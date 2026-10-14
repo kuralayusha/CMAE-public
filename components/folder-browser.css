@@ -1,0 +1,548 @@
+/* Finder — prefixed global classes (Tailwind breaks CSS module exports here) */
+
+.cmae-fb {
+  display: flex;
+  flex-direction: column;
+  min-height: min(70vh, 640px);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cmae-fb-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #fff;
+}
+
+.cmae-fb-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-subtle, #fafafa);
+}
+
+.cmae-fb-nav {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cmae-fb-nav-btn {
+  width: 32px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.cmae-fb-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cmae-fb-nav-btn:not(:disabled):hover {
+  background: #f0f0f0;
+}
+
+.cmae-fb-crumbs {
+  flex: 1 1 180px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 4px 10px;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  font-size: 13px;
+}
+
+.cmae-fb-crumb-sep {
+  margin: 0 5px;
+  color: #a3a3a3;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  user-select: none;
+}
+
+.cmae-fb-crumb {
+  border: none;
+  background: transparent;
+  padding: 1px 4px;
+  margin: 0;
+  border-radius: var(--radius);
+  color: var(--ink-muted);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmae-fb-crumb:hover {
+  color: var(--ink);
+  background: #f3f3f3;
+}
+
+.cmae-fb-crumb-now {
+  padding: 1px 4px;
+  font-weight: 600;
+  color: var(--ink);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmae-fb-count {
+  flex: 0 0 auto;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+
+.cmae-fb-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cmae-fb-body.is-split {
+  grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.15fr);
+}
+
+/* Preview açıkken boyut/tarih sütunlarını gizle — isim okunaklı kalsın */
+.cmae-fb-body.is-split .cmae-fb-cols {
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: 44px;
+}
+
+.cmae-fb-body.is-split .cmae-fb-cols > span:nth-child(2),
+.cmae-fb-body.is-split .cmae-fb-cols > span:nth-child(3),
+.cmae-fb-body.is-split .cmae-fb-row > .cmae-fb-cell {
+  display: none;
+}
+
+.cmae-fb-body.is-split .cmae-fb-row {
+  grid-template-columns: 24px minmax(0, 1fr);
+}
+
+.cmae-fb-list-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.cmae-fb-body.is-split .cmae-fb-list-pane {
+  border-right: 1px solid var(--line);
+}
+
+.cmae-fb-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px 148px;
+  gap: 12px;
+  padding: 9px 16px 9px 44px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.cmae-fb-cols > span {
+  min-width: 0;
+}
+
+.cmae-fb-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  overflow: auto;
+  flex: 1 1 auto;
+  max-height: min(56vh, 520px);
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+
+.cmae-fb-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 88px 148px;
+  gap: 12px;
+  align-items: center;
+  margin: 0 0 1px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.cmae-fb-row:hover {
+  background: #f5f5f5;
+}
+
+.cmae-fb-row.is-selected {
+  background: #efefef;
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+.cmae-fb-row:focus {
+  outline: none;
+}
+
+.cmae-fb-row:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.cmae-fb-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  opacity: 0.8;
+}
+
+.cmae-fb-name {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.cmae-fb-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmae-fb-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmae-fb-badge.is-muted {
+  color: var(--ink-muted);
+  opacity: 0.72;
+}
+
+.cmae-fb-badge.is-ok {
+  color: var(--ink-muted);
+}
+
+.cmae-fb-badge.is-ai {
+  color: var(--ink-muted);
+  opacity: 0.55;
+  font-weight: 400;
+}
+
+.cmae-fb-cell {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmae-fb-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 36px 20px;
+}
+
+.cmae-fb-empty p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.cmae-fb-empty span {
+  font-size: 13px;
+  color: var(--ink-muted);
+  line-height: 1.45;
+}
+
+.cmae-fb-loading {
+  margin: 0;
+  padding: 28px 16px;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+.cmae-fb-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: #fff;
+}
+
+.cmae-fb-preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-subtle, #fafafa);
+}
+
+.cmae-fb-preview-title {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cmae-fb-preview-title strong {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmae-fb-preview-title span {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  color: var(--ink-muted);
+}
+
+.cmae-fb-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cmae-fb-close {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--font-body), sans-serif;
+}
+
+.cmae-fb-close:hover:not(:disabled) {
+  background: #f5f5f5;
+}
+
+.cmae-fb-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cmae-fb-preview-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  max-height: min(56vh, 520px);
+  padding: 14px 16px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+
+.cmae-fb-preview-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono), ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.cmae-fb-row.is-renaming {
+  background: #f5f5f5;
+  border-color: var(--line);
+  cursor: default;
+  grid-template-columns: 24px minmax(0, 1fr);
+}
+
+.cmae-fb-rename {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--ink);
+  border-radius: calc(var(--radius) - 1px);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.cmae-fb-rename:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
+}
+
+.cmae-fb-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.cmae-fb-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 12px;
+  border: none;
+  border-radius: calc(var(--radius) - 1px);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cmae-fb-menu-item:hover:not(:disabled) {
+  background: #f3f3f3;
+}
+
+.cmae-fb-menu-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cmae-fb-menu-item.is-danger {
+  color: #b42318;
+}
+
+.cmae-fb-menu-item.is-danger:hover:not(:disabled) {
+  background: #fef3f2;
+}
+
+.cmae-fb-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(17, 17, 17, 0.38);
+}
+
+.cmae-fb-modal {
+  width: min(100%, 400px);
+  padding: 22px 22px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
+}
+
+.cmae-fb-modal h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.cmae-fb-modal p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+
+.cmae-fb-modal p strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.cmae-fb-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+@media (max-width: 900px) {
+  .cmae-fb-body.is-split {
+    grid-template-columns: 1fr;
+  }
+
+  .cmae-fb-body.is-split .cmae-fb-list-pane {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .cmae-fb-cols {
+    grid-template-columns: minmax(0, 1fr) 72px;
+  }
+
+  .cmae-fb-cols > span:last-child,
+  .cmae-fb-date {
+    display: none;
+  }
+
+  .cmae-fb-row {
+    grid-template-columns: 24px minmax(0, 1fr) 72px;
+  }
+
+  .cmae-fb-list,
+  .cmae-fb-preview-body {
+    max-height: min(40vh, 340px);
+  }
+}

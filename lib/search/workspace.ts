@@ -1,0 +1,599 @@
+import { spawn } from "child_process";
+import fs from "fs/promises";
+import path from "path";
+
+const ROOT = path.resolve(process.cwd(), "workspace");
+
+/** Serializes create / renumber so concurrent runs never share the same index. */
+let folderIndexLock: Promise<void> = Promise.resolve();
+
+function withFolderIndexLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = folderIndexLock.then(fn, fn);
+  folderIndexLock = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+function safeName(name: string): string {
+  return name
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80) || "Company";
+}
+
+function parseNumberedFolder(
+  name: string,
+): { index: number; rest: string } | null {
+  const m = name.match(/^(\d+)\s*-\s*(.*)$/);
+  if (!m) return null;
+  return { index: Number(m[1]), rest: m[2] ?? "" };
+}
+
+async function listNumberedTopLevel(): Promise<
+  { index: number; name: string; rest: string }[]
+> {
+  await fs.mkdir(ROOT, { recursive: true });
+  const entries = await fs.readdir(ROOT);
+  const out: { index: number; name: string; rest: string }[] = [];
+  for (const e of entries) {
+    if (e.startsWith(".")) continue;
+    const parsed = parseNumberedFolder(e);
+    if (!parsed) continue;
+    try {
+      const st = await fs.stat(path.join(ROOT, e));
+      if (!st.isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    out.push({ index: parsed.index, name: e, rest: parsed.rest });
+  }
+  out.sort((a, b) => a.index - b.index || a.name.localeCompare(b.name));
+  return out;
+}
+
+async function nextIndexUnlocked(): Promise<number> {
+  const numbered = await listNumberedTopLevel();
+  let max = 0;
+  for (const e of numbered) max = Math.max(max, e.index);
+  return max + 1;
+}
+
+/**
+ * After a gap (deleted top-level folder), renumber so indices are 1..N contiguous.
+ * Higher numbers shift down; tracker + search job refs stay in sync via callback.
+ */
+export async function compactTopLevelFolderIndices(
+  onRenamed?: (oldName: string, next: { name: string; absolutePath: string }) => void,
+): Promise<{ from: string; to: string }[]> {
+  return withFolderIndexLock(async () => {
+    const numbered = await listNumberedTopLevel();
+    const changes: { from: string; to: string }[] = [];
+    const pending: { oldName: string; tempPath: string; finalName: string }[] =
+      [];
+
+    for (let i = 0; i < numbered.length; i++) {
+      const item = numbered[i]!;
+      const targetIndex = i + 1;
+      const finalName = `${targetIndex}- ${item.rest}`;
+      if (item.name === finalName) continue;
+      const tempPath = path.join(
+        ROOT,
+        `.__renum_${targetIndex}_${Date.now()}_${i}`,
+      );
+      await fs.rename(path.join(ROOT, item.name), tempPath);
+      pending.push({ oldName: item.name, tempPath, finalName });
+    }
+
+    for (const p of pending) {
+      const dest = path.join(ROOT, p.finalName);
+      if (!dest.startsWith(ROOT + path.sep)) {
+        throw new Error("Geçersiz workspace yolu");
+      }
+      await fs.rename(p.tempPath, dest);
+      changes.push({ from: p.oldName, to: p.finalName });
+      onRenamed?.(p.oldName, { name: p.finalName, absolutePath: dest });
+    }
+
+    return changes;
+  });
+}
+
+export async function createCompanyFolder(companyName: string): Promise<{
+  index: number;
+  folderName: string;
+  folderPath: string;
+}> {
+  return withFolderIndexLock(async () => {
+    await fs.mkdir(ROOT, { recursive: true });
+    let index = await nextIndexUnlocked();
+    const base = safeName(companyName);
+
+    // Retry on rare name clash (e.g. leftover folder)
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const folderName = `${index}- ${base}`;
+      const folderPath = path.join(ROOT, folderName);
+      if (!folderPath.startsWith(ROOT + path.sep) && folderPath !== ROOT) {
+        throw new Error("Geçersiz workspace yolu");
+      }
+      try {
+        await fs.mkdir(folderPath);
+        return { index, folderName, folderPath };
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException)?.code;
+        if (code === "EEXIST") {
+          index += 1;
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("Workspace klasör indeksi atanamadı");
+  });
+}
+
+export async function renameCompanyFolder(
+  currentPath: string,
+  companyName: string,
+): Promise<{ folderName: string; folderPath: string }> {
+  return withFolderIndexLock(async () => {
+    const base = path.basename(currentPath);
+    const parsed = parseNumberedFolder(base);
+    const index = parsed ? String(parsed.index) : String(await nextIndexUnlocked());
+    const folderName = `${index}- ${safeName(companyName)}`;
+    const folderPath = path.join(ROOT, folderName);
+    if (!folderPath.startsWith(ROOT + path.sep)) {
+      throw new Error("Geçersiz workspace yolu");
+    }
+    if (folderPath !== currentPath) {
+      try {
+        await fs.rename(currentPath, folderPath);
+      } catch {
+        await fs.mkdir(folderPath, { recursive: true });
+      }
+    }
+    return { folderName, folderPath };
+  });
+}
+
+export async function writeFile(
+  folderPath: string,
+  fileName: string,
+  content: string,
+): Promise<string> {
+  if (fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
+    throw new Error("Geçersiz dosya adı");
+  }
+  if (!folderPath.startsWith(ROOT + path.sep)) {
+    throw new Error("Geçersiz klasör");
+  }
+  const full = path.join(folderPath, fileName);
+  await fs.writeFile(full, content, "utf8");
+  return full;
+}
+
+export function getWorkspaceRoot() {
+  return ROOT;
+}
+
+/** Open path in OS file manager (Finder / Explorer / xdg-open). */
+export async function revealInFileManager(relativePath = ""): Promise<{
+  path: string;
+  absolutePath: string;
+}> {
+  const full = resolveWorkspacePath(relativePath);
+  let st;
+  try {
+    st = await fs.stat(full);
+  } catch {
+    throw new Error("Yol bulunamadı");
+  }
+
+  const platform = process.platform;
+  await new Promise<void>((resolve, reject) => {
+    let child;
+    if (platform === "darwin") {
+      // Reveal file in Finder; for dirs just open the folder
+      child = st.isDirectory()
+        ? spawn("open", [full], { stdio: "ignore", detached: true })
+        : spawn("open", ["-R", full], { stdio: "ignore", detached: true });
+    } else if (platform === "win32") {
+      child = st.isDirectory()
+        ? spawn("explorer", [full], { stdio: "ignore", detached: true })
+        : spawn("explorer", ["/select,", full], {
+            stdio: "ignore",
+            detached: true,
+          });
+    } else {
+      const target = st.isDirectory() ? full : path.dirname(full);
+      child = spawn("xdg-open", [target], { stdio: "ignore", detached: true });
+    }
+    child.on("error", reject);
+    child.unref();
+    // Don't wait for the GUI process to exit
+    resolve();
+  });
+
+  return {
+    path: toRelative(full),
+    absolutePath: full,
+  };
+}
+
+export type WorkspaceEntryBadge = {
+  /** Shown next to filename, e.g. "(boş)", "(2)", "(for AI)" */
+  text: string;
+  /** muted = faded empty; ok = has links; ai = internal agent notes */
+  tone: "muted" | "ok" | "ai";
+};
+
+/** Agent scratch files — not primary user deliverables. */
+const FOR_AI_FILES = new Set([
+  "ozet.md",
+  "review.md",
+  "rotalar.md",
+  "iletisim.md",
+]);
+
+/** User-facing deliverables (no "for AI" badge). */
+function isUserFacingMailDraft(name: string): boolean {
+  return (
+    /^email_/i.test(name) ||
+    /^follow_up_/i.test(name) ||
+    /^followup/i.test(name) ||
+    /^thanks/i.test(name) ||
+    /^tesekkur/i.test(name) ||
+    /^reply/i.test(name) ||
+    /^yanit/i.test(name)
+  );
+}
+
+export type WorkspaceEntry = {
+  name: string;
+  relativePath: string;
+  kind: "dir" | "file";
+  size: number;
+  mtime: number;
+  badge?: WorkspaceEntryBadge | null;
+};
+
+/** Count job URLs in basvuru_linkleri.md (jobfit output). */
+export function analyzeBasvuruLinkleri(content: string): {
+  count: number;
+  empty: boolean;
+} {
+  const text = String(content || "");
+  if (
+    /uygun\s+a[cç][ıi]k\s+ilan\s+yok/i.test(text) ||
+    /no\s+matching\s+(open\s+)?(job|role)/i.test(text)
+  ) {
+    return { count: 0, empty: true };
+  }
+
+  const fromLinkLines = [
+    ...text.matchAll(/^\s*-\s*Link:\s*(\S+)/gim),
+  ]
+    .map((m) => m[1] || "")
+    .filter((u) => /https?:\/\//i.test(u) || /^www\./i.test(u));
+
+  const fromMd = [...text.matchAll(/\]\((https?:\/\/[^)\s]+)\)/gi)].map(
+    (m) => m[1]!,
+  );
+
+  const unique = new Set(
+    [...fromLinkLines, ...fromMd].map((u) => u.replace(/[),.;]+$/, "")),
+  );
+  const count = unique.size;
+  return { count, empty: count === 0 };
+}
+
+async function badgeForEntry(
+  name: string,
+  kind: "dir" | "file",
+  fullPath: string,
+): Promise<WorkspaceEntryBadge | null> {
+  if (kind !== "file") return null;
+
+  if (/^basvuru_linkleri\.md$/i.test(name)) {
+    try {
+      const raw = await fs.readFile(fullPath, "utf8");
+      const { count, empty } = analyzeBasvuruLinkleri(raw);
+      if (empty || count === 0) {
+        return { text: "(boş)", tone: "muted" };
+      }
+      return { text: `(${count})`, tone: "ok" };
+    } catch {
+      return null;
+    }
+  }
+
+  // User cares about: şirket bilgileri, başvuru linkleri, mail taslakları
+  if (
+    /^sirket_bilgileri\.md$/i.test(name) ||
+    isUserFacingMailDraft(name)
+  ) {
+    return null;
+  }
+
+  if (FOR_AI_FILES.has(name.toLowerCase())) {
+    return { text: "(for AI)", tone: "ai" };
+  }
+
+  return null;
+}
+
+/** Resolve a relative path inside workspace; throws on traversal. */
+export function resolveWorkspacePath(relativePath = ""): string {
+  const cleaned = String(relativePath || "")
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .trim();
+  if (cleaned.includes("\0") || cleaned.split("/").some((p) => p === "..")) {
+    throw new Error("Geçersiz yol");
+  }
+  const full = path.resolve(ROOT, cleaned);
+  if (full !== ROOT && !full.startsWith(ROOT + path.sep)) {
+    throw new Error("Geçersiz workspace yolu");
+  }
+  return full;
+}
+
+function toRelative(full: string): string {
+  if (full === ROOT) return "";
+  return path.relative(ROOT, full).split(path.sep).join("/");
+}
+
+export async function listWorkspace(relativePath = ""): Promise<{
+  path: string;
+  breadcrumbs: { name: string; path: string }[];
+  entries: WorkspaceEntry[];
+}> {
+  const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const top = normalized.split("/")[0]?.toLowerCase() || "";
+  if (top === "cvs") {
+    throw new Error("Bu klasör Folders’ta görünmez");
+  }
+
+  const dir = resolveWorkspacePath(relativePath);
+  await fs.mkdir(ROOT, { recursive: true });
+
+  let st;
+  try {
+    st = await fs.stat(dir);
+  } catch {
+    throw new Error("Klasör bulunamadı");
+  }
+  if (!st.isDirectory()) {
+    throw new Error("Yol bir klasör değil");
+  }
+
+  const rel = toRelative(dir);
+  const parts = rel ? rel.split("/") : [];
+  const breadcrumbs: { name: string; path: string }[] = [
+    { name: "workspace", path: "" },
+  ];
+  for (let i = 0; i < parts.length; i++) {
+    breadcrumbs.push({
+      name: parts[i],
+      path: parts.slice(0, i + 1).join("/"),
+    });
+  }
+
+  // System / private dirs — not shown in Folders UI
+  const HIDDEN_TOP_LEVEL = new Set(["cvs"]);
+
+  const names = await fs.readdir(dir);
+  const entries: WorkspaceEntry[] = [];
+  for (const name of names) {
+    if (name === ".gitkeep" || name.startsWith(".")) continue;
+    // Hide CV library at workspace root
+    if (!rel && HIDDEN_TOP_LEVEL.has(name.toLowerCase())) continue;
+    const full = path.join(dir, name);
+    try {
+      const s = await fs.stat(full);
+      const kind = s.isDirectory() ? "dir" : "file";
+      const badge = await badgeForEntry(name, kind, full);
+      entries.push({
+        name,
+        relativePath: toRelative(full),
+        kind,
+        size: s.size,
+        mtime: s.mtimeMs,
+        badge,
+      });
+    } catch {
+      /* skip unreadable */
+    }
+  }
+
+  entries.sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "dir" ? -1 : 1;
+    return a.name.localeCompare(b.name, "tr", { numeric: true, sensitivity: "base" });
+  });
+
+  return { path: rel, breadcrumbs, entries };
+}
+
+const TEXT_EXT = new Set([
+  ".md",
+  ".txt",
+  ".json",
+  ".csv",
+  ".html",
+  ".htm",
+  ".xml",
+  ".yml",
+  ".yaml",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".css",
+  ".svg",
+  ".log",
+  ".env",
+  ".gitignore",
+]);
+
+export async function readWorkspaceFile(relativePath: string): Promise<{
+  path: string;
+  name: string;
+  content: string;
+  size: number;
+  mtime: number;
+  binary: boolean;
+}> {
+  const full = resolveWorkspacePath(relativePath);
+  if (full === ROOT) throw new Error("Dosya yolu gerekli");
+
+  let st;
+  try {
+    st = await fs.stat(full);
+  } catch {
+    throw new Error("Dosya bulunamadı");
+  }
+  if (!st.isFile()) throw new Error("Yol bir dosya değil");
+  if (st.size > 2_000_000) throw new Error("Dosya çok büyük (max 2 MB)");
+
+  const name = path.basename(full);
+  const ext = path.extname(name).toLowerCase();
+  const looksText = !ext || TEXT_EXT.has(ext);
+
+  if (!looksText) {
+    return {
+      path: toRelative(full),
+      name,
+      content: "",
+      size: st.size,
+      mtime: st.mtimeMs,
+      binary: true,
+    };
+  }
+
+  const buf = await fs.readFile(full);
+  // Heuristic: too many null bytes → binary
+  const sample = buf.subarray(0, Math.min(buf.length, 4096));
+  let nulls = 0;
+  for (const b of sample) if (b === 0) nulls++;
+  if (nulls > 0) {
+    return {
+      path: toRelative(full),
+      name,
+      content: "",
+      size: st.size,
+      mtime: st.mtimeMs,
+      binary: true,
+    };
+  }
+
+  return {
+    path: toRelative(full),
+    name,
+    content: buf.toString("utf8"),
+    size: st.size,
+    mtime: st.mtimeMs,
+    binary: false,
+  };
+}
+
+function safeEntryName(name: string): string {
+  const cleaned = name
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  if (!cleaned || cleaned === "." || cleaned === "..") {
+    throw new Error("Geçersiz isim");
+  }
+  return cleaned;
+}
+
+/** Rename a file or folder inside workspace (real FS rename). */
+export async function renameWorkspaceEntry(
+  relativePath: string,
+  newName: string,
+): Promise<{ path: string; name: string; kind: "dir" | "file" }> {
+  const full = resolveWorkspacePath(relativePath);
+  if (full === ROOT) throw new Error("workspace kökü yeniden adlandırılamaz");
+
+  let st;
+  try {
+    st = await fs.stat(full);
+  } catch {
+    throw new Error("Yol bulunamadı");
+  }
+
+  const nextName = safeEntryName(newName);
+  const parent = path.dirname(full);
+  const target = path.join(parent, nextName);
+  if (target !== ROOT && !target.startsWith(ROOT + path.sep)) {
+    throw new Error("Geçersiz hedef yol");
+  }
+  if (target === full) {
+    return {
+      path: toRelative(full),
+      name: path.basename(full),
+      kind: st.isDirectory() ? "dir" : "file",
+    };
+  }
+
+  const targetExists = await fs.stat(target).then(
+    () => true,
+    (err: NodeJS.ErrnoException) => {
+      if (err.code === "ENOENT") return false;
+      throw err;
+    },
+  );
+  if (targetExists) throw new Error("Bu isimde bir öğe zaten var");
+
+  await fs.rename(full, target);
+  return {
+    path: toRelative(target),
+    name: nextName,
+    kind: st.isDirectory() ? "dir" : "file",
+  };
+}
+
+/** Delete a file or folder inside workspace (recursive for dirs). */
+export async function deleteWorkspaceEntry(
+  relativePath: string,
+): Promise<{ path: string }> {
+  const full = resolveWorkspacePath(relativePath);
+  if (full === ROOT) throw new Error("workspace kökü silinemez");
+
+  try {
+    await fs.stat(full);
+  } catch {
+    throw new Error("Yol bulunamadı");
+  }
+
+  await fs.rm(full, { recursive: true, force: false });
+  return { path: toRelative(full) };
+}
+
+/** Append " (canceled)" to folder name, keep numeric prefix */
+export async function markFolderCanceled(currentPath: string): Promise<{
+  folderName: string;
+  folderPath: string;
+}> {
+  if (!currentPath.startsWith(ROOT + path.sep)) {
+    throw new Error("Geçersiz klasör");
+  }
+  const base = path.basename(currentPath);
+  if (/\(canceled\)/i.test(base)) {
+    return { folderName: base, folderPath: currentPath };
+  }
+  const folderName = `${base} (canceled)`;
+  const folderPath = path.join(ROOT, folderName);
+  if (!folderPath.startsWith(ROOT + path.sep)) {
+    throw new Error("Geçersiz hedef klasör");
+  }
+  try {
+    await fs.rename(currentPath, folderPath);
+  } catch {
+    await fs.mkdir(folderPath, { recursive: true });
+  }
+  return { folderName, folderPath };
+}

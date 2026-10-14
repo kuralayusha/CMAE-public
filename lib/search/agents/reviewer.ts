@@ -1,0 +1,169 @@
+import type { RunContext } from "../context";
+import { askLlm, extractJson } from "../llm";
+import { speak } from "../speak";
+import type { ReviewVerdict, SpecialistId } from "../types";
+import { writeFile } from "../workspace";
+
+const THRESHOLD = 72;
+const REDOABLE = ["scout", "jobfit", "contact", "research", "writer"] as const;
+
+export async function runReviewer(ctx: RunContext): Promise<ReviewVerdict> {
+  const { jobId } = ctx;
+  speak(jobId, "reviewer", "system", "── reviewer online · kalite & tutarlılık");
+
+  const packageBrief = `
+Company: ${ctx.companyName}
+URL: ${ctx.url}
+Site language: ${ctx.siteLanguage}
+Primary email: ${ctx.primaryEmail || "none"}
+JobFit: ${ctx.jobFit?.hasMatchingJob ? "has jobs" : "cold"} · ${JSON.stringify(ctx.jobFit?.jobs || []).slice(0, 1500)}
+Emails: ${ctx.emails
+    .slice(0, 8)
+    .map((e) => e.email)
+    .join(", ")}
+Routes count: ${ctx.routes.length}
+Research (excerpt):
+${ctx.researchMd.slice(0, 2500)}
+
+Draft site-lang:
+${ctx.draftSite.slice(0, 2000)}
+
+Draft preferred (${ctx.user.preferredLang}):
+${ctx.draftPreferred.slice(0, 2000)}
+
+CV excerpt:
+${ctx.user.cvText.slice(0, 2000)}
+`;
+
+  const raw = await askLlm(
+    jobId,
+    `You are a strict Application Package Reviewer.
+Score each specialist 0-100 and overall 0-100.
+Pass threshold = ${THRESHOLD}.
+
+Check:
+- scout: useful pages found? company name plausible?
+- jobfit: jobs claim match CV? cold path justified?
+- contact: best email for hiring (careers > generic)?
+- research: concrete, non-hallucinated, useful for personalization?
+- writer: email matches CV + research + job/cold intent? correct language? no fake claims? tone?
+- writer craft quality (penalize heavily if missing):
+  · length ~100–150 words (fail if clearly over ~200 or padded fluff)
+  · 3–4 short paragraphs, scannable in ~10–15 seconds
+  · subject short/specific (≤8 words); not vague ("Hello", "Job application", "İş başvurusu", "Merhaba")
+  · body order: greeting → who/what → value (1–2 wins, preferably quantified from CV) → why this company (research-specific) → open close + CV attached mention
+  · personalized to this company (not copy-paste generic); clear target role/field (not "any position")
+  · professional-warm tone; company name spelled correctly; plain text only
+- writer HARD FAIL (score writer ≤ 40 and rewindTo=writer) if SUBJECT/BODY contain notes, TODOs, placeholders ([…], TBD, N/A, "unknown", "bulunamadı"), meta comments, or explanations about missing info. SUBJECT+BODY must be paste-ready for Gmail draft — no agent chatter inside the mail fields. Missing facts must be omitted, never annotated.
+
+If overall < ${THRESHOLD} OR writer < ${THRESHOLD}, set rewindTo to the WEAKEST specialist that would most improve the package (usually writer, sometimes research/contact/jobfit/scout).
+If all good, rewindTo = null and passed = true.
+
+Return ONLY JSON:
+{
+  "passed": boolean,
+  "overallScore": number,
+  "threshold": ${THRESHOLD},
+  "scores": { "scout": 0, "jobfit": 0, "contact": 0, "research": 0, "writer": 0 },
+  "rewindTo": "scout"|"jobfit"|"contact"|"research"|"writer"|null,
+  "feedback": {
+    "scout": "",
+    "jobfit": "",
+    "contact": "",
+    "research": "",
+    "writer": ""
+  },
+  "summary": "Turkish short verdict"
+}
+
+Package:
+${packageBrief}`,
+    "Paket skorlanıyor…",
+    "reviewer",
+  );
+
+  const parsed = extractJson<ReviewVerdict>(raw);
+  const verdict = normalizeVerdict(parsed);
+
+  ctx.lastReview = verdict;
+  speak(
+    jobId,
+    "reviewer",
+    verdict.passed ? "ok" : "think",
+    `skor ${verdict.overallScore}/${verdict.threshold} · ${verdict.passed ? "PASS" : `REWIND → ${verdict.rewindTo}`}`,
+  );
+  if (verdict.summary) {
+    speak(jobId, "reviewer", "think", verdict.summary);
+  }
+  if (verdict.rewindTo && verdict.feedback[verdict.rewindTo]) {
+    speak(
+      jobId,
+      "reviewer",
+      "think",
+      `feedback[${verdict.rewindTo}]: ${verdict.feedback[verdict.rewindTo]}`,
+    );
+  }
+
+  await writeFile(
+    ctx.folderPath,
+    "review.md",
+    `# Reviewer\n\n- Overall: **${verdict.overallScore}** / ${verdict.threshold}\n- Passed: ${verdict.passed}\n- Rewind: ${verdict.rewindTo || "—"}\n\n## Skorlar\n${Object.entries(
+      verdict.scores,
+    )
+      .map(([k, v]) => `- ${k}: ${v}`)
+      .join("\n")}\n\n## Feedback\n${Object.entries(verdict.feedback)
+      .filter(([, v]) => v)
+      .map(([k, v]) => `### ${k}\n${v}`)
+      .join("\n\n")}\n\n## Özet\n${verdict.summary}\n`,
+  );
+
+  return verdict;
+}
+
+function normalizeVerdict(parsed: ReviewVerdict | null): ReviewVerdict {
+  const scores = {
+    scout: clamp(parsed?.scores?.scout ?? 0),
+    jobfit: clamp(parsed?.scores?.jobfit ?? 0),
+    contact: clamp(parsed?.scores?.contact ?? 0),
+    research: clamp(parsed?.scores?.research ?? 0),
+    writer: clamp(parsed?.scores?.writer ?? 0),
+  };
+  let overall = clamp(
+    parsed?.overallScore ??
+      Math.round(
+        (scores.scout +
+          scores.jobfit +
+          scores.contact +
+          scores.research +
+          scores.writer) /
+          5,
+      ),
+  );
+  let rewindTo = parsed?.rewindTo ?? null;
+  if (rewindTo && !REDOABLE.includes(rewindTo)) rewindTo = null;
+
+  let passed = Boolean(parsed?.passed) && overall >= THRESHOLD && !rewindTo;
+  if (overall < THRESHOLD && !rewindTo) {
+    // pick weakest
+    const weakest = (Object.entries(scores) as [Exclude<SpecialistId, "reviewer">, number][])
+      .sort((a, b) => a[1] - b[1])[0]?.[0];
+    rewindTo = weakest || "writer";
+    passed = false;
+  }
+  if (passed) rewindTo = null;
+
+  return {
+    passed,
+    overallScore: overall,
+    threshold: THRESHOLD,
+    scores,
+    rewindTo,
+    feedback: parsed?.feedback || {},
+    summary: parsed?.summary || "",
+  };
+}
+
+function clamp(n: number) {
+  if (Number.isNaN(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
