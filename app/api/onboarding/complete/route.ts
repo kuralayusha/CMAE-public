@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     if (gaps.length) {
       return NextResponse.json(
         {
-          error: "Eksik zorunlu alanlar var",
+          error: "Required fields are missing",
           gaps,
         },
         { status: 400 },

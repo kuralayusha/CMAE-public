@@ -82,7 +82,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ...result });
     }
 
-    return NextResponse.json({ error: "Bilinmeyen aksiyon" }, { status: 400 });
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

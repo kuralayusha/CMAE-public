@@ -44,12 +44,14 @@ export function resolveDraftContent(
 } {
   const folder = folderPathForItem(item);
   if (!folder) {
-    throw new Error("Bu satırın workspace klasörü yok — search çıktısı gerekli");
+    throw new Error(
+      "This row has no workspace folder — search output is required",
+    );
   }
 
   let draft: ParsedMailDraft | null = null;
   if (kind === "application") {
-    // Gönderilmeyi bekleyenler: site dili taslağı (email_site_language.md)
+    // Pending send: prefer site-language draft (email_site_language.md)
     draft = findEmailDraftInFolder(folder, preferredLang, {
       preferSiteLanguage: true,
     });
@@ -70,8 +72,8 @@ export function resolveDraftContent(
   if (!draft) {
     throw new Error(
       kind === "application"
-        ? "email_*.md taslağı bulunamadı"
-        : `${kind} taslağı henüz hazır değil — önce hazırla butonunu kullanın`,
+        ? "email_*.md draft not found"
+        : `${kind} draft is not ready yet — use the prepare button first`,
     );
   }
 
@@ -91,7 +93,7 @@ export function resolveDraftContent(
 
   const to = item.primaryTo;
   if (!to) {
-    throw new Error("Alıcı e-posta adresi yok (primaryTo / thread)");
+    throw new Error("No recipient email address (primaryTo / thread)");
   }
 
   return { ...draft, to, inReplyTo: null, references: null };
@@ -109,7 +111,7 @@ export async function createGmailDraftForItem(
 }> {
   const creds = getGmailCredentials();
   if (!creds) {
-    throw new Error("Gmail kimlik bilgileri eksik");
+    throw new Error("Gmail credentials are missing");
   }
 
   const db = getDb();
@@ -118,12 +120,12 @@ export async function createGmailDraftForItem(
     .from(trackerItems)
     .where(eq(trackerItems.id, itemId))
     .get();
-  if (!item) throw new Error("Tracker item bulunamadı");
+  if (!item) throw new Error("Tracker item not found");
   assertItemActiveForDrafts(itemId);
 
   if (kind === "follow_up" && item.status !== "follow_up_due") {
     throw new Error(
-      "Follow-up şu an kapalı — son follow-up sonrası 7 gün beklenmeli (veya henüz takip günü gelmedi)",
+      "Follow-up is currently locked — wait 7 days after the last follow-up (or follow-up day has not arrived yet)",
     );
   }
 
@@ -154,7 +156,7 @@ export async function createGmailDraftForItem(
             fullName: settings?.fullName,
           });
           if (!pick) {
-            cvWarning = "CV eklenmedi — workspace/cvs/ boş";
+            cvWarning = "CV not attached — workspace/cvs/ is empty";
             return undefined;
           }
           attachedCv = pick.entry.label || pick.entry.fileName;

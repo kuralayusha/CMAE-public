@@ -4,12 +4,12 @@ import "@/components/folder-browser.css";
 
 export const metadata: Metadata = {
   title: "CMAE",
-  description: "Local-first cold mail ajanı — tracker, search ve Gmail taslakları",
+  description: "Local-first cold mail agent — tracker, search, and Gmail drafts",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="tr" className="h-full">
+    <html lang="en" className="h-full">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

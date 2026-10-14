@@ -83,7 +83,7 @@ export function setJobStatus(
     getJobBus().emit(`job:${jobId}`, { type: "done", status } satisfies JobEvent);
   }
 
-  // Search bitti → tracker’a light merge (IMAP/AI yok); tracker sayfası SSE ile yenilenir
+  // Search finished → light merge into tracker (no IMAP/AI); tracker page refreshes via SSE
   if (status === "done") {
     void Promise.resolve()
       .then(async () => {

@@ -49,12 +49,12 @@ type BootItem = {
 };
 
 const BOOT_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
-  { id: "db", label: "Database hazır" },
-  { id: "profile", label: "Profil ve tercihler kaydedildi" },
-  { id: "gmail", label: "Gmail IMAP bağlantısı deneniyor" },
-  { id: "cursor", label: "Cursor API key deneniyor" },
-  { id: "cv", label: "CV kütüphanesi hazır" },
-  { id: "unlock", label: "Tracker / Araştır kilidi açılıyor" },
+  { id: "db", label: "Database ready" },
+  { id: "profile", label: "Profile and preferences saved" },
+  { id: "gmail", label: "Trying Gmail IMAP connection" },
+  { id: "cursor", label: "Trying Cursor API key" },
+  { id: "cv", label: "CV library ready" },
+  { id: "unlock", label: "Unlocking Tracker / Search" },
 ];
 
 function freshBootItems(): BootItem[] {
@@ -134,7 +134,9 @@ export function OnboardingWizard() {
       case "welcome":
         return true;
       case "profile":
-        return Boolean(form.fullName.trim());
+        return Boolean(
+          form.fullName.trim() && form.preferredLanguage.trim(),
+        );
       case "gmail":
         return (
           form.gmailAddress.trim() &&
@@ -148,9 +150,7 @@ export function OnboardingWizard() {
         );
       case "prefs":
         return (
-          form.preferredLanguage.trim() &&
-          form.emailSignature.trim().length >= 3 &&
-          form.followUpDays >= 1
+          form.emailSignature.trim().length >= 3 && form.followUpDays >= 1
         );
       case "job":
         return (
@@ -191,7 +191,7 @@ export function OnboardingWizard() {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Kayıt başarısız");
+    if (!res.ok) throw new Error(data.error || "Save failed");
     setHasGmailPw(Boolean(data.hasGmailAppPassword) || hasGmailPw);
     setHasCursorKey(Boolean(data.hasCursorApiKey));
     setCursorFromEnv(Boolean(data.cursorApiKeyFromEnv));
@@ -213,7 +213,7 @@ export function OnboardingWizard() {
         const statusData = await statusRes.json();
         const gaps = (statusData.gaps || []) as string[];
         if (gaps.length) {
-          throw new Error(`Eksik: ${gaps.join(", ")}`);
+          throw new Error(`Missing: ${gaps.join(", ")}`);
         }
         setBusy(false);
         setStep(STEPS.length - 1);
@@ -264,12 +264,12 @@ export function OnboardingWizard() {
     };
 
     try {
-      await softOk("db", "Database hazır");
-      await softOk("profile", "Profil ve tercihler kaydedildi");
+      await softOk("db", "Database ready");
+      await softOk("profile", "Profile and preferences saved");
 
       patchBoot("gmail", {
         status: "running",
-        label: "Gmail IMAP bağlantısı deneniyor…",
+        label: "Trying Gmail IMAP connection…",
       });
 
       const gmailRes = await fetch("/api/onboarding/verify", {
@@ -282,10 +282,10 @@ export function OnboardingWizard() {
         const msg =
           gmailData.gmail?.error ||
           gmailData.error ||
-          "Gmail bağlantısı başarısız";
+          "Gmail connection failed";
         patchBoot("gmail", {
           status: "fail",
-          label: "Gmail bağlantısı başarısız",
+          label: "Gmail connection failed",
           detail: msg,
         });
         setBootFailMsg(msg);
@@ -297,12 +297,12 @@ export function OnboardingWizard() {
 
       patchBoot("gmail", {
         status: "ok",
-        label: "Gmail IMAP bağlantısı doğrulandı",
+        label: "Gmail IMAP connection verified",
       });
 
       patchBoot("cursor", {
         status: "running",
-        label: "Cursor API key deneniyor…",
+        label: "Trying Cursor API key…",
       });
 
       const cursorRes = await fetch("/api/onboarding/verify", {
@@ -315,10 +315,10 @@ export function OnboardingWizard() {
         const msg =
           cursorData.cursor?.error ||
           cursorData.error ||
-          "Cursor API key doğrulanamadı";
+          "Cursor API key could not be verified";
         patchBoot("cursor", {
           status: "fail",
-          label: "Cursor API key başarısız",
+          label: "Cursor API key failed",
           detail: msg,
         });
         setBootFailMsg(msg);
@@ -330,14 +330,14 @@ export function OnboardingWizard() {
 
       patchBoot("cursor", {
         status: "ok",
-        label: "Cursor API key doğrulandı",
+        label: "Cursor API key verified",
       });
 
-      await softOk("cv", "CV kütüphanesi hazır");
+      await softOk("cv", "CV library ready");
 
       patchBoot("unlock", {
         status: "running",
-        label: "Tracker / Araştır kilidi açılıyor…",
+        label: "Unlocking Tracker / Search…",
       });
 
       const completeRes = await fetch("/api/onboarding/complete", {
@@ -350,14 +350,14 @@ export function OnboardingWizard() {
         throw new Error(
           completeData.error ||
             (completeData.gaps
-              ? `Eksik: ${(completeData.gaps as string[]).join(", ")}`
-              : "Tamamlanamadı"),
+              ? `Missing: ${(completeData.gaps as string[]).join(", ")}`
+              : "Could not complete"),
         );
       }
 
       patchBoot("unlock", {
         status: "ok",
-        label: "Tracker / Araştır kilidi açıldı",
+        label: "Tracker / Search unlocked",
       });
       setBootDone(true);
       await sleep(1200);
@@ -382,7 +382,7 @@ export function OnboardingWizard() {
       fd.append("language", form.preferredLanguage || "en");
       const res = await fetch("/api/settings/cv", { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "CV yüklenemedi");
+      if (!res.ok) throw new Error(data.error || "Could not upload CV");
       setCvs(data.cvs || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -399,7 +399,7 @@ export function OnboardingWizard() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "CV silinemedi");
+      if (!res.ok) throw new Error(data.error || "Could not delete CV");
       setCvs(data.cvs || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -418,7 +418,7 @@ export function OnboardingWizard() {
         body: JSON.stringify({ language }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Dil güncellenemedi");
+      if (!res.ok) throw new Error(data.error || "Could not update language");
       setCvs(data.cvs || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -444,10 +444,10 @@ export function OnboardingWizard() {
       <div className="cmae-onb">
         <div className="cmae-onb-brand">CMAE</div>
         <div className="cmae-onb-boot">
-          <h1 className="cmae-onb-boot-title">Bağlantılar doğrulanıyor…</h1>
+          <h1 className="cmae-onb-boot-title">Verifying connections…</h1>
           <p className="cmae-onb-boot-lead">
-            Gmail IMAP ve Cursor API gerçekten deneniyor. Biri başarısız olursa
-            ilgili adıma geri dönersin.
+            Gmail IMAP and Cursor API are being tested for real. If either fails,
+            you will return to that step.
           </p>
           <ul className="cmae-onb-boot-list">
             {bootItems.map((item) => (
@@ -475,13 +475,13 @@ export function OnboardingWizard() {
           </ul>
           {bootFailMsg ? (
             <p className="cmae-onb-boot-fail is-visible">
-              {bootFailMsg} — ilgili adıma dönülüyor…
+              {bootFailMsg} — returning to the related step…
             </p>
           ) : (
             <p
               className={`cmae-onb-boot-done${bootDone ? " is-visible" : ""}`}
             >
-              Hazırsın — Tracker’a geçiliyor…
+              You&apos;re ready — opening Tracker…
             </p>
           )}
         </div>
@@ -504,37 +504,56 @@ export function OnboardingWizard() {
           ))}
         </div>
         <p className="cmae-onb-step-label">
-          Adım {step + 1} / {STEPS.length - 1}
+          Step {step + 1} / {STEPS.length - 1}
         </p>
 
         {stepId === "welcome" ? (
           <>
-            <h1 className="cmae-onb-title">CMAE’ye hoş geldin</h1>
+            <h1 className="cmae-onb-title">Welcome to CMAE</h1>
             <p className="cmae-onb-lead">
-              CMAE; şirket araştırması, kişiselleştirilmiş başvuru mailleri,
-              Gmail taslakları ve follow-up takibini tek yerde yönetir.
+              CMAE manages company research, personalized application emails,
+              Gmail drafts, and follow-up tracking in one place.
             </p>
           </>
         ) : null}
 
         {stepId === "profile" ? (
           <>
-            <h1 className="cmae-onb-title">Profilin</h1>
+            <h1 className="cmae-onb-title">Your profile</h1>
             <p className="cmae-onb-why">
-              Adın mail gövdesinde ve ek dosya adında (ör. Ad_Soyad_CV.pdf)
-              kullanılır. Gmail hesabını sonraki adımda bağlarsın.
+              Your name is used in the email body and attachment filename (e.g.
+              First_Last_CV.pdf). Language drives drafts, AI research, and
+              follow-ups. You will connect Gmail in the next step.
             </p>
             <div className="cmae-onb-fields">
-              <Field label="Ad Soyad">
+              <Field label="Full name">
                 <input
                   className="cmae-input"
                   value={form.fullName}
                   onChange={(e) =>
                     setForm({ ...form, fullName: e.target.value })
                   }
-                  placeholder="Adın Soyadın"
+                  placeholder="Your Full Name"
                   autoFocus
                 />
+              </Field>
+              <Field
+                label="Preferred language"
+                hint="Default for drafts, AI research, and follow-ups. Thread language still wins when clear."
+              >
+                <select
+                  className="cmae-input"
+                  value={form.preferredLanguage}
+                  onChange={(e) =>
+                    setForm({ ...form, preferredLanguage: e.target.value })
+                  }
+                >
+                  {PREFERRED_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </div>
           </>
@@ -542,18 +561,19 @@ export function OnboardingWizard() {
 
         {stepId === "gmail" ? (
           <>
-            <h1 className="cmae-onb-title">Gmail bağlantısı</h1>
+            <h1 className="cmae-onb-title">Gmail connection</h1>
             <p className="cmae-onb-why">
-              Tracker gelen/giden mailleri IMAP ile okur; başvuru ve follow-up
-              taslaklarını Gmail Drafts klasörüne yazar. Normal şifre değil — App
-              Password gerekir.
+              Tracker reads inbox/sent mail via IMAP and writes application and
+              follow-up drafts to the Gmail Drafts folder. Not your normal
+              password — an App Password is required.
             </p>
             <ol className="cmae-onb-guide">
               <li>
-                Google hesabında{" "}
-                <strong>2 adımlı doğrulama</strong> açık olmalı.
+                <strong>2-Step Verification</strong> must be enabled on your
+                Google account.
               </li>
               <li>
+                Open the{" "}
                 <a
                   href="https://myaccount.google.com/apppasswords"
                   target="_blank"
@@ -561,19 +581,19 @@ export function OnboardingWizard() {
                 >
                   App passwords
                 </a>{" "}
-                sayfasını aç.
+                page.
               </li>
               <li>
-                Uygulama adı olarak örn. <strong>CMAE</strong> yaz →{" "}
+                Enter an app name such as <strong>CMAE</strong> →{" "}
                 <strong>Create</strong>.
               </li>
               <li>
-                Oluşan <strong>16 haneli şifreyi</strong> kopyala ve aşağıya
-                yapıştır.
+                Copy the generated <strong>16-digit password</strong> and paste
+                it below.
               </li>
             </ol>
             <div className="cmae-onb-fields">
-              <Field label="Gmail adresi">
+              <Field label="Gmail address">
                 <input
                   className="cmae-input"
                   type="email"
@@ -587,8 +607,8 @@ export function OnboardingWizard() {
                 label="Gmail App Password"
                 hint={
                   hasGmailPw
-                    ? "Kayıtlı bir şifre var — değiştirmek için yenisini yapıştır"
-                    : "Boşluklarla veya bitişik yapıştırabilirsin"
+                    ? "A password is already saved — paste a new one to replace it"
+                    : "You can paste with spaces or without"
                 }
               >
                 <input
@@ -610,27 +630,28 @@ export function OnboardingWizard() {
           <>
             <h1 className="cmae-onb-title">Cursor API Key</h1>
             <p className="cmae-onb-why">
-              Search ajanları (keşif, araştırma, mail yazımı) ve Tracker’daki
-              follow-up / yanıt taslakları bu anahtarla çalışır.
+              Search agents (discovery, research, email writing) and Tracker
+              follow-up / reply drafts run with this key.
             </p>
             <ol className="cmae-onb-guide">
               <li>
+                Open{" "}
                 <a
                   href="https://cursor.com/dashboard/api"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   Cursor Dashboard → API Keys
-                </a>{" "}
-                sayfasını aç.
+                </a>
+                .
               </li>
               <li>
-                Yeni bir API key oluştur (istediğin adı ver, örn.{" "}
+                Create a new API key (any name, e.g.{" "}
                 <strong>CMAE local</strong>).
               </li>
               <li>
-                Anahtarı kopyala ve <strong>bir kez</strong> aşağıya yapıştır —
-                sonra güvenli saklanır.
+                Copy the key and paste it below <strong>once</strong> — it will
+                then be stored securely.
               </li>
             </ol>
             <div className="cmae-onb-fields">
@@ -638,9 +659,9 @@ export function OnboardingWizard() {
                 label="Cursor API Key"
                 hint={
                   hasCursorKey
-                    ? "Veritabanında kayıtlı — değiştirmek için yenisini yapıştır"
+                    ? "Saved in the database — paste a new one to replace it"
                     : cursorFromEnv
-                      ? ".env içindeki CURSOR_API_KEY kullanılacak — boş bırakabilirsin"
+                      ? "CURSOR_API_KEY from .env will be used — you can leave this blank"
                       : undefined
                 }
               >
@@ -661,33 +682,15 @@ export function OnboardingWizard() {
 
         {stepId === "prefs" ? (
           <>
-            <h1 className="cmae-onb-title">Mail tercihlerin</h1>
+            <h1 className="cmae-onb-title">Your mail preferences</h1>
             <p className="cmae-onb-why">
-              Dil ikinci taslak dilini belirler; imza her mailin sonuna aynen
-              eklenir.
+              Follow-up timing and the signature appended exactly at the end of
+              every email.
             </p>
             <div className="cmae-onb-fields">
               <Field
-                label="Tercih edilen dil"
-                hint="Ana diliniz olarak seçmenizi tavsiye ederiz."
-              >
-                <select
-                  className="cmae-input"
-                  value={form.preferredLanguage}
-                  onChange={(e) =>
-                    setForm({ ...form, preferredLanguage: e.target.value })
-                  }
-                >
-                  {PREFERRED_LANGUAGES.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field
-                label="Follow-up günü"
-                hint="Mailiniz karşılıksız kaldığında kaç gün sonra hatırlatma maili göndereceğinizi belirler. Önerilen: 4–7 gün."
+                label="Follow-up day"
+                hint="How many days after no reply before a reminder email. Recommended: 4–7 days."
               >
                 <input
                   className="cmae-input"
@@ -704,8 +707,8 @@ export function OnboardingWizard() {
                 />
               </Field>
               <Field
-                label="E-posta imzası"
-                hint="Alt satırlar korunur; AI değiştiremez"
+                label="Email signature"
+                hint="Line breaks are preserved; AI cannot change this"
               >
                 <textarea
                   className="cmae-input cmae-textarea"
@@ -726,14 +729,14 @@ export function OnboardingWizard() {
 
         {stepId === "job" ? (
           <>
-            <h1 className="cmae-onb-title">İş tercihlerin</h1>
+            <h1 className="cmae-onb-title">Your job preferences</h1>
             <p className="cmae-onb-why">
-              Çalışma tipi ve ihbar başvuru / follow-up metinlerinde geçer. Ücret
-              yalnızca karşı taraf sorduğunda yanıtlarda kullanılır; maillerde
-              kendiliğinden yazılmaz.
+              Work type and notice period appear in application / follow-up
+              text. Salary is only used in replies when the other side asks; it
+              is never written into emails on its own.
             </p>
             <div className="cmae-onb-fields">
-              <Field label="Çalışma tipi" hint="En az birini seç">
+              <Field label="Work type" hint="Select at least one">
                 <div className="cmae-onb-check-row">
                   {(
                     [
@@ -754,8 +757,8 @@ export function OnboardingWizard() {
                 </div>
               </Field>
               <Field
-                label="İhbar süresi (hafta)"
-                hint="0 = ab sofort / hemen"
+                label="Notice period (weeks)"
+                hint="0 = immediately / ab sofort"
               >
                 <input
                   className="cmae-input"
@@ -772,7 +775,7 @@ export function OnboardingWizard() {
                 />
               </Field>
               <div className="cmae-form-grid">
-                <Field label="Periyot">
+                <Field label="Period">
                   <select
                     className="cmae-input"
                     value={prefs.salaryPeriod}
@@ -783,11 +786,11 @@ export function OnboardingWizard() {
                       })
                     }
                   >
-                    <option value="monthly">Aylık</option>
-                    <option value="yearly">Yıllık</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="yearly">Yearly</option>
                   </select>
                 </Field>
-                <Field label="Brüt / Net">
+                <Field label="Gross / Net">
                   <select
                     className="cmae-input"
                     value={prefs.salaryKind}
@@ -798,11 +801,11 @@ export function OnboardingWizard() {
                       })
                     }
                   >
-                    <option value="gross">Brüt</option>
+                    <option value="gross">Gross</option>
                     <option value="net">Net</option>
                   </select>
                 </Field>
-                <Field label="Para birimi">
+                <Field label="Currency">
                   <select
                     className="cmae-input"
                     value={prefs.salaryCurrency}
@@ -817,12 +820,12 @@ export function OnboardingWizard() {
                     }
                   >
                     <option value="eur">Euro</option>
-                    <option value="usd">Dolar</option>
-                    <option value="other">Diğer</option>
+                    <option value="usd">Dollar</option>
+                    <option value="other">Other</option>
                   </select>
                 </Field>
                 {prefs.salaryCurrency === "other" ? (
-                  <Field label="Diğer para birimi">
+                  <Field label="Other currency">
                     <input
                       className="cmae-input"
                       value={prefs.salaryCurrencyOther}
@@ -836,7 +839,7 @@ export function OnboardingWizard() {
                     />
                   </Field>
                 ) : null}
-                <Field label="Min ücret">
+                <Field label="Min salary">
                   <input
                     className="cmae-input"
                     type="number"
@@ -865,7 +868,7 @@ export function OnboardingWizard() {
                     })
                   }
                 />
-                Pazarlığa açığım
+                Open to negotiation
               </label>
             </div>
           </>
@@ -873,11 +876,12 @@ export function OnboardingWizard() {
 
         {stepId === "cv" ? (
           <>
-            <h1 className="cmae-onb-title">CV’ni yükle</h1>
+            <h1 className="cmae-onb-title">Upload your CV</h1>
             <p className="cmae-onb-why">
-              Metin AI’ın kişiselleştirilmiş mail yazması için parse edilir; PDF
-              başvuru ve follow-up Gmail taslaklarına otomatik eklenir. En az bir
-              CV zorunlu — dil/etiketleri sonra Ayarlar’dan düzenleyebilirsin.
+              Text is parsed so AI can write personalized emails; the PDF is
+              attached automatically to application and follow-up Gmail drafts.
+              At least one CV is required — you can edit languages/labels later
+              in Settings.
             </p>
             {cvs.length ? (
               <ul className="cmae-onb-cv-list">
@@ -890,7 +894,7 @@ export function OnboardingWizard() {
                       className="cmae-input cmae-onb-cv-lang"
                       value={cv.language}
                       disabled={busy}
-                      aria-label="CV dili"
+                      aria-label="CV language"
                       onChange={(e) =>
                         void patchCvLanguage(cv.id, e.target.value)
                       }
@@ -907,16 +911,16 @@ export function OnboardingWizard() {
                       disabled={busy}
                       onClick={() => void removeCv(cv.id)}
                     >
-                      Sil
+                      Delete
                     </Button>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="cmae-onb-hint">Henüz CV yok.</p>
+              <p className="cmae-onb-hint">No CV yet.</p>
             )}
             {cvs.length < 4 ? (
-              <Field label="PDF yükle">
+              <Field label="Upload PDF">
                 <input
                   className="cmae-onb-file"
                   type="file"
@@ -943,7 +947,7 @@ export function OnboardingWizard() {
               disabled={busy}
               onClick={goBack}
             >
-              Geri
+              Back
             </Button>
           ) : (
             <span />
@@ -957,10 +961,10 @@ export function OnboardingWizard() {
               {busy
                 ? "…"
                 : stepId === "cv"
-                  ? "Sistemi başlat"
+                  ? "Start system"
                   : stepId === "welcome"
-                    ? "Başla"
-                    : "İleri"}
+                    ? "Get started"
+                    : "Next"}
             </Button>
           </div>
         </div>

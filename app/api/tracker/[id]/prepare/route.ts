@@ -18,12 +18,12 @@ export async function POST(
     const { id: idRaw } = await ctx.params;
     const id = Number(idRaw);
     if (!Number.isFinite(id)) {
-      return NextResponse.json({ error: "Geçersiz id" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
     const body = (await req.json().catch(() => ({}))) as { kind?: string };
     const kind = (body.kind || "follow_up") as Exclude<DraftKind, "application">;
     if (!KINDS.includes(kind as (typeof KINDS)[number])) {
-      return NextResponse.json({ error: "Geçersiz kind" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
     }
     const result = await prepareDraftForItem(id, kind);
     return NextResponse.json(result);

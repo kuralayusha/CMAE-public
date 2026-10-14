@@ -18,8 +18,8 @@ export async function runCurl(
       `$ ${display}`,
       undefined,
       targetUrl
-        ? `Web sayfası indiriliyor: ${targetUrl}. (Keşif)`
-        : "İnternetten veri indiriliyor. (Keşif)",
+        ? `Downloading web page: ${targetUrl}. (Scout)`
+        : "Fetching data from the internet. (Scout)",
     );
   }
 
@@ -38,7 +38,7 @@ export async function runCurl(
         "system",
         `  ↳ stderr: ${preview.slice(0, 240)}`,
         undefined,
-        `İndirme uyarısı: ${preview.slice(0, 100)}. (Keşif)`,
+        `Download warning: ${preview.slice(0, 100)}. (Scout)`,
       );
     }
     emitLine(
@@ -47,8 +47,8 @@ export async function runCurl(
       `  ↳ ${out.length} bytes${out.length ? ` · preview: ${compact(out, 120)}` : ""}`,
       undefined,
       out.length
-        ? `Sayfa alındı (${Math.round(out.length / 1024)} KB). (Keşif)`
-        : "Sayfa boş geldi. (Keşif)",
+        ? `Page fetched (${Math.round(out.length / 1024)} KB). (Scout)`
+        : "Page came back empty. (Scout)",
     );
     return { stdout: out, stderr: err, code: 0 };
   } catch (e) {
@@ -60,7 +60,7 @@ export async function runCurl(
       "err",
       `  ✖ curl failed (${err.code ?? "?"}): ${compact(stderr, 200)}`,
       undefined,
-      `Sayfa indirilemedi: ${compact(stderr, 100)}. (Keşif)`,
+      `Could not download page: ${compact(stderr, 100)}. (Scout)`,
     );
     return { stdout, stderr, code: err.code ?? 1 };
   }
@@ -79,7 +79,7 @@ export async function runPython(
     "python",
     `$ python3 -c ${shellQuote(shown)}`,
     undefined,
-    "Metin içinde e-posta ve kalıplar taranıyor. (İletişim)",
+    "Scanning text for emails and patterns. (Contact)",
   );
 
   try {
@@ -92,7 +92,7 @@ export async function runPython(
       let countHint = "";
       try {
         const parsed = JSON.parse(out) as unknown;
-        if (Array.isArray(parsed)) countHint = ` ${parsed.length} sonuç.`;
+        if (Array.isArray(parsed)) countHint = ` ${parsed.length} results.`;
       } catch {
         /* ignore */
       }
@@ -101,7 +101,7 @@ export async function runPython(
         "system",
         `  ↳ ${compact(out, 300)}`,
         undefined,
-        `Tarama bitti.${countHint} (İletişim)`,
+        `Scan finished.${countHint} (Contact)`,
       );
     }
     if (stderr.toString().trim()) {
@@ -110,7 +110,7 @@ export async function runPython(
         "system",
         `  ↳ py-stderr: ${compact(stderr.toString(), 160)}`,
         undefined,
-        `Tarama uyarısı: ${compact(stderr.toString(), 100)}. (İletişim)`,
+        `Scan warning: ${compact(stderr.toString(), 100)}. (Contact)`,
       );
     }
     return { stdout: out, stderr: stderr.toString(), code: 0 };
@@ -121,7 +121,7 @@ export async function runPython(
       "err",
       `  ✖ python failed: ${compact(err.stderr?.toString() || err.message || String(e), 220)}`,
       undefined,
-      "Tarama scripti hata verdi. (İletişim)",
+      "Scan script failed. (Contact)",
     );
     return {
       stdout: err.stdout?.toString() || "",

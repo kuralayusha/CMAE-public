@@ -77,7 +77,7 @@ export const PAGE_HELP: Record<AppPageId, PageHelp> = {
       "Secrets (Gmail App Password, Cursor API Key) are encrypted in the local database on this machine.",
     ],
     helpSteps: [
-      "Update your name, signature, and preferred language — outreach follows these.",
+      "Update your name and preferred language under Profile — drafts and AI follow these.",
       "To change Gmail or Cursor credentials, paste a new value; leave blank to keep the current one.",
       "Job preferences (work type, notice, salary) feed application and follow-up copy.",
       "Add PDF CVs to the library; they attach to drafts by language and tags.",

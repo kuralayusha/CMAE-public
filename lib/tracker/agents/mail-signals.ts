@@ -149,13 +149,13 @@ export async function classifyMailSignals(
       } catch (err) {
         if (err instanceof SyncCanceledError) throw err;
         const msg = err instanceof Error ? err.message : String(err);
-        log?.("system", `intent batch ${i + 1} başarısız → regex: ${msg}`);
+        log?.("system", `intent batch ${i + 1} failed → regex: ${msg}`);
       }
     }
   } catch (err) {
     if (err instanceof SyncCanceledError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
-    log?.("system", `AI intent atlandı → regex: ${msg}`);
+    log?.("system", `AI intent skipped → regex: ${msg}`);
   }
 
   let aiHits = 0;

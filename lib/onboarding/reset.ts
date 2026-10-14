@@ -39,7 +39,7 @@ export function resetAppForOnboarding(): void {
 
   if (isOnboardingFlagSet() || isOnboardingComplete()) {
     throw new Error(
-      "Veriler silindi ama onboarding bayrağı temizlenemedi — sunucuyu yeniden başlatıp tekrar dene",
+      "Data was wiped but the onboarding flag could not be cleared — restart the server and try again",
     );
   }
 }

@@ -63,12 +63,12 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
             className="term-tl term-tl-close"
             title={
               canCancel
-                ? "Sync’i iptal et"
+                ? "Cancel sync"
                 : canDismiss
-                  ? "Kapat"
+                  ? "Close"
                   : undefined
             }
-            aria-label={canCancel ? "İptal" : "Kapat"}
+            aria-label={canCancel ? "Cancel" : "Close"}
             disabled={!canCancel && !canDismiss}
             onClick={onRedClick}
             style={{
@@ -85,8 +85,8 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
           <button
             type="button"
             className="term-tl term-tl-min"
-            title={collapsed ? "Genişlet" : "Daralt"}
-            aria-label={collapsed ? "Genişlet" : "Daralt"}
+            title={collapsed ? "Expand" : "Collapse"}
+            aria-label={collapsed ? "Expand" : "Collapse"}
             onClick={() => setCollapsed((c) => !c)}
             style={DOT_HIT}
           >
@@ -115,7 +115,7 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
         >
           {lines.length === 0 ? (
             <div className="term-line" style={{ color: "#64748b" }}>
-              Sync adımları burada görünecek…
+              Sync steps will appear here…
             </div>
           ) : null}
           {lines.map((line) => (

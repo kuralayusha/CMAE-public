@@ -18,7 +18,7 @@ export async function GET(
   const { id } = await ctx.params;
   const session = getSyncSession(id);
   if (!session) {
-    return new Response(JSON.stringify({ error: "Sync session yok" }), {
+    return new Response(JSON.stringify({ error: "Sync session not found" }), {
       status: 404,
       headers: { "Content-Type": "application/json" },
     });

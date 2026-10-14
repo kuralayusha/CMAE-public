@@ -90,7 +90,7 @@ export async function compactTopLevelFolderIndices(
     for (const p of pending) {
       const dest = path.join(ROOT, p.finalName);
       if (!dest.startsWith(ROOT + path.sep)) {
-        throw new Error("Geçersiz workspace yolu");
+        throw new Error("Invalid workspace path");
       }
       await fs.rename(p.tempPath, dest);
       changes.push({ from: p.oldName, to: p.finalName });
@@ -116,7 +116,7 @@ export async function createCompanyFolder(companyName: string): Promise<{
       const folderName = `${index}- ${base}`;
       const folderPath = path.join(ROOT, folderName);
       if (!folderPath.startsWith(ROOT + path.sep) && folderPath !== ROOT) {
-        throw new Error("Geçersiz workspace yolu");
+        throw new Error("Invalid workspace path");
       }
       try {
         await fs.mkdir(folderPath);
@@ -130,7 +130,7 @@ export async function createCompanyFolder(companyName: string): Promise<{
         throw err;
       }
     }
-    throw new Error("Workspace klasör indeksi atanamadı");
+    throw new Error("Could not assign workspace folder index");
   });
 }
 
@@ -145,7 +145,7 @@ export async function renameCompanyFolder(
     const folderName = `${index}- ${safeName(companyName)}`;
     const folderPath = path.join(ROOT, folderName);
     if (!folderPath.startsWith(ROOT + path.sep)) {
-      throw new Error("Geçersiz workspace yolu");
+      throw new Error("Invalid workspace path");
     }
     if (folderPath !== currentPath) {
       try {
@@ -164,10 +164,10 @@ export async function writeFile(
   content: string,
 ): Promise<string> {
   if (fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
-    throw new Error("Geçersiz dosya adı");
+    throw new Error("Invalid file name");
   }
   if (!folderPath.startsWith(ROOT + path.sep)) {
-    throw new Error("Geçersiz klasör");
+    throw new Error("Invalid folder");
   }
   const full = path.join(folderPath, fileName);
   await fs.writeFile(full, content, "utf8");
@@ -188,7 +188,7 @@ export async function revealInFileManager(relativePath = ""): Promise<{
   try {
     st = await fs.stat(full);
   } catch {
-    throw new Error("Yol bulunamadı");
+    throw new Error("Path not found");
   }
 
   const platform = process.platform;
@@ -223,7 +223,7 @@ export async function revealInFileManager(relativePath = ""): Promise<{
 }
 
 export type WorkspaceEntryBadge = {
-  /** Shown next to filename, e.g. "(boş)", "(2)", "(for AI)" */
+  /** Shown next to filename, e.g. "(empty)", "(2)", "(for AI)" */
   text: string;
   /** muted = faded empty; ok = has links; ai = internal agent notes */
   tone: "muted" | "ok" | "ai";
@@ -301,7 +301,7 @@ async function badgeForEntry(
       const raw = await fs.readFile(fullPath, "utf8");
       const { count, empty } = analyzeBasvuruLinkleri(raw);
       if (empty || count === 0) {
-        return { text: "(boş)", tone: "muted" };
+        return { text: "(empty)", tone: "muted" };
       }
       return { text: `(${count})`, tone: "ok" };
     } catch {
@@ -309,7 +309,7 @@ async function badgeForEntry(
     }
   }
 
-  // User cares about: şirket bilgileri, başvuru linkleri, mail taslakları
+  // User cares about: company info, application links, mail drafts
   if (
     /^sirket_bilgileri\.md$/i.test(name) ||
     isUserFacingMailDraft(name)
@@ -331,11 +331,11 @@ export function resolveWorkspacePath(relativePath = ""): string {
     .replace(/^\/+/, "")
     .trim();
   if (cleaned.includes("\0") || cleaned.split("/").some((p) => p === "..")) {
-    throw new Error("Geçersiz yol");
+    throw new Error("Invalid path");
   }
   const full = path.resolve(ROOT, cleaned);
   if (full !== ROOT && !full.startsWith(ROOT + path.sep)) {
-    throw new Error("Geçersiz workspace yolu");
+    throw new Error("Invalid workspace path");
   }
   return full;
 }
@@ -353,7 +353,7 @@ export async function listWorkspace(relativePath = ""): Promise<{
   const normalized = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
   const top = normalized.split("/")[0]?.toLowerCase() || "";
   if (top === "cvs") {
-    throw new Error("Bu klasör Folders’ta görünmez");
+    throw new Error("This folder is not visible in Folders");
   }
 
   const dir = resolveWorkspacePath(relativePath);
@@ -363,10 +363,10 @@ export async function listWorkspace(relativePath = ""): Promise<{
   try {
     st = await fs.stat(dir);
   } catch {
-    throw new Error("Klasör bulunamadı");
+    throw new Error("Folder not found");
   }
   if (!st.isDirectory()) {
-    throw new Error("Yol bir klasör değil");
+    throw new Error("Path is not a folder");
   }
 
   const rel = toRelative(dir);
@@ -446,16 +446,16 @@ export async function readWorkspaceFile(relativePath: string): Promise<{
   binary: boolean;
 }> {
   const full = resolveWorkspacePath(relativePath);
-  if (full === ROOT) throw new Error("Dosya yolu gerekli");
+  if (full === ROOT) throw new Error("File path required");
 
   let st;
   try {
     st = await fs.stat(full);
   } catch {
-    throw new Error("Dosya bulunamadı");
+    throw new Error("File not found");
   }
-  if (!st.isFile()) throw new Error("Yol bir dosya değil");
-  if (st.size > 2_000_000) throw new Error("Dosya çok büyük (max 2 MB)");
+  if (!st.isFile()) throw new Error("Path is not a file");
+  if (st.size > 2_000_000) throw new Error("File too large (max 2 MB)");
 
   const name = path.basename(full);
   const ext = path.extname(name).toLowerCase();
@@ -505,7 +505,7 @@ function safeEntryName(name: string): string {
     .trim()
     .slice(0, 120);
   if (!cleaned || cleaned === "." || cleaned === "..") {
-    throw new Error("Geçersiz isim");
+    throw new Error("Invalid name");
   }
   return cleaned;
 }
@@ -516,20 +516,20 @@ export async function renameWorkspaceEntry(
   newName: string,
 ): Promise<{ path: string; name: string; kind: "dir" | "file" }> {
   const full = resolveWorkspacePath(relativePath);
-  if (full === ROOT) throw new Error("workspace kökü yeniden adlandırılamaz");
+  if (full === ROOT) throw new Error("workspace root cannot be renamed");
 
   let st;
   try {
     st = await fs.stat(full);
   } catch {
-    throw new Error("Yol bulunamadı");
+    throw new Error("Path not found");
   }
 
   const nextName = safeEntryName(newName);
   const parent = path.dirname(full);
   const target = path.join(parent, nextName);
   if (target !== ROOT && !target.startsWith(ROOT + path.sep)) {
-    throw new Error("Geçersiz hedef yol");
+    throw new Error("Invalid target path");
   }
   if (target === full) {
     return {
@@ -546,7 +546,7 @@ export async function renameWorkspaceEntry(
       throw err;
     },
   );
-  if (targetExists) throw new Error("Bu isimde bir öğe zaten var");
+  if (targetExists) throw new Error("An item with this name already exists");
 
   await fs.rename(full, target);
   return {
@@ -561,12 +561,12 @@ export async function deleteWorkspaceEntry(
   relativePath: string,
 ): Promise<{ path: string }> {
   const full = resolveWorkspacePath(relativePath);
-  if (full === ROOT) throw new Error("workspace kökü silinemez");
+  if (full === ROOT) throw new Error("workspace root cannot be deleted");
 
   try {
     await fs.stat(full);
   } catch {
-    throw new Error("Yol bulunamadı");
+    throw new Error("Path not found");
   }
 
   await fs.rm(full, { recursive: true, force: false });
@@ -579,7 +579,7 @@ export async function markFolderCanceled(currentPath: string): Promise<{
   folderPath: string;
 }> {
   if (!currentPath.startsWith(ROOT + path.sep)) {
-    throw new Error("Geçersiz klasör");
+    throw new Error("Invalid folder");
   }
   const base = path.basename(currentPath);
   if (/\(canceled\)/i.test(base)) {
@@ -588,7 +588,7 @@ export async function markFolderCanceled(currentPath: string): Promise<{
   const folderName = `${base} (canceled)`;
   const folderPath = path.join(ROOT, folderName);
   if (!folderPath.startsWith(ROOT + path.sep)) {
-    throw new Error("Geçersiz hedef klasör");
+    throw new Error("Invalid destination folder");
   }
   try {
     await fs.rename(currentPath, folderPath);

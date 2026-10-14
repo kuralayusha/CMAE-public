@@ -40,7 +40,7 @@ export default function SearchPage() {
     try {
       const res = await fetch("/api/search");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Jobs yüklenemedi");
+      if (!res.ok) throw new Error(data.error || "Could not load jobs");
 
       const active: JobCard[] = data.active || data.jobs || [];
       const hist: JobCard[] = data.history || active;
@@ -105,7 +105,7 @@ export default function SearchPage() {
         body: JSON.stringify({ urls }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Başlatılamadı");
+      if (!res.ok) throw new Error(data.error || "Could not start");
       const created: JobCard[] = data.jobs || [];
       upsertCatalog(created);
       setPanelIds((prev) => [...created.map((j) => j.id), ...prev]);
@@ -158,7 +158,7 @@ export default function SearchPage() {
               />
               <div className="cmae-start-actions">
                 <Button type="submit" disabled={busy || !urls.trim()}>
-                  {busy ? "Agent’lar başlatılıyor…" : "Araştırmayı başlat"}
+                  {busy ? "Starting agents…" : "Start research"}
                 </Button>
               </div>
               {error ? <p className="cmae-error">{error}</p> : null}
@@ -166,10 +166,10 @@ export default function SearchPage() {
 
             <section className="cmae-panel">
               {loading && panelJobs.length === 0 ? (
-                <p className="cmae-panel-empty">Terminaller yükleniyor…</p>
+                <p className="cmae-panel-empty">Loading terminals…</p>
               ) : panelJobs.length === 0 ? (
                 <p className="cmae-panel-empty">
-                  Panel boş. Yeni araştırma başlat veya soldan geçmiş bir kayda tıkla.
+                  Panel is empty. Start a new research or click a past entry on the right.
                 </p>
               ) : (
                 <div className="term-grid">
@@ -177,9 +177,9 @@ export default function SearchPage() {
                     <div key={j.id} id={`term-${j.id}`} className="term-slot">
                       {!LIVE.has(j.status) ? (
                         <div className="term-slot-bar">
-                          <span>Geçmiş oturum</span>
+                          <span>Past session</span>
                           <button type="button" onClick={() => removeFromPanel(j.id)}>
-                            Panelden kaldır
+                            Remove from panel
                           </button>
                         </div>
                       ) : null}

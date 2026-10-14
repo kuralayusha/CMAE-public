@@ -45,7 +45,7 @@ export async function runConductor(jobId: string) {
     "conductor",
     "system",
     `◆ conductor · ${job.url} · specialists: ${SPECIALISTS.join(" → ")}`,
-    "Araştırma başlıyor; uzman adımlar sırayla işleyecek: keşif → ilan → iletişim → araştırma → yazım → kontrol",
+    "Research starting; specialists will run in order: scout → jobfit → contact → research → writer → reviewer",
   );
 
   try {
@@ -57,12 +57,12 @@ export async function runConductor(jobId: string) {
     const cvText = libraryText?.trim() || cfg?.cvText?.trim() || "";
     if (!cvText) {
       throw new Error(
-        "CV bulunamadı — Ayarlar’dan CV yükleyin veya workspace/cvs/ klasörüne PDF bırakın",
+        "CV not found — upload a CV in Settings or place a PDF in workspace/cvs/",
       );
     }
 
     const ctx = createRunContext(jobId, job.url, {
-      fullName: cfg?.fullName || "Aday",
+      fullName: cfg?.fullName || "Candidate",
       email: cfg?.gmailAddress || "",
       cvText,
       preferredLang: cfg?.preferredLanguage || "tr",
@@ -79,7 +79,7 @@ export async function runConductor(jobId: string) {
         "conductor",
         "system",
         `▶ dispatch → ${agent} (step ${stepIndex + 1}/${PIPELINE.length})`,
-        `Sıra ${stepIndex + 1}/${PIPELINE.length}: iş ${agent} adımına geçildi`,
+        `Step ${stepIndex + 1}/${PIPELINE.length}: dispatched to ${agent}`,
       );
 
       await RUNNERS[agent](ctx);
@@ -110,7 +110,7 @@ export async function runConductor(jobId: string) {
           jobId,
           "conductor",
           "think",
-          `max rewind (${MAX_REWINDS}) aşıldı — mevcut paketle devam`,
+          `max rewind (${MAX_REWINDS}) exceeded — continuing with current package`,
         );
         break;
       }
@@ -123,7 +123,7 @@ export async function runConductor(jobId: string) {
           jobId,
           "conductor",
           "think",
-          `${target} için max retry — paket kilitleniyor`,
+          `max retry for ${target} — locking package`,
         );
         break;
       }
@@ -160,7 +160,7 @@ export async function runConductor(jobId: string) {
     await writeFile(
       ctx.folderPath,
       "ozet.md",
-      `# ${ctx.companyName} — tarama özeti\n\n- URL: ${ctx.url}\n- Klasör: ${ctx.folderName}\n- Mimari: conductor + specialists\n- Uygun ilan: ${ctx.jobFit?.hasMatchingJob ? "evet" : "hayır"}\n- E-posta: ${ctx.primaryEmail || "—"}\n- Site dili: ${ctx.siteLanguage}\n- Review: ${ctx.lastReview?.overallScore ?? "—"} / ${ctx.lastReview?.threshold ?? "—"}\n- Rewinds: ${rewinds}\n`,
+      `# ${ctx.companyName} — scan summary\n\n- URL: ${ctx.url}\n- Folder: ${ctx.folderName}\n- Architecture: conductor + specialists\n- Matching job: ${ctx.jobFit?.hasMatchingJob ? "yes" : "no"}\n- Email: ${ctx.primaryEmail || "—"}\n- Site language: ${ctx.siteLanguage}\n- Review: ${ctx.lastReview?.overallScore ?? "—"} / ${ctx.lastReview?.threshold ?? "—"}\n- Rewinds: ${rewinds}\n`,
     );
 
     setJobStatus(jobId, "done", {

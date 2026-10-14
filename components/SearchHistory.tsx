@@ -14,11 +14,11 @@ const STATUS_META: Record<
   string,
   { label: string; tone: "run" | "done" | "cancel" | "err" | "idle" }
 > = {
-  queued: { label: "kuyruk", tone: "run" },
-  running: { label: "çalışıyor", tone: "run" },
-  done: { label: "bitti", tone: "done" },
-  canceled: { label: "iptal", tone: "cancel" },
-  error: { label: "hata", tone: "err" },
+  queued: { label: "queued", tone: "run" },
+  running: { label: "running", tone: "run" },
+  done: { label: "done", tone: "done" },
+  canceled: { label: "canceled", tone: "cancel" },
+  error: { label: "error", tone: "err" },
 };
 
 type Props = {
@@ -37,19 +37,19 @@ export function SearchHistory({
   onSelect,
 }: Props) {
   return (
-    <aside className="cmae-hist" aria-label="Araştırma geçmişi">
+    <aside className="cmae-hist" aria-label="Search history">
       <div className="cmae-hist-scroll">
         {loading && items.length === 0 ? (
           <div className="cmae-hist-empty" role="status">
             <span className="cmae-hist-empty-mark" aria-hidden />
-            <p>Yükleniyor…</p>
+            <p>Loading…</p>
           </div>
         ) : items.length === 0 ? (
           <div className="cmae-hist-empty">
             <span className="cmae-hist-empty-mark" aria-hidden />
-            <p>Henüz araştırma yok</p>
+            <p>No searches yet</p>
             <span className="cmae-hist-empty-hint">
-              Yeni bir URL ile başlattığında burada listelenir.
+              When you start with a new URL, it will appear here.
             </span>
           </div>
         ) : (
@@ -96,7 +96,7 @@ export function SearchHistory({
                           {meta.label}
                         </span>
                         {inPanel ? (
-                          <span className="cmae-hist-open">açık</span>
+                          <span className="cmae-hist-open">open</span>
                         ) : null}
                       </span>
                     </span>

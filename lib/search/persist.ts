@@ -97,7 +97,7 @@ export function listUnfinishedJobs(store: Map<string, SearchJob>): SearchJob[] {
     });
 }
 
-/** Tüm araştırmalar (done / canceled dahil) — history bar */
+/** All searches (including done / canceled) — history bar */
 export function listAllJobs(store: Map<string, SearchJob>): SearchJob[] {
   return [...store.values()].sort((a, b) => b.createdAt - a.createdAt);
 }

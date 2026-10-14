@@ -11,7 +11,7 @@ import { createCompanyFolder, renameCompanyFolder, writeFile } from "../workspac
 
 export async function runScout(ctx: RunContext) {
   const { jobId, url } = ctx;
-  speak(jobId, "scout", "system", "── scout online · keşif & rota planı");
+  speak(jobId, "scout", "system", "── scout online · discovery & route plan");
 
   if (ctx.redoFeedback.scout) {
     speak(jobId, "scout", "think", `Reviewer feedback: ${ctx.redoFeedback.scout}`);
@@ -21,7 +21,7 @@ export async function runScout(ctx: RunContext) {
   try {
     host = new URL(url).hostname.replace(/^www\./, "");
   } catch {
-    throw new Error(`Geçersiz URL: ${url}`);
+    throw new Error(`Invalid URL: ${url}`);
   }
 
   if (!ctx.folderPath) {
@@ -36,7 +36,7 @@ export async function runScout(ctx: RunContext) {
     speak(jobId, "scout", "ok", `workspace → ${folder.folderName}/`);
   }
 
-  speak(jobId, "scout", "think", "Ana sayfa çekiliyor…");
+  speak(jobId, "scout", "think", "Fetching homepage…");
   const home = await fetchPage(jobId, url);
   ctx.home = home;
 
@@ -50,7 +50,7 @@ export async function runScout(ctx: RunContext) {
     jobId,
     "scout",
     "think",
-    `dil≈${plan.siteLanguage} · ${plan.routes.length} rota · ${plan.pathGuesses.length} path`,
+    `lang≈${plan.siteLanguage} · ${plan.routes.length} routes · ${plan.pathGuesses.length} paths`,
   );
   for (const r of plan.routes.slice(0, 10)) {
     speak(
@@ -64,13 +64,13 @@ export async function runScout(ctx: RunContext) {
   await writeFile(
     ctx.folderPath,
     "rotalar.md",
-    `# Keşfedilen rotalar (scout)\n\nKaynak: ${url}\nDil: ${plan.siteLanguage}\n\n${plan.notes ? `Not: ${plan.notes}\n\n` : ""}${plan.routes
+    `# Discovered routes (scout)\n\nSource: ${url}\nLanguage: ${plan.siteLanguage}\n\n${plan.notes ? `Note: ${plan.notes}\n\n` : ""}${plan.routes
       .map(
         (r) =>
           `- **${r.role}** (p${r.priority}) [${r.text || r.href}](${r.href}) — ${r.reason}`,
       )
-      .join("\n")}\n\n## Path tahminleri\n${
-      plan.pathGuesses.map((p) => `- \`${p}\``).join("\n") || "- (yok)"
+      .join("\n")}\n\n## Path guesses\n${
+      plan.pathGuesses.map((p) => `- \`${p}\``).join("\n") || "- (none)"
     }\n`,
   );
 
@@ -81,7 +81,7 @@ export async function runScout(ctx: RunContext) {
     const key = r.href.replace(/\/$/, "");
     if (visited.has(key)) continue;
     visited.add(key);
-    speak(jobId, "scout", "think", `Ziyaret (${r.role}): ${r.href}`);
+    speak(jobId, "scout", "think", `Visit (${r.role}): ${r.href}`);
     pages.push(await fetchPage(jobId, r.href));
   }
 
@@ -90,7 +90,7 @@ export async function runScout(ctx: RunContext) {
       const guess = new URL(pathGuess, url).toString();
       const key = guess.replace(/\/$/, "");
       if (visited.has(key)) continue;
-      speak(jobId, "scout", "think", `Path denemesi: ${guess}`);
+      speak(jobId, "scout", "think", `Trying path: ${guess}`);
       const page = await fetchPage(jobId, guess);
       if (page.text.length > 80) {
         visited.add(key);
@@ -107,7 +107,7 @@ export async function runScout(ctx: RunContext) {
     `Extract the company/organization name. Reply ONLY the name.\n\nTitle: ${home.title}\nURL: ${url}\nText: ${home.text.slice(0, 3000)}${
       ctx.redoFeedback.scout ? `\n\nPrevious reviewer note: ${ctx.redoFeedback.scout}` : ""
     }`,
-    "Şirket adı…",
+    "Company name…",
     "scout",
   );
   const companyName =
@@ -126,5 +126,10 @@ export async function runScout(ctx: RunContext) {
     companyName,
     folderName: renamed.folderName,
   });
-  speak(jobId, "scout", "ok", `hazır · ${renamed.folderName}/ · ${pages.length} sayfa`);
+  speak(
+    jobId,
+    "scout",
+    "ok",
+    `ready · ${renamed.folderName}/ · ${pages.length} pages`,
+  );
 }

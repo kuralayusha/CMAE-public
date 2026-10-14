@@ -73,7 +73,7 @@ export function assertOnboarded(): void {
 export class OnboardingRequiredError extends Error {
   status = 403;
   constructor() {
-    super("Onboarding tamamlanmadan bu işlem yapılamaz");
+    super("This action requires completed onboarding");
     this.name = "OnboardingRequiredError";
   }
 }

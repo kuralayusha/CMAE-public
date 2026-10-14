@@ -5,7 +5,7 @@ import { writeFile } from "../workspace";
 
 export async function runContact(ctx: RunContext) {
   const { jobId } = ctx;
-  speak(jobId, "contact", "system", "── contact online · hiring e-posta avı");
+  speak(jobId, "contact", "system", "── contact online · hiring email hunt");
 
   if (ctx.redoFeedback.contact) {
     speak(jobId, "contact", "think", `Reviewer feedback: ${ctx.redoFeedback.contact}`);
@@ -33,9 +33,9 @@ export async function runContact(ctx: RunContext) {
   await writeFile(
     ctx.folderPath,
     "iletisim.md",
-    `# İletişim (contact agent)\n\n## Önerilen\n${
-      ctx.primaryEmail || "_bulunamadı_"
-    }\n\n## Adaylar\n${
+    `# Contact (contact agent)\n\n## Recommended\n${
+      ctx.primaryEmail || "_not found_"
+    }\n\n## Candidates\n${
       ctx.emails.length
         ? ctx.emails
             .map(
@@ -43,10 +43,10 @@ export async function runContact(ctx: RunContext) {
                 `- ${e.email} _(role: ${e.role}, p${e.priority}, ${e.page})_ — ${e.reason}`,
             )
             .join("\n")
-        : "- (yok)"
+        : "- (none)"
     }\n${
       ctx.redoFeedback.contact
-        ? `\n## Reviewer notu\n${ctx.redoFeedback.contact}\n`
+        ? `\n## Reviewer note\n${ctx.redoFeedback.contact}\n`
         : ""
     }`,
   );
@@ -56,7 +56,7 @@ export async function runContact(ctx: RunContext) {
     "contact",
     ctx.primaryEmail ? "ok" : "think",
     ctx.primaryEmail
-      ? `önerilen: ${ctx.primaryEmail}`
-      : "direkt e-posta yok — writer genel hitap kullanacak",
+      ? `recommended: ${ctx.primaryEmail}`
+      : "no direct email — writer will use a generic greeting",
   );
 }

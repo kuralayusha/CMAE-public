@@ -282,7 +282,7 @@ export function Terminal({
               {displayLines.length === 0 ? (
                 <div className="term-line" style={{ color: "#64748b" }}>
                   {logMode === "simple"
-                    ? "Araştırma başladığında burada sade adımlar görünecek…"
+                    ? "When research starts, plain steps will appear here…"
                     : "waiting for agent…"}
                 </div>
               ) : null}
@@ -376,7 +376,7 @@ function formatStamp(at: number) {
   });
 }
 
-/** "Cümle. (Keşif ajanı)" → body + hint */
+/** "Sentence. (Scout agent)" → body + hint */
 function splitAgentParen(plain: string): { body: string; agentHint: string | null } {
   const m = plain.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
   if (!m) return { body: plain, agentHint: null };

@@ -50,7 +50,7 @@ function formatSize(n: number): string {
 
 function formatDate(ms: number): string {
   try {
-    return new Intl.DateTimeFormat("tr-TR", {
+    return new Intl.DateTimeFormat("en-US", {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -143,7 +143,7 @@ export function FolderBrowser() {
     try {
       const res = await fetch(`/api/folders?path=${encodeURIComponent(p)}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Liste alınamadı");
+      if (!res.ok) throw new Error(data.error || "Could not load listing");
       setListing(data);
     } catch (err) {
       setListing(null);
@@ -160,7 +160,7 @@ export function FolderBrowser() {
         `/api/folders?view=file&path=${encodeURIComponent(p)}`,
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Dosya okunamadı");
+      if (!res.ok) throw new Error(data.error || "Could not read file");
       setPreview(data);
     } catch (err) {
       setPreview(null);
@@ -263,7 +263,7 @@ export function FolderBrowser() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Yeniden adlandırılamadı");
+      if (!res.ok) throw new Error(data.error || "Could not rename");
       setRenamingPath(null);
       if (filePath === renamingPath || filePath.startsWith(`${renamingPath}/`)) {
         go("");
@@ -293,7 +293,7 @@ export function FolderBrowser() {
         body: JSON.stringify({ action: "delete", path: entry.relativePath }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Silinemedi");
+      if (!res.ok) throw new Error(data.error || "Could not delete");
       setDeleteTarget(null);
       if (
         path === entry.relativePath ||
@@ -322,7 +322,7 @@ export function FolderBrowser() {
         body: JSON.stringify({ action: "reveal", path: targetPath }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Finder açılamadı");
+      if (!res.ok) throw new Error(data.error || "Could not open Finder");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -351,8 +351,8 @@ export function FolderBrowser() {
               className="cmae-fb-nav-btn"
               disabled={!path}
               onClick={() => go(parentPath(path))}
-              aria-label="Üst klasör"
-              title="Üst klasör"
+              aria-label="Parent folder"
+              title="Parent folder"
             >
               ←
             </button>
@@ -361,14 +361,14 @@ export function FolderBrowser() {
               className="cmae-fb-nav-btn"
               disabled={!path && !filePath}
               onClick={() => go("")}
-              aria-label="workspace kökü"
-              title="workspace kökü"
+              aria-label="workspace root"
+              title="workspace root"
             >
               ⌂
             </button>
           </div>
 
-          <nav className="cmae-fb-crumbs" aria-label="Konum">
+          <nav className="cmae-fb-crumbs" aria-label="Location">
             {crumbs.map((c, i) => {
               const last = i === crumbs.length - 1 && !filePath;
               return (
@@ -404,7 +404,7 @@ export function FolderBrowser() {
           </nav>
 
           <div className="cmae-fb-count">
-            {dirCount} klasör · {fileCount} dosya
+            {dirCount} folders · {fileCount} files
           </div>
         </div>
 
@@ -417,17 +417,17 @@ export function FolderBrowser() {
         <div className={`cmae-fb-body${preview ? " is-split" : ""}`}>
           <div className="cmae-fb-list-pane">
             <div className="cmae-fb-cols" aria-hidden>
-              <span>Ad</span>
-              <span>Boyut</span>
-              <span>Değiştirilme</span>
+              <span>Name</span>
+              <span>Size</span>
+              <span>Modified</span>
             </div>
 
             {loading && !listing ? (
-              <p className="cmae-fb-loading">Yükleniyor…</p>
+              <p className="cmae-fb-loading">Loading…</p>
             ) : listing && listing.entries.length === 0 ? (
               <div className="cmae-fb-empty">
-                <p>Bu klasör boş</p>
-                <span>Search çalıştırınca şirket klasörleri burada görünür.</span>
+                <p>This folder is empty</p>
+                <span>Company folders appear here after you run Search.</span>
               </div>
             ) : (
               <ul className="cmae-fb-list">
@@ -459,7 +459,7 @@ export function FolderBrowser() {
                                 setRenamingPath(null);
                               }
                             }}
-                            aria-label="Klasör adını düzenle"
+                            aria-label="Edit folder name"
                           />
                         </div>
                       ) : (
@@ -479,10 +479,10 @@ export function FolderBrowser() {
                                 className={`cmae-fb-badge is-${entry.badge.tone}`}
                                 title={
                                   entry.badge.tone === "muted"
-                                    ? "Başvuru linki yok"
+                                    ? "No application link"
                                     : entry.badge.tone === "ai"
-                                      ? "AI ara çıktısı — genelde kullanıcıya gerekmez"
-                                      : `${entry.badge.text} başvuru linki`
+                                      ? "AI search output — usually not needed by the user"
+                                      : `${entry.badge.text} application link`
                                 }
                               >
                                 {entry.badge.text}
@@ -505,7 +505,7 @@ export function FolderBrowser() {
           </div>
 
           {preview ? (
-            <aside className="cmae-fb-preview" aria-label="Dosya önizleme">
+            <aside className="cmae-fb-preview" aria-label="File preview">
               <div className="cmae-fb-preview-head">
                 <div className="cmae-fb-preview-title">
                   <strong>{preview.name}</strong>
@@ -519,23 +519,23 @@ export function FolderBrowser() {
                     className="cmae-fb-close"
                     disabled={revealing}
                     onClick={() => void revealInOs(preview.path)}
-                    title="Finder / Dosya Gezgini’nde göster"
+                    title="Show in Finder / File Explorer"
                   >
-                    {revealing ? "Açılıyor…" : "Finder’da aç"}
+                    {revealing ? "Opening…" : "Open in Finder"}
                   </button>
                   <button
                     type="button"
                     className="cmae-fb-close"
                     onClick={() => go(path)}
                   >
-                    Kapat
+                    Close
                   </button>
                 </div>
               </div>
               <div className="cmae-fb-preview-body">
                 {preview.binary ? (
                   <p className="cmae-fb-loading">
-                    Bu dosya metin olarak önizlenemiyor.
+                    This file cannot be previewed as text.
                   </p>
                 ) : (
                   <pre>{preview.content}</pre>
@@ -560,7 +560,7 @@ export function FolderBrowser() {
             disabled={busy}
             onClick={() => startRename(menu.entry)}
           >
-            Yeniden adlandır
+            Rename
           </button>
           <button
             type="button"
@@ -569,7 +569,7 @@ export function FolderBrowser() {
             disabled={busy}
             onClick={() => askDelete(menu.entry)}
           >
-            Sil
+            Delete
           </button>
         </div>
       ) : null}
@@ -589,10 +589,10 @@ export function FolderBrowser() {
             aria-labelledby="cmae-fb-delete-title"
             aria-describedby="cmae-fb-delete-desc"
           >
-            <h2 id="cmae-fb-delete-title">Klasörü sil</h2>
+            <h2 id="cmae-fb-delete-title">Delete folder</h2>
             <p id="cmae-fb-delete-desc">
-              <strong>{deleteTarget.name}</strong> klasörü ve içindeki tüm
-              dosyalar kalıcı olarak silinecek. Bu işlem geri alınamaz.
+              The folder <strong>{deleteTarget.name}</strong> and all files
+              inside it will be permanently deleted. This cannot be undone.
             </p>
             <div className="cmae-fb-modal-actions">
               <button
@@ -602,7 +602,7 @@ export function FolderBrowser() {
                 disabled={busy}
                 onClick={() => setDeleteTarget(null)}
               >
-                Vazgeç
+                Cancel
               </button>
               <Button
                 type="button"
@@ -610,7 +610,7 @@ export function FolderBrowser() {
                 disabled={busy}
                 onClick={() => void confirmDelete()}
               >
-                {busy ? "Siliniyor…" : "Sil"}
+                {busy ? "Deleting…" : "Delete"}
               </Button>
             </div>
           </div>

@@ -3,9 +3,9 @@ export type TermKind = "think" | "curl" | "python" | "system" | "ok" | "err";
 export type TermLine = {
   id: string;
   kind: TermKind;
-  /** Teknik / detay log satırı */
+  /** Technical / detail log line */
   text: string;
-  /** Okunabilir mod için düz açıklama (yoksa client derive eder) */
+  /** Plain description for readable mode (client derives if missing) */
   plain?: string;
   at: number;
   agent?: SpecialistId;

@@ -8,7 +8,7 @@ function getMasterKey(): Buffer {
   const raw = process.env.CMAE_MASTER_KEY;
   if (!raw || raw.length < 16) {
     throw new Error(
-      "CMAE_MASTER_KEY eksik veya çok kısa. .env dosyasına en az 16 karakterlik bir anahtar ekleyin.",
+      "CMAE_MASTER_KEY is missing or too short. Add a key of at least 16 characters to .env.",
     );
   }
   return createHash("sha256").update(raw).digest();
@@ -28,7 +28,7 @@ export function decrypt(payload: string): string {
   const key = getMasterKey();
   const buf = Buffer.from(payload, "base64");
   if (buf.length < IV_LEN + TAG_LEN + 1) {
-    throw new Error("Geçersiz şifreli veri");
+    throw new Error("Invalid encrypted data");
   }
   const iv = buf.subarray(0, IV_LEN);
   const tag = buf.subarray(IV_LEN, IV_LEN + TAG_LEN);

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as {
       skipImap?: boolean;
-      /** incremental (default) | hard — hard = full window re-fetch, DB wipe yok */
+      /** incremental (default) | hard — hard = full window re-fetch, no DB wipe */
       mode?: "incremental" | "hard";
     };
     const mode =

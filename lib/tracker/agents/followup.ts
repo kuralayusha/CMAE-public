@@ -106,10 +106,10 @@ async function ensureWorkspaceFolder(item: {
   const created = await createCompanyFolder(item.company || "Company");
   const notes = [
     `# ${item.company}`,
-    item.position ? `Pozisyon: ${item.position}` : null,
-    item.primaryTo ? `İletişim: ${item.primaryTo}` : null,
+    item.position ? `Position: ${item.position}` : null,
+    item.primaryTo ? `Contact: ${item.primaryTo}` : null,
     "",
-    "Bu klasör tracker'dan otomatik oluşturuldu (mail hazırlama).",
+    "This folder was auto-created from the tracker (mail prepare).",
   ]
     .filter(Boolean)
     .join("\n");
@@ -174,12 +174,12 @@ export async function prepareDraftForItem(
     .from(trackerItems)
     .where(eq(trackerItems.id, itemId))
     .get();
-  if (!item) throw new Error("Tracker item bulunamadı");
+  if (!item) throw new Error("Tracker item not found");
   assertItemActiveForDrafts(itemId);
 
   if (kind === "follow_up" && item.status !== "follow_up_due") {
     throw new Error(
-      "Follow-up şu an kapalı — son follow-up sonrası 7 gün beklenmeli (veya henüz takip günü gelmedi)",
+      "Follow-up is currently locked — wait 7 days after the last follow-up (or follow-up day has not arrived yet)",
     );
   }
 
@@ -254,7 +254,7 @@ ${JSON.stringify(recent, null, 2)}
   const text = await askTrackerLlm(prompt);
   const parsed = parseSubjectBody(text);
   if (!parsed) {
-    throw new Error("Agent SUBJECT/BODY üretemedi");
+    throw new Error("Agent could not produce SUBJECT/BODY");
   }
 
   const subjectThreaded = replySubject(

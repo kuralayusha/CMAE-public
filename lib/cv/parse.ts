@@ -10,7 +10,7 @@ export async function parseCvPdf(buffer: Buffer): Promise<{ text: string }> {
       .replace(/\n{3,}/g, "\n\n")
       .trim();
     if (!text) {
-      throw new Error("PDF'den metin çıkarılamadı");
+      throw new Error("Could not extract text from PDF");
     }
     return { text };
   } finally {

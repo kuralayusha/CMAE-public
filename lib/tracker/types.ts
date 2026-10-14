@@ -91,14 +91,14 @@ export type TrackerSection = {
 export const STATUS_ORDER: TrackerStatus[] = [...TRACKER_STATUSES];
 
 export const STATUS_TITLES: Record<TrackerStatus, string> = {
-  ready_to_send: "Gönderilmeyi bekleyenler",
-  needs_reply: "Yazılı yanıt bekleniyor",
-  needs_action: "Aksiyon gerekli (link / form)",
-  follow_up_due: "Follow-up gerekli",
-  waiting: "Beklemede (tarihli)",
-  in_progress: "Aktif görüşmeler",
-  rejected: "Reddedilenler",
-  closed: "Kapanmış",
-  inactive: "Pasif (inactive)",
-  ignored: "Kara liste (ignored)",
+  ready_to_send: "Ready to send",
+  needs_reply: "Reply needed",
+  needs_action: "Action needed (link / form)",
+  follow_up_due: "Follow-up due",
+  waiting: "Waiting (dated)",
+  in_progress: "Active conversations",
+  rejected: "Rejected",
+  closed: "Closed",
+  inactive: "Inactive",
+  ignored: "Ignored",
 };

@@ -19,10 +19,10 @@ export async function POST(req: Request) {
     const raw = String(body.urls || body.url || "");
     const urls = parseUrls(raw);
     if (!urls.length) {
-      return NextResponse.json({ error: "En az bir link gerekli" }, { status: 400 });
+      return NextResponse.json({ error: "At least one link is required" }, { status: 400 });
     }
     if (urls.length > 20) {
-      return NextResponse.json({ error: "En fazla 20 link" }, { status: 400 });
+      return NextResponse.json({ error: "Maximum 20 links" }, { status: 400 });
     }
 
     const jobs = startSearchJobs(urls);

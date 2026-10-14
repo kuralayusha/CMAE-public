@@ -11,7 +11,9 @@ async function resolveApiKey(): Promise<string> {
   const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
   const key = decryptOptional(row?.cursorApiKeyEnc);
   if (!key) {
-    throw new Error("Cursor API key yok — Ayarlar’dan ekleyin veya CURSOR_API_KEY set edin");
+    throw new Error(
+      "Cursor API key missing — add it in Settings or set CURSOR_API_KEY",
+    );
   }
   return key;
 }
@@ -26,8 +28,8 @@ export async function askLlm(
     jobId,
     agent,
     "think",
-    label || "Model düşünüyor…",
-    "Durum değerlendiriliyor",
+    label || "Model thinking…",
+    "Evaluating status",
   );
   const apiKey = await resolveApiKey();
   const result = await Agent.prompt(prompt, {
@@ -37,7 +39,9 @@ export async function askLlm(
   });
 
   if (result.status === "error" || !result.result) {
-    throw new Error(`LLM yanıt vermedi (status=${result.status ?? "unknown"})`);
+    throw new Error(
+      `LLM did not respond (status=${result.status ?? "unknown"})`,
+    );
   }
   const text = String(result.result).trim();
   const preview = text.replace(/\s+/g, " ").slice(0, 160);
@@ -46,7 +50,7 @@ export async function askLlm(
     agent,
     "think",
     `  ↳ ${preview}${text.length > 160 ? "…" : ""}`,
-    `Yanıt alındı: ${preview.slice(0, 90)}${preview.length > 90 ? "…" : ""}`,
+    `Response received: ${preview.slice(0, 90)}${preview.length > 90 ? "…" : ""}`,
   );
   return text;
 }

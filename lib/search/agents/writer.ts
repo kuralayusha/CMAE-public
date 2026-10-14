@@ -72,7 +72,7 @@ COLD vs OPEN ROLE
 
 export async function runWriter(ctx: RunContext) {
   const { jobId, user } = ctx;
-  speak(jobId, "writer", "system", "── writer online · başvuru maili");
+  speak(jobId, "writer", "system", "── writer online · application mail");
 
   if (ctx.redoFeedback.writer) {
     speak(jobId, "writer", "think", `Reviewer feedback: ${ctx.redoFeedback.writer}`);
@@ -121,7 +121,7 @@ ${MAIL_CRAFT_GUIDE}
 ${MAIL_FIELD_RULES}
 
 Short, concrete, no fabricated experience. Follow MAIL CRAFT structure and length limits.`,
-    `Mail taslağı (${ctx.siteLanguage})…`,
+    `Mail draft (${ctx.siteLanguage})…`,
     "writer",
   );
 
@@ -150,13 +150,13 @@ ${MAIL_FIELD_RULES}`,
   await writeFile(
     ctx.folderPath,
     "email_site_language.md",
-    `# Başvuru maili — site dili (${ctx.siteLanguage})\n\n${ctx.draftSite}\n`,
+    `# Application mail — site language (${ctx.siteLanguage})\n\n${ctx.draftSite}\n`,
   );
   await writeFile(
     ctx.folderPath,
     `email_${user.preferredLang}.md`,
-    `# Başvuru maili — ${user.preferredLang}\n\n${ctx.draftPreferred}\n`,
+    `# Application mail — ${user.preferredLang}\n\n${ctx.draftPreferred}\n`,
   );
 
-  speak(jobId, "writer", "ok", "iki dilde taslak yazıldı");
+  speak(jobId, "writer", "ok", "drafts written in both languages");
 }

@@ -1,5 +1,5 @@
 export class SyncCanceledError extends Error {
-  constructor(message = "Sync iptal edildi") {
+  constructor(message = "Sync canceled") {
     super(message);
     this.name = "SyncCanceledError";
   }

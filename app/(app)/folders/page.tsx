@@ -15,13 +15,11 @@ export default function FoldersPage() {
   return (
     <>
       <TopNav active="folders" onHelp={help.reopen} />
-      <div className="cmae-shell--finder">
-        <PageShell title={meta.title} subtitle={meta.subtitle}>
-          <Suspense fallback={<p className="cmae-fb-loading">Klasörler yükleniyor…</p>}>
-            <FolderBrowser />
-          </Suspense>
-        </PageShell>
-      </div>
+      <PageShell title={meta.title} subtitle={meta.subtitle}>
+        <Suspense fallback={<p className="cmae-fb-loading">Loading folders…</p>}>
+          <FolderBrowser />
+        </Suspense>
+      </PageShell>
       <PageHelpModal
         pageId="folders"
         open={help.open}

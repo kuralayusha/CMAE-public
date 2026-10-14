@@ -48,7 +48,7 @@ export function closeDb() {
 export function wipeDatabaseContents() {
   const db = getDb();
   // drizzle instance wraps better-sqlite3 — use the live handle
-  if (!sqlite) throw new Error("SQLite handle yok");
+  if (!sqlite) throw new Error("SQLite handle missing");
   sqlite.exec(`
     PRAGMA foreign_keys = OFF;
     DELETE FROM tracker_item_mails;

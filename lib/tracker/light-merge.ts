@@ -92,8 +92,8 @@ function patchSearchMeta(
 }
 
 /**
- * IMAP/AI/wipe yok. Bitmiş bir search workspace adayını mevcut tracker’a merge eder.
- * Gmail sync hâlâ mail durumlarını güncelleyen ağır yoldur.
+ * No IMAP/AI/wipe. Merges a finished search workspace candidate into the current tracker.
+ * Gmail sync remains the heavy path that updates mail statuses.
  */
 export function mergeSearchJobIntoTracker(
   searchJobId: string,
@@ -104,7 +104,7 @@ export function mergeSearchJobIntoTracker(
       ok: false,
       action: "skipped",
       searchJobId,
-      reason: "workspace candidate yok (done + klasör)",
+      reason: "no workspace candidate (done + folder)",
     };
   }
 
@@ -143,7 +143,7 @@ export function mergeSearchJobIntoTracker(
       r.status !== "inactive",
   );
 
-  // Fresh search draft + mevcut yazışma → ayrı ready_to_send (full rebuild ile aynı kural)
+  // Fresh search draft + existing thread → separate ready_to_send (same rule as full rebuild)
   if (c.hasEmailDraft && companyHasOutboundThread) {
     const itemId = insertReadyToSend(c);
     for (const r of sameCompany) {
@@ -167,7 +167,7 @@ export function mergeSearchJobIntoTracker(
   }
 
   if (companyHasMails) {
-    // Search meta’sız satırlara bağla; yoksa aynı şirketin satırlarına klasör güncelle
+    // Attach to rows without search meta; otherwise update folder on same-company rows
     const bare = sameCompany.filter((r) => !r.searchJobId);
     const targets = bare.length ? bare : sameCompany;
     for (const r of targets) {

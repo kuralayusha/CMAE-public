@@ -9,7 +9,7 @@ const REDOABLE = ["scout", "jobfit", "contact", "research", "writer"] as const;
 
 export async function runReviewer(ctx: RunContext): Promise<ReviewVerdict> {
   const { jobId } = ctx;
-  speak(jobId, "reviewer", "system", "── reviewer online · kalite & tutarlılık");
+  speak(jobId, "reviewer", "system", "── reviewer online · quality & consistency");
 
   const packageBrief = `
 Company: ${ctx.companyName}
@@ -73,12 +73,12 @@ Return ONLY JSON:
     "research": "",
     "writer": ""
   },
-  "summary": "Turkish short verdict"
+  "summary": "English short verdict"
 }
 
 Package:
 ${packageBrief}`,
-    "Paket skorlanıyor…",
+    "Scoring package…",
     "reviewer",
   );
 
@@ -90,7 +90,7 @@ ${packageBrief}`,
     jobId,
     "reviewer",
     verdict.passed ? "ok" : "think",
-    `skor ${verdict.overallScore}/${verdict.threshold} · ${verdict.passed ? "PASS" : `REWIND → ${verdict.rewindTo}`}`,
+    `score ${verdict.overallScore}/${verdict.threshold} · ${verdict.passed ? "PASS" : `REWIND → ${verdict.rewindTo}`}`,
   );
   if (verdict.summary) {
     speak(jobId, "reviewer", "think", verdict.summary);
@@ -107,14 +107,14 @@ ${packageBrief}`,
   await writeFile(
     ctx.folderPath,
     "review.md",
-    `# Reviewer\n\n- Overall: **${verdict.overallScore}** / ${verdict.threshold}\n- Passed: ${verdict.passed}\n- Rewind: ${verdict.rewindTo || "—"}\n\n## Skorlar\n${Object.entries(
+    `# Reviewer\n\n- Overall: **${verdict.overallScore}** / ${verdict.threshold}\n- Passed: ${verdict.passed}\n- Rewind: ${verdict.rewindTo || "—"}\n\n## Scores\n${Object.entries(
       verdict.scores,
     )
       .map(([k, v]) => `- ${k}: ${v}`)
       .join("\n")}\n\n## Feedback\n${Object.entries(verdict.feedback)
       .filter(([, v]) => v)
       .map(([k, v]) => `### ${k}\n${v}`)
-      .join("\n\n")}\n\n## Özet\n${verdict.summary}\n`,
+      .join("\n\n")}\n\n## Summary\n${verdict.summary}\n`,
   );
 
   return verdict;

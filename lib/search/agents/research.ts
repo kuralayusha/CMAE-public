@@ -7,7 +7,7 @@ import { writeFile } from "../workspace";
 
 export async function runResearch(ctx: RunContext) {
   const { jobId } = ctx;
-  speak(jobId, "research", "system", "── research online · şirket kesiti");
+  speak(jobId, "research", "system", "── research online · company profile");
 
   if (ctx.redoFeedback.research) {
     speak(jobId, "research", "think", `Reviewer feedback: ${ctx.redoFeedback.research}`);
@@ -22,7 +22,7 @@ export async function runResearch(ctx: RunContext) {
 
   let externalSnippet = "";
   for (const q of queries) {
-    speak(jobId, "research", "think", `Sorgu: ${q}`);
+    speak(jobId, "research", "think", `Query: ${q}`);
     const ddg = `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
     const { stdout } = await runCurl(jobId, [
       "-sL",
@@ -54,17 +54,17 @@ ${externalSnippet.slice(0, 7000)}
 
 ${ctx.redoFeedback.research ? `Reviewer feedback to address: ${ctx.redoFeedback.research}\n` : ""}
 
-## Özet
-## Çalışma alanları / ürünler
-## Kültür & konum
-## Aday için notlar
-## Kaynaklar
+## Summary
+## Focus areas / products
+## Culture & location
+## Notes for the candidate
+## Sources
 `,
-    "Şirket profili yazılıyor…",
+    "Writing company profile…",
     "research",
   );
 
   ctx.researchMd = research;
   await writeFile(ctx.folderPath, "sirket_bilgileri.md", research);
-  speak(jobId, "research", "ok", "sirket_bilgileri.md yazıldı");
+  speak(jobId, "research", "ok", "sirket_bilgileri.md written");
 }

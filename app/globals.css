@@ -20,7 +20,8 @@
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --radius: 0;
   --nav-h: 56px;
-  --page-max: 920px;
+  /* Shared app chrome width (nav + page shells). Onboarding uses --onb-max. */
+  --page-max: 1180px;
   --space-page-x: 28px;
 }
 
@@ -77,6 +78,7 @@ select {
 }
 
 .cmae-nav-inner {
+  width: 100%;
   max-width: var(--page-max);
   margin: 0 auto;
   padding: 0 var(--space-page-x);
@@ -252,13 +254,11 @@ select {
 
 /* —— Page shell —— */
 .cmae-shell {
+  /* width:100% so body flex + margin:auto don’t shrink-wrap to form content */
+  width: 100%;
   max-width: var(--page-max);
   margin: 0 auto;
   padding: 40px var(--space-page-x) 80px;
-}
-
-.cmae-shell--finder .cmae-shell {
-  max-width: 1180px;
 }
 
 .cmae-shell-head {
@@ -408,6 +408,16 @@ select.cmae-input {
   background: transparent;
 }
 
+.cmae-form:has(.cmae-form-acc) {
+  gap: 0;
+}
+
+.cmae-form:has(.cmae-form-acc) .cmae-form-actions {
+  padding: 20px 0 8px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+
 .cmae-form-section {
   display: grid;
   gap: 16px;
@@ -420,6 +430,62 @@ select.cmae-input {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-faint);
+}
+
+/* Settings accordion — closed by default; name= groups exclusive open */
+.cmae-form-acc {
+  border-top: 1px solid var(--line);
+  margin: 0;
+  padding: 0;
+}
+
+.cmae-form-acc:first-of-type {
+  border-top: none;
+}
+
+.cmae-form-acc-sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 14px 0;
+  margin: 0;
+}
+
+.cmae-form-acc-sum::-webkit-details-marker {
+  display: none;
+}
+
+.cmae-form-acc-sum::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-right: 1.5px solid var(--ink-faint);
+  border-bottom: 1.5px solid var(--ink-faint);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+  margin-top: -3px;
+}
+
+.cmae-form-acc[open] > .cmae-form-acc-sum::after {
+  transform: rotate(225deg);
+  margin-top: 3px;
+}
+
+.cmae-form-acc-sum:hover .cmae-form-section-title {
+  color: var(--ink-muted);
+}
+
+.cmae-form-acc .cmae-form-section {
+  padding: 0 0 18px;
+}
+
+.cmae-form-acc.is-danger .cmae-form-section-title {
+  color: var(--ink-muted);
 }
 
 .cmae-form-grid {
@@ -537,7 +603,7 @@ select.cmae-input {
   }
 }
 
-/* —— Search: fixed left history rail —— */
+/* —— Search: fixed right history rail —— */
 .cmae-search {
   --hist-w: 260px;
   --hist-surface: #ffffff;
@@ -552,14 +618,14 @@ select.cmae-input {
 .cmae-hist {
   position: fixed;
   top: var(--nav-h);
-  left: 0;
+  right: 0;
   bottom: 0;
   width: var(--hist-w);
   z-index: 40;
   display: flex;
   flex-direction: column;
   background: var(--hist-surface);
-  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 
 .cmae-hist-scroll {
@@ -627,9 +693,9 @@ select.cmae-input {
   gap: 10px;
   text-align: left;
   margin: 0;
-  padding: 11px 16px 11px 18px;
+  padding: 11px 18px 11px 16px;
   border: none;
-  border-left: 2px solid transparent;
+  border-right: 2px solid transparent;
   border-radius: 0;
   background: transparent;
   color: var(--ink);
@@ -660,7 +726,7 @@ select.cmae-input {
 .cmae-hist button.cmae-hist-row.is-selected {
   background: var(--ink);
   color: #fff;
-  border-left-color: var(--ink);
+  border-right-color: var(--ink);
 }
 
 .cmae-hist button.cmae-hist-row.is-selected .cmae-hist-name {
@@ -812,19 +878,26 @@ select.cmae-input {
 }
 
 .cmae-main {
-  margin-left: var(--hist-w);
   min-width: 0;
 }
 
+/* Same left edge as .cmae-shell / nav — centered on full viewport, not hist column */
 .cmae-main-inner {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 36px var(--space-page-x) 72px;
+  --cmae-main-left: max(0px, calc((100vw - var(--page-max)) / 2));
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(
+    var(--page-max),
+    calc(100vw - var(--hist-w) - var(--cmae-main-left))
+  );
+  margin-left: var(--cmae-main-left);
+  margin-right: auto;
+  padding: 40px var(--space-page-x) 80px;
 }
 
 .cmae-page-head {
-  margin: 0 0 28px;
-  max-width: 520px;
+  margin: 0 0 36px;
+  max-width: 560px;
 }
 
 .cmae-page-head h1 {
@@ -891,12 +964,12 @@ select.cmae-input {
   .cmae-hist {
     position: sticky;
     top: var(--nav-h);
-    left: auto;
+    right: auto;
     bottom: auto;
     width: 100%;
     max-height: min(38vh, 260px);
     z-index: 30;
-    border-right: none;
+    border-left: none;
     border-bottom: 1px solid var(--line);
   }
 
@@ -904,9 +977,6 @@ select.cmae-input {
     padding: 4px 0 8px;
   }
 
-  .cmae-main {
-    margin-left: 0;
-  }
 }
 
 /* —— Terminal —— */
@@ -1426,14 +1496,13 @@ body:has(.term-live-page) {
 }
 
 /* —— Tracker —— */
-.cmae-shell:has(.cmae-tracker) {
-  max-width: min(1180px, 100%);
-}
-
 .cmae-tracker {
   display: flex;
   flex-direction: column;
   gap: 28px;
+  width: 100%;
+  /* Reserve table column mins so head/toolbar don’t jump while Loading… */
+  min-width: min(100%, 860px);
 }
 
 .cmae-tracker:has(.cmae-tracker-selbar) {
@@ -1452,7 +1521,8 @@ body:has(.term-live-page) {
 }
 
 .cmae-tracker-selbar-inner {
-  max-width: min(1180px, 100%);
+  width: 100%;
+  max-width: var(--page-max);
   margin: 0 auto;
   padding: 8px var(--space-page-x);
   display: flex;

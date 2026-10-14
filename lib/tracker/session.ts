@@ -178,7 +178,7 @@ export function startTrackerSyncSession(opts?: {
       });
 
       if (session.cancelRequested || abort.signal.aborted) {
-        appendLine(session, "err", "Sync iptal edildi");
+        appendLine(session, "err", "Sync canceled");
         finish(session, "canceled");
         return;
       }
@@ -201,7 +201,7 @@ export function startTrackerSyncSession(opts?: {
         session.cancelRequested ||
         abort.signal.aborted
       ) {
-        appendLine(session, "err", "Sync iptal edildi");
+        appendLine(session, "err", "Sync canceled");
         finish(session, "canceled");
         return;
       }
@@ -225,7 +225,7 @@ export function cancelTrackerSyncSession(id?: string): SyncSessionPublic | null 
   } catch {
     /* ignore */
   }
-  appendLine(session, "err", "İptal istendi…");
+  appendLine(session, "err", "Cancel requested…");
   return toPublic(session);
 }
 

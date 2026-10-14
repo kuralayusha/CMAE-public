@@ -27,7 +27,7 @@ export async function runTrackerSync(opts?: {
   throwIfSyncCanceled(signal);
   log?.(
     "system",
-    mode === "hard" ? "Tracker Hard Sync başladı" : "Tracker sync başladı",
+    mode === "hard" ? "Tracker hard sync started" : "Tracker sync started",
   );
 
   if (!opts?.skipImap) {
@@ -37,14 +37,14 @@ export async function runTrackerSync(opts?: {
     upserted = sync.upserted;
     keptOutsideWindow = sync.keptOutsideWindow;
   } else {
-    log?.("think", "IMAP atlandı (skipImap)");
+    log?.("think", "IMAP skipped (skipImap)");
   }
 
   throwIfSyncCanceled(signal);
   log?.("think", "Liste yeniden kuruluyor (mail + workspace + AI)…");
   const { itemCount } = await rebuildTrackerItems({ onProgress: log, signal });
   throwIfSyncCanceled(signal);
-  log?.("ok", `Sync tamam · ${upserted} mail · ${itemCount} satır`);
+  log?.("ok", `Sync complete · ${upserted} mails · ${itemCount} rows`);
   return {
     skippedImap,
     skipReason,

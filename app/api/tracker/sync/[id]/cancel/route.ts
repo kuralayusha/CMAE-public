@@ -12,7 +12,7 @@ export async function POST(
   if (blocked) return blocked;
   const { id } = await ctx.params;
   if (!getSyncSession(id)) {
-    return NextResponse.json({ error: "Sync session yok" }, { status: 404 });
+    return NextResponse.json({ error: "Sync session not found" }, { status: 404 });
   }
   const session = cancelTrackerSyncSession(id);
   return NextResponse.json({

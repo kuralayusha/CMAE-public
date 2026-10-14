@@ -89,7 +89,7 @@ export async function rebuildTrackerItems(opts?: {
   const searches = listWorkspaceCandidates();
   log?.(
     "think",
-    `${briefs.length} mail · ${searches.length} workspace adayı…`,
+    `${briefs.length} mails · ${searches.length} workspace candidates…`,
   );
 
   // Pass 1: language-agnostic per-mail intent (AI + regex)
@@ -106,7 +106,7 @@ export async function rebuildTrackerItems(opts?: {
     mailIntents,
   });
   throwIfSyncCanceled(signal);
-  log?.("think", `${groups.length} grup → tracker satırları yazılıyor…`);
+  log?.("think", `${groups.length} groups → writing tracker rows…`);
 
   // Preserve draft flags + inactive keyed by searchJobId / company
   const prev = db.select().from(trackerItems).all();

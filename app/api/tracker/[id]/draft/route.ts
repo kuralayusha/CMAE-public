@@ -18,12 +18,12 @@ export async function POST(
     const { id: idRaw } = await ctx.params;
     const id = Number(idRaw);
     if (!Number.isFinite(id)) {
-      return NextResponse.json({ error: "Geçersiz id" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
     }
     const body = (await req.json().catch(() => ({}))) as { kind?: string };
     const kind = (body.kind || "application") as DraftKind;
     if (!KINDS.includes(kind)) {
-      return NextResponse.json({ error: "Geçersiz kind" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid kind" }, { status: 400 });
     }
     const result = await createGmailDraftForItem(id, kind);
     return NextResponse.json(result);

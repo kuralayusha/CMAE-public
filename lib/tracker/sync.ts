@@ -42,7 +42,7 @@ function setSyncState(patch: {
 
 /**
  * Upsert by messageId — duplicates yok.
- * Hard/incremental asla mail_messages silmez (31+ günlük kayıtlar kalır).
+ * Hard/incremental never deletes mail_messages (31+ day records are kept).
  */
 export function upsertMails(mails: FetchedMail[]): number {
   const db = getDb();
@@ -65,7 +65,7 @@ export function upsertMails(mails: FetchedMail[]): number {
           subject: m.subject,
           dateIso: m.dateIso,
           snippet: m.snippet || existing.snippet,
-          // Boş body ile üzerine yazma (eski/korunan gövde kalsın)
+          // Do not overwrite with an empty body (keep older/preserved body)
           bodyText: m.bodyText || existing.bodyText,
           headersHash: m.headersHash ?? existing.headersHash,
         })
@@ -111,7 +111,7 @@ export async function syncMailsFromGmail(opts?: {
 
   if (isSyncDisabled()) {
     setSyncState({ lastError: null });
-    log?.("system", "IMAP kapalı (CMAE_DISABLE_SYNC=1)");
+    log?.("system", "IMAP disabled (CMAE_DISABLE_SYNC=1)");
     return {
       skipped: true,
       reason: "CMAE_DISABLE_SYNC=1",
@@ -123,7 +123,7 @@ export async function syncMailsFromGmail(opts?: {
 
   const creds = getGmailCredentials();
   if (!creds) {
-    const msg = "Gmail adresi veya App Password eksik — Ayarlar’dan ekleyin";
+    const msg = "Gmail address or App Password missing — add them in Settings";
     setSyncState({ lastError: msg });
     log?.("err", msg);
     return {
@@ -137,7 +137,7 @@ export async function syncMailsFromGmail(opts?: {
 
   try {
     throwIfSyncCanceled(signal);
-    log?.("curl", `Gmail IMAP bağlanıyor (${creds.address})…`);
+    log?.("curl", `Connecting to Gmail IMAP (${creds.address})…`);
     const fetched = await fetchRecentMail(
       creds.address,
       creds.appPassword,
@@ -156,10 +156,10 @@ export async function syncMailsFromGmail(opts?: {
     cutoff.setDate(cutoff.getDate() - WINDOW_DAYS);
     const cutoffIso = cutoff.toISOString();
 
-    log?.("think", `${fetched.mails.length} mail veritabanına yazılıyor (upsert)…`);
+    log?.("think", `Writing ${fetched.mails.length} mails to the database (upsert)…`);
     const upserted = upsertMails(fetched.mails);
 
-    // Güvenlik: sync sonrası satır sayısı asla düşmemeli (silme yok)
+    // Safety: row count must never drop after sync (no deletes)
     const afterRows = db
       .select({ id: mailMessages.id, dateIso: mailMessages.dateIso })
       .from(mailMessages)
@@ -171,30 +171,30 @@ export async function syncMailsFromGmail(opts?: {
 
     if (afterCount < beforeCount) {
       throw new Error(
-        `Sync güvenlik hatası: mail sayısı düştü (${beforeCount} → ${afterCount})`,
+        `Sync safety error: mail count dropped (${beforeCount} → ${afterCount})`,
       );
     }
 
     setSyncState({ lastSyncAt: new Date().toISOString(), lastError: null });
     log?.(
       "ok",
-      `${upserted} upsert · DB ${afterCount} mail · pencere dışı korunan ${keptOutsideWindow}`,
+      `${upserted} upsert · DB ${afterCount} mails · kept outside window ${keptOutsideWindow}`,
     );
     if (mode === "hard") {
       log?.(
         "system",
-        "Hard sync: 30g+ kayıtlar silinmedi; aynı messageId tekrar yazılmaz",
+        "Hard sync: 30d+ records were not deleted; same messageId is not rewritten",
       );
     }
     return { skipped: false, upserted, mode, keptOutsideWindow };
   } catch (err) {
     if (err instanceof SyncCanceledError) {
-      log?.("err", "IMAP iptal edildi");
+      log?.("err", "IMAP canceled");
       throw err;
     }
     const msg = err instanceof Error ? err.message : String(err);
     setSyncState({ lastError: msg });
-    log?.("err", `IMAP hata: ${msg}`);
+    log?.("err", `IMAP error: ${msg}`);
     throw err;
   }
 }

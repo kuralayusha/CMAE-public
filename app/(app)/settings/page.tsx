@@ -57,6 +57,28 @@ const DEFAULT_PREFS: JobPreferences = {
   salaryNegotiable: true,
 };
 
+function SettingsAcc({
+  title,
+  children,
+  danger,
+}: {
+  title: string;
+  children: React.ReactNode;
+  danger?: boolean;
+}) {
+  return (
+    <details
+      className={`cmae-form-acc${danger ? " is-danger" : ""}`}
+      name="cmae-settings"
+    >
+      <summary className="cmae-form-acc-sum">
+        <span className="cmae-form-section-title">{title}</span>
+      </summary>
+      <div className="cmae-form-section">{children}</div>
+    </details>
+  );
+}
+
 export default function SettingsPage() {
   const help = usePageHelp("settings");
   const [form, setForm] = useState({
@@ -79,7 +101,7 @@ export default function SettingsPage() {
   async function loadCvs() {
     const res = await fetch("/api/settings/cv");
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "CV listesi alınamadı");
+    if (!res.ok) throw new Error(data.error || "Could not load CV list");
     setCvs(data.cvs || []);
     setCvMax(data.max || 4);
   }
@@ -127,11 +149,11 @@ export default function SettingsPage() {
         body: JSON.stringify({ ...form, jobPreferences: prefs }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Kayıt başarısız");
+      if (!res.ok) throw new Error(data.error || "Save failed");
       setMeta(data);
       if (data.jobPreferences) setPrefs({ ...DEFAULT_PREFS, ...data.jobPreferences });
       setForm((f) => ({ ...f, gmailAppPassword: "", cursorApiKey: "" }));
-      setStatus("Kaydedildi");
+      setStatus("Saved");
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -148,9 +170,9 @@ export default function SettingsPage() {
       fd.append("language", form.preferredLanguage || "en");
       const res = await fetch("/api/settings/cv", { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "CV yüklenemedi");
+      if (!res.ok) throw new Error(data.error || "Could not upload CV");
       setCvs(data.cvs || []);
-      setStatus(`CV eklendi: ${data.entry?.label || file.name}`);
+      setStatus(`CV added: ${data.entry?.label || file.name}`);
       await load();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
@@ -172,9 +194,9 @@ export default function SettingsPage() {
         body: JSON.stringify(patch),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "CV güncellenemedi");
+      if (!res.ok) throw new Error(data.error || "Could not update CV");
       setCvs(data.cvs || []);
-      setStatus("CV güncellendi");
+      setStatus("CV updated");
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -183,7 +205,7 @@ export default function SettingsPage() {
   }
 
   async function removeCv(id: string) {
-    if (!window.confirm("Bu CV silinsin mi?")) return;
+    if (!window.confirm("Delete this CV?")) return;
     setBusy(true);
     setStatus(null);
     try {
@@ -191,9 +213,9 @@ export default function SettingsPage() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "CV silinemedi");
+      if (!res.ok) throw new Error(data.error || "Could not delete CV");
       setCvs(data.cvs || []);
-      setStatus("CV silindi");
+      setStatus("CV deleted");
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -207,7 +229,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/onboarding/reset", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Silme başarısız");
+      if (!res.ok) throw new Error(data.error || "Delete failed");
       setWipeOpen(false);
       try {
         for (const k of Object.keys(localStorage)) {
@@ -229,31 +251,45 @@ export default function SettingsPage() {
       <TopNav active="settings" onHelp={help.reopen} />
       <PageShell title={pageMeta.title} subtitle={pageMeta.subtitle}>
         <form className="cmae-form" onSubmit={save}>
-          <section className="cmae-form-section">
-            <h2 className="cmae-form-section-title">Profil</h2>
+          <SettingsAcc title="Profile">
             <Field
-              label="Ad Soyad"
-              hint="Mail gövdesinde ve ek dosya adında kullanılır."
+              label="Full name"
+              hint="Used in the email body and attachment filename."
             >
               <input
                 className="cmae-input"
                 value={form.fullName}
                 onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                placeholder="Adın Soyadın"
+                placeholder="Your Full Name"
               />
             </Field>
-          </section>
-
-          <hr className="cmae-form-rule" />
-
-          <section className="cmae-form-section">
-            <h2 className="cmae-form-section-title">Gmail</h2>
             <Field
-              label="Gmail adresi"
+              label="Preferred language"
+              hint="Default for drafts, AI research, and follow-ups. Thread language still wins when clear."
+            >
+              <select
+                className="cmae-input"
+                value={form.preferredLanguage}
+                onChange={(e) =>
+                  setForm({ ...form, preferredLanguage: e.target.value })
+                }
+              >
+                {PREFERRED_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </SettingsAcc>
+
+          <SettingsAcc title="Gmail">
+            <Field
+              label="Gmail address"
               hint={
                 meta?.hasGmailAppPassword
-                  ? "App Password kayıtlı ✓"
-                  : "App Password henüz yok"
+                  ? "App Password saved ✓"
+                  : "No App Password yet"
               }
             >
               <input
@@ -265,7 +301,7 @@ export default function SettingsPage() {
             </Field>
             <Field
               label="Gmail App Password"
-              hint="Boş bırakırsan mevcut şifre korunur."
+              hint="Leave blank to keep the current password."
             >
               <input
                 className="cmae-input"
@@ -278,20 +314,17 @@ export default function SettingsPage() {
                 }
               />
             </Field>
-          </section>
+          </SettingsAcc>
 
-          <hr className="cmae-form-rule" />
-
-          <section className="cmae-form-section">
-            <h2 className="cmae-form-section-title">Cursor API Key</h2>
+          <SettingsAcc title="Cursor API Key">
             <Field
               label="API Key"
               hint={
                 meta?.hasCursorApiKey
-                  ? "Veritabanında kayıtlı ✓ — boş bırakırsan korunur"
+                  ? "Saved in the database ✓ — leave blank to keep it"
                   : meta?.cursorApiKeyFromEnv
-                    ? ".env içinde CURSOR_API_KEY var — boş bırakabilirsin"
-                    : "cursor.com/dashboard/api adresinden al"
+                    ? "CURSOR_API_KEY is set in .env — you can leave this blank"
+                    : "Get it from cursor.com/dashboard/api"
               }
             >
               <input
@@ -303,53 +336,30 @@ export default function SettingsPage() {
                 onChange={(e) => setForm({ ...form, cursorApiKey: e.target.value })}
               />
             </Field>
-          </section>
+          </SettingsAcc>
 
-          <hr className="cmae-form-rule" />
-
-          <section className="cmae-form-section">
-            <h2 className="cmae-form-section-title">Mail tercihleri</h2>
-            <div className="cmae-form-grid">
-              <Field
-                label="Tercih edilen dil"
-                hint="Ana diliniz olarak seçmenizi tavsiye ederiz."
-              >
-                <select
-                  className="cmae-input"
-                  value={form.preferredLanguage}
-                  onChange={(e) =>
-                    setForm({ ...form, preferredLanguage: e.target.value })
-                  }
-                >
-                  {PREFERRED_LANGUAGES.map((l) => (
-                    <option key={l.code} value={l.code}>
-                      {l.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field
-                label="Follow-up günü"
-                hint="Mailiniz karşılıksız kaldığında kaç gün sonra hatırlatma maili göndereceğinizi belirler. Önerilen: 4–7 gün."
-              >
-                <input
-                  className="cmae-input"
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={form.followUpDays}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      followUpDays: Number(e.target.value) || 5,
-                    })
-                  }
-                />
-              </Field>
-            </div>
+          <SettingsAcc title="Email preferences">
             <Field
-              label="E-posta imzası"
-              hint="Alt satırlar korunur; AI değiştiremez."
+              label="Follow-up days"
+              hint="How many days to wait before sending a reminder if there's no reply. Recommended: 4–7 days."
+            >
+              <input
+                className="cmae-input"
+                type="number"
+                min={1}
+                max={30}
+                value={form.followUpDays}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    followUpDays: Number(e.target.value) || 5,
+                  })
+                }
+              />
+            </Field>
+            <Field
+              label="Email signature"
+              hint="Line breaks are preserved; AI cannot change this."
             >
               <textarea
                 className="cmae-input cmae-textarea"
@@ -364,18 +374,15 @@ export default function SettingsPage() {
                 }
               />
             </Field>
-          </section>
+          </SettingsAcc>
 
-          <hr className="cmae-form-rule" />
-
-          <section className="cmae-form-section">
-            <h2 className="cmae-form-section-title">İş tercihleri</h2>
+          <SettingsAcc title="Job preferences">
             <p className="cmae-form-hint">
-              Çalışma tipi ve ihbar başvuru / follow-up metinlerinde geçer. Ücret
-              yalnızca karşı taraf sorduğunda yanıtlarda kullanılır.
+              Work type and notice period appear in application / follow-up
+              texts. Salary is only used in replies when the other party asks.
             </p>
 
-            <Field label="Çalışma tipi" hint="Birden fazla seçilebilir">
+            <Field label="Work type" hint="Multiple selections allowed">
               <div className="cmae-check-row">
                 {(
                   [
@@ -397,8 +404,8 @@ export default function SettingsPage() {
             </Field>
 
             <Field
-              label="İhbar süresi (hafta)"
-              hint="0 = ab sofort / hemen başlayabilirim"
+              label="Notice period (weeks)"
+              hint="0 = available immediately / can start right away"
             >
               <input
                 className="cmae-input"
@@ -415,9 +422,9 @@ export default function SettingsPage() {
               />
             </Field>
 
-            <h3 className="cmae-form-subsection">Ücret beklentisi</h3>
+            <h3 className="cmae-form-subsection">Salary expectations</h3>
             <div className="cmae-form-grid">
-              <Field label="Periyot">
+              <Field label="Period">
                 <select
                   className="cmae-input"
                   value={prefs.salaryPeriod}
@@ -428,11 +435,11 @@ export default function SettingsPage() {
                     })
                   }
                 >
-                  <option value="monthly">Aylık</option>
-                  <option value="yearly">Yıllık</option>
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
                 </select>
               </Field>
-              <Field label="Brüt / Net">
+              <Field label="Gross / Net">
                 <select
                   className="cmae-input"
                   value={prefs.salaryKind}
@@ -443,11 +450,11 @@ export default function SettingsPage() {
                     })
                   }
                 >
-                  <option value="gross">Brüt</option>
+                  <option value="gross">Gross</option>
                   <option value="net">Net</option>
                 </select>
               </Field>
-              <Field label="Para birimi">
+              <Field label="Currency">
                 <select
                   className="cmae-input"
                   value={prefs.salaryCurrency}
@@ -459,12 +466,12 @@ export default function SettingsPage() {
                   }
                 >
                   <option value="eur">Euro (EUR)</option>
-                  <option value="usd">Dolar (USD)</option>
-                  <option value="other">Diğer</option>
+                  <option value="usd">Dollar (USD)</option>
+                  <option value="other">Other</option>
                 </select>
               </Field>
               {prefs.salaryCurrency === "other" ? (
-                <Field label="Diğer para birimi" hint="ör. TL, TRY, CHF">
+                <Field label="Other currency" hint="e.g. TL, TRY, CHF">
                   <input
                     className="cmae-input"
                     value={prefs.salaryCurrencyOther}
@@ -475,7 +482,7 @@ export default function SettingsPage() {
                   />
                 </Field>
               ) : null}
-              <Field label="Min ücret" hint="Beklediğin taban">
+              <Field label="Min salary" hint="Your expected floor">
                 <input
                   className="cmae-input"
                   type="number"
@@ -500,17 +507,14 @@ export default function SettingsPage() {
                   setPrefs({ ...prefs, salaryNegotiable: e.target.checked })
                 }
               />
-              Pazarlığa açığım
+              Open to negotiation
             </label>
-          </section>
+          </SettingsAcc>
 
-          <hr className="cmae-form-rule" />
-
-          <section className="cmae-form-section">
-            <h2 className="cmae-form-section-title">CV</h2>
+          <SettingsAcc title="CV">
             <p className="cmae-form-hint">
-              En fazla {cvMax} PDF. Dil ve etiketlere göre başvuru / follow-up
-              taslaklarına otomatik eklenir.
+              Up to {cvMax} PDFs. Attached automatically to application /
+              follow-up drafts based on language and tags.
             </p>
 
             {cvs.length ? (
@@ -518,7 +522,7 @@ export default function SettingsPage() {
                 {cvs.map((cv) => (
                   <li key={cv.id} className="cmae-cv-item">
                     <div className="cmae-form-grid">
-                      <Field label="Etiket">
+                      <Field label="Label">
                         <input
                           className="cmae-input"
                           defaultValue={cv.label}
@@ -529,7 +533,7 @@ export default function SettingsPage() {
                           }}
                         />
                       </Field>
-                      <Field label="Dil">
+                      <Field label="Language">
                         <select
                           className="cmae-input"
                           value={cv.language}
@@ -545,7 +549,7 @@ export default function SettingsPage() {
                           ))}
                         </select>
                       </Field>
-                      <Field label="Etiketler (virgülle)" hint="ör. marketing, frontend">
+                      <Field label="Tags (comma-separated)" hint="e.g. marketing, frontend">
                         <input
                           className="cmae-input"
                           defaultValue={cv.tags.join(", ")}
@@ -570,7 +574,7 @@ export default function SettingsPage() {
                           disabled={busy}
                           onChange={() => void patchCv(cv.id, { isDefault: true })}
                         />
-                        Varsayılan
+                        Default
                       </label>
                       <span className="cmae-form-status">{cv.fileName}</span>
                       <Button
@@ -579,18 +583,18 @@ export default function SettingsPage() {
                         disabled={busy}
                         onClick={() => void removeCv(cv.id)}
                       >
-                        Sil
+                        Delete
                       </Button>
                     </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="cmae-form-hint">Henüz CV yok.</p>
+              <p className="cmae-form-hint">No CVs yet.</p>
             )}
 
             {cvs.length < cvMax ? (
-              <Field label="PDF yükle">
+              <Field label="Upload PDF">
                 <input
                   type="file"
                   accept="application/pdf"
@@ -604,25 +608,22 @@ export default function SettingsPage() {
               </Field>
             ) : (
               <p className="cmae-form-hint">
-                Limit doldu ({cvMax}). Yeni eklemek için birini sil.
+                Limit reached ({cvMax}). Delete one to add another.
               </p>
             )}
-          </section>
+          </SettingsAcc>
 
           <div className="cmae-form-actions">
             <Button type="submit" disabled={busy}>
-              {busy ? "Kaydediliyor…" : "Kaydet"}
+              {busy ? "Saving…" : "Save"}
             </Button>
             {status ? <span className="cmae-form-status">{status}</span> : null}
           </div>
 
-          <hr className="cmae-form-rule" />
-
-          <section className="cmae-form-section">
-            <h2 className="cmae-form-section-title">Tehlikeli bölge</h2>
+          <SettingsAcc title="Danger zone" danger>
             <p className="cmae-form-hint">
-              Veritabanı, workspace şirket klasörleri, CV’ler ve arama geçmişi
-              silinir. Uygulama sıfır kurulum gibi onboarding’e döner.
+              Deletes the database, workspace company folders, CVs, and search
+              history. The app returns to onboarding as if freshly installed.
             </p>
             <Button
               type="button"
@@ -630,9 +631,9 @@ export default function SettingsPage() {
               disabled={busy}
               onClick={() => setWipeOpen(true)}
             >
-              Tüm Verileri Sil
+              Delete All Data
             </Button>
-          </section>
+          </SettingsAcc>
         </form>
       </PageShell>
 
@@ -655,10 +656,10 @@ export default function SettingsPage() {
             aria-labelledby="wipe-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="wipe-title">Tüm veriler silinsin mi?</h3>
+            <h3 id="wipe-title">Delete all data?</h3>
             <p>
-              Ayarlar, mailler, tracker, CV’ler, workspace klasörleri ve arama
-              geçmişi kalıcı olarak silinir. Bu işlem geri alınamaz.
+              Settings, emails, tracker, CVs, workspace folders, and search
+              history will be permanently deleted. This cannot be undone.
             </p>
             <div className="term-modal-actions">
               <button
@@ -667,7 +668,7 @@ export default function SettingsPage() {
                 onClick={() => setWipeOpen(false)}
                 disabled={busy}
               >
-                Vazgeç
+                Cancel
               </button>
               <button
                 type="button"
@@ -675,7 +676,7 @@ export default function SettingsPage() {
                 onClick={() => void confirmWipe()}
                 disabled={busy}
               >
-                {busy ? "Siliniyor…" : "Evet, tümünü sil"}
+                {busy ? "Deleting…" : "Yes, delete everything"}
               </button>
             </div>
           </div>

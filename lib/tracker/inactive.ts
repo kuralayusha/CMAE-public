@@ -98,6 +98,6 @@ export function assertItemActiveForDrafts(itemId: number): void {
     .where(eq(trackerItems.id, itemId))
     .get();
   if (row?.status === "inactive") {
-    throw new Error("Pasif (inactive) başvurular için mail hazırlanamaz");
+    throw new Error("Cannot prepare mail for inactive applications");
   }
 }

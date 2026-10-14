@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       : [];
 
     if (!ids.length) {
-      return NextResponse.json({ error: "ids gerekli" }, { status: 400 });
+      return NextResponse.json({ error: "ids required" }, { status: 400 });
     }
     if (action !== "inactive" && action !== "active") {
       return NextResponse.json(

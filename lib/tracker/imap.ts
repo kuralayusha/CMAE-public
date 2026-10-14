@@ -259,7 +259,7 @@ async function fetchFolder(
         const msg = err instanceof Error ? err.message : String(err);
         onProgress?.(
           "err",
-          `${folder}: incremental başarısız → window fallback (${msg})`,
+          `${folder}: incremental failed → window fallback (${msg})`,
         );
         mails = await fetchByRange(
           client,
@@ -273,12 +273,12 @@ async function fetchFolder(
     } else {
       if (mode === "incremental") {
         const why = !stored
-          ? "cursor yok"
+          ? "no cursor"
           : stored.uidValidity !== uidValidity
-            ? "UIDVALIDITY değişti"
+            ? "UIDVALIDITY changed"
             : stored.mailboxPath !== mailbox
-              ? "mailbox path değişti"
-              : "cursor boş";
+              ? "mailbox path changed"
+              : "cursor empty";
         onProgress?.("think", `${folder}: window sync (${why})`);
       } else {
         onProgress?.("think", `${folder}: hard sync · since window`);
@@ -354,17 +354,17 @@ export async function fetchRecentMail(
   log?.(
     "system",
     mode === "hard"
-      ? `Hard sync · son ${windowDays} gün (DB’deki eski mailler korunur)`
-      : `Incremental sync · yeni UID’ler (fallback: son ${windowDays} gün)`,
+      ? `Hard sync · last ${windowDays} days (older mails in DB are kept)`
+      : `Incremental sync · new UIDs (fallback: last ${windowDays} days)`,
   );
   log?.(
     "system",
-    `since ${since.toISOString().slice(0, 10)} · pencere dışı kayıtlar silinmez`,
+    `since ${since.toISOString().slice(0, 10)} · records outside the window are not deleted`,
   );
 
   return withClient(address, appPassword, async (client) => {
     throwIfSyncCanceled(signal);
-    log?.("ok", "IMAP bağlantısı kuruldu");
+    log?.("ok", "IMAP connection established");
     const strategies: Partial<Record<MailFolder, "incremental" | "window">> =
       {};
 
@@ -383,7 +383,7 @@ export async function fetchRecentMail(
     const sentPath = await findSpecialMailbox(client, "\\Sent");
     let sentMails: FetchedMail[] = [];
     if (!sentPath) {
-      log?.("err", "Sent mailbox bulunamadı (SPECIAL-USE \\Sent)");
+      log?.("err", "Sent mailbox not found (SPECIAL-USE \\Sent)");
       console.warn("[tracker/imap] Sent mailbox not found (SPECIAL-USE \\Sent)");
     } else {
       try {
@@ -401,7 +401,7 @@ export async function fetchRecentMail(
       } catch (err) {
         throwIfSyncCanceled(signal);
         const msg = err instanceof Error ? err.message : String(err);
-        log?.("err", `Sent okunamadı (${sentPath}): ${msg}`);
+        log?.("err", `Could not read Sent (${sentPath}): ${msg}`);
         console.warn(
           `[tracker/imap] Sent mailbox fetch failed (${sentPath}):`,
           err,
@@ -518,7 +518,7 @@ export async function appendDraft(
   await withClient(address, appPassword, async (client) => {
     const draftsPath = await findSpecialMailbox(client, "\\Drafts");
     if (!draftsPath) {
-      throw new Error("Gmail Drafts klasörü bulunamadı (SPECIAL-USE \\Drafts)");
+      throw new Error("Gmail Drafts folder not found (SPECIAL-USE \\Drafts)");
     }
     const raw = buildRfc822(draft);
     await client.append(draftsPath, raw, ["\\Draft"]);

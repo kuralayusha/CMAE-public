@@ -64,8 +64,8 @@ export async function fetchPage(jobId: string, url: string): Promise<DiscoveredP
 }
 
 /**
- * Orkestra kararı: hangi linkler kariyer/iletişim/şirket bilgisi için ziyaret edilmeli?
- * Dil bağımsız — Çince, Arapça, İtalyanca vb. AI anlar.
+ * Conductor decision: which links to visit for careers/contact/company info?
+ * Language-agnostic — AI understands Chinese, Arabic, Italian, etc.
  */
 export async function planRoutesWithAi(
   jobId: string,
@@ -112,14 +112,14 @@ Return ONLY JSON:
       "href": "absolute url from the list (or carefully constructed same-origin url)",
       "text": "link text",
       "role": "careers|jobs|contact|about|team|blog|product|other",
-      "reason": "why visit, in Turkish",
+      "reason": "why visit, in English",
       "priority": 1
     }
   ],
   "pathGuesses": [
     "/... relative paths that are likely on THIS site's language/locale for careers and contact if missing from links"
   ],
-  "notes": "short planner note in Turkish"
+  "notes": "short planner note in English"
 }
 
 Rules:
@@ -128,7 +128,7 @@ Rules:
 - pathGuesses: invent locale-appropriate paths (e.g. Chinese site might use /招聘 or /join-us — decide from context). Max 8.
 - Max 12 routes. priority 1 = visit first.
 - Only same-origin hrefs.`,
-    "AI rota planı (dil-bağımsız)…",
+    "AI route plan (language-agnostic)…",
     "scout",
   );
 
@@ -152,7 +152,7 @@ Rules:
     .sort((a, b) => a.priority - b.priority)
     .slice(0, 12);
 
-  // AI boş dönerse: ilk N linki mekanik fallback (kural yok, sadece örneklem)
+  // If AI returns empty: mechanical fallback to first N links (sample only)
   const fallbackRoutes: PlannedRoute[] =
     routes.length > 0
       ? routes
@@ -163,7 +163,7 @@ Rules:
             href: l.href,
             text: l.text,
             role: "other",
-            reason: "AI plan boş — örneklem fallback",
+            reason: "AI plan empty — sample fallback",
             priority: i + 1,
           }));
 
@@ -180,7 +180,7 @@ Rules:
   };
 }
 
-/** AI: hangi e-postalar hiring için daha doğru? */
+/** AI: which emails are better for hiring outreach? */
 export async function rankEmailsWithAi(
   jobId: string,
   companyName: string,
@@ -214,11 +214,11 @@ Return ONLY JSON:
       "page": "",
       "role": "careers|hr|contact|info|other",
       "priority": 1,
-      "reason": "Turkish one-liner"
+      "reason": "English one-liner"
     }
   ]
 }`,
-    "AI e-posta önceliklendirme…",
+    "AI email prioritization…",
     "contact",
   );
 
@@ -235,11 +235,11 @@ Return ONLY JSON:
     page: e.page,
     role: e.pageRole || "other",
     priority: i + 1,
-    reason: "AI sıralama yok — keşif sırası",
+    reason: "No AI ranking — discovery order",
   }));
 }
 
-/** AI: harici arama sorguları (dil/platform siteye göre) */
+/** AI: external search queries (language/platform per site) */
 export async function planExternalQueriesWithAi(
   jobId: string,
   companyName: string,
@@ -253,7 +253,7 @@ Site language hint: ${siteLanguage}
 Mix languages if useful (local press + English). Include platforms that make sense for THAT market (not always LinkedIn/Western sites).
 
 Return ONLY JSON: { "queries": ["...", "..."] }`,
-    "AI harici arama sorguları…",
+    "AI external search queries…",
     "research",
   );
   const parsed = extractJson<{ queries?: string[] }>(raw);
@@ -263,7 +263,7 @@ Return ONLY JSON: { "queries": ["...", "..."] }`,
 }
 
 export async function extractEmails(jobId: string, htmlOrText: string, sourceUrl: string) {
-  emitLine(jobId, "think", `E-posta pattern taraması: ${sourceUrl}`);
+  emitLine(jobId, "think", `Email pattern scan: ${sourceUrl}`);
 
   const jsEmails = extractEmailsJs(htmlOrText);
 

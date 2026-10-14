@@ -9,7 +9,9 @@ async function resolveApiKey(): Promise<string> {
   const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
   const key = decryptOptional(row?.cursorApiKeyEnc);
   if (!key) {
-    throw new Error("Cursor API key yok — Ayarlar’dan ekleyin veya CURSOR_API_KEY set edin");
+    throw new Error(
+      "Cursor API key missing — add it in Settings or set CURSOR_API_KEY",
+    );
   }
   return key;
 }
@@ -22,7 +24,9 @@ export async function askTrackerLlm(prompt: string): Promise<string> {
     local: { cwd: process.cwd() },
   });
   if (result.status === "error" || !result.result) {
-    throw new Error(`LLM yanıt vermedi (status=${result.status ?? "unknown"})`);
+    throw new Error(
+      `LLM did not respond (status=${result.status ?? "unknown"})`,
+    );
   }
   return String(result.result).trim();
 }

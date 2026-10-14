@@ -13,7 +13,7 @@ export async function GET(
   const { id } = await ctx.params;
   const job = getJob(id);
   if (!job) {
-    return new Response(JSON.stringify({ error: "Job yok" }), {
+    return new Response(JSON.stringify({ error: "Job not found" }), {
       status: 404,
       headers: { "Content-Type": "application/json" },
     });

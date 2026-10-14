@@ -1,21 +1,21 @@
 import type { SpecialistId, TermKind } from "./types";
 
-const AGENT_TR: Record<string, string> = {
-  conductor: "Orkestra şefi",
-  scout: "Keşif ajanı",
-  jobfit: "İlan eşleştirme ajanı",
-  contact: "İletişim ajanı",
-  research: "Araştırma ajanı",
-  writer: "Yazım ajanı",
-  reviewer: "Kontrol ajanı",
+const AGENT_EN: Record<string, string> = {
+  conductor: "Conductor",
+  scout: "Scout agent",
+  jobfit: "Job-fit agent",
+  contact: "Contact agent",
+  research: "Research agent",
+  writer: "Writer agent",
+  reviewer: "Reviewer agent",
 };
 
 export function agentLabel(agent?: SpecialistId | "conductor" | string | null) {
-  if (!agent) return "Sistem";
-  return AGENT_TR[agent] || agent;
+  if (!agent) return "System";
+  return AGENT_EN[agent] || agent;
 }
 
-/** Asıl cümle önde, ajan parantezde — göz yormasın */
+/** Lead with the action; put the agent in parentheses so it stays light */
 export function withAgent(
   action: string,
   agent?: SpecialistId | "conductor" | string | null,
@@ -25,7 +25,7 @@ export function withAgent(
   return `${body}. (${who})`;
 }
 
-/** Detay satırından okunabilir özet üret (eski loglar / eksik plain için) */
+/** Derive a readable summary from a detail line (legacy logs / missing plain) */
 export function derivePlain(input: {
   kind: TermKind;
   text: string;
@@ -37,70 +37,70 @@ export function derivePlain(input: {
   if (input.kind === "curl") {
     const url = raw.match(/https?:\/\/[^\s'"]+/)?.[0];
     return withAgent(
-      url ? `Web sayfası indiriliyor: ${shortUrl(url)}` : "İnternetten veri çekiliyor",
+      url ? `Downloading web page: ${shortUrl(url)}` : "Fetching data from the internet",
       agent || "scout",
     );
   }
   if (input.kind === "python") {
-    return withAgent("Metin içinde e-posta / veri taranıyor", agent || "contact");
+    return withAgent("Scanning text for emails / patterns", agent || "contact");
   }
   if (input.kind === "err") {
-    return withAgent(`Sorun: ${clip(raw, 110)}`, agent);
+    return withAgent(`Issue: ${clip(raw, 110)}`, agent);
   }
   if (input.kind === "ok") {
-    return withAgent(`Tamamlandı: ${clip(stripDecor(raw), 120)}`, agent);
+    return withAgent(`Done: ${clip(stripDecor(raw), 120)}`, agent);
   }
 
   if (/dispatch →\s*(\w+)/i.test(raw)) {
     const m = raw.match(/dispatch →\s*(\w+)/i);
-    return withAgent(`İş ${agentLabel(m?.[1])} ajanına verildi`, "conductor");
+    return withAgent(`Handed work to ${agentLabel(m?.[1])} agent`, "conductor");
   }
   if (/REWIND →\s*(\w+)/i.test(raw)) {
     const m = raw.match(/REWIND →\s*(\w+)/i);
     return withAgent(
-      `Paket beğenilmedi; ${agentLabel(m?.[1])} adımından itibaren yeniden deneniyor`,
+      `Package rejected; retrying from ${agentLabel(m?.[1])} step`,
       "reviewer",
     );
   }
   if (/workflow complete|done ·/i.test(raw)) {
-    return withAgent("Araştırma tamamlandı", "conductor");
+    return withAgent("Research complete", "conductor");
   }
   if (/CANCEL|aborted \(canceled\)/i.test(raw)) {
-    return withAgent("İş kullanıcı tarafından iptal edildi", "conductor");
+    return withAgent("Job canceled by user", "conductor");
   }
   if (/session|specialists:/i.test(raw)) {
-    return withAgent("Araştırma başlatıldı", "conductor");
+    return withAgent("Research started", "conductor");
   }
   if (/online/i.test(raw)) {
-    return withAgent("Göreve başlandı", agent);
+    return withAgent("Started task", agent);
   }
-  if (/Ana sayfa|sayfa çek/i.test(raw)) {
-    return withAgent("Sitenin ana sayfası inceleniyor", agent || "scout");
+  if (/Ana sayfa|sayfa çek|home page|fetching home/i.test(raw)) {
+    return withAgent("Reviewing the site home page", agent || "scout");
   }
-  if (/Ziyaret|Path denemesi|rota/i.test(raw)) {
-    return withAgent("İlgili sayfalar dolaşılıyor", agent || "scout");
+  if (/Ziyaret|Path denemesi|rota|visit|route/i.test(raw)) {
+    return withAgent("Browsing related pages", agent || "scout");
   }
-  if (/Şirket adı/i.test(raw)) {
-    return withAgent("Şirket adı çıkarılıyor", agent || "scout");
+  if (/Şirket adı|Company name/i.test(raw)) {
+    return withAgent("Extracting company name", agent || "scout");
   }
-  if (/İlan–CV|ilan/i.test(raw) && (input.agent === "jobfit" || /jobfit/i.test(input.text))) {
-    return withAgent("CV’ye uygun açık pozisyon aranıyor", "jobfit");
+  if (/İlan–CV|ilan|job.?fit/i.test(raw) && (input.agent === "jobfit" || /jobfit/i.test(input.text))) {
+    return withAgent("Looking for open roles that match the CV", "jobfit");
   }
-  if (/e-posta|email|iletisim|İletişim/i.test(raw)) {
-    return withAgent("Başvuru için uygun e-posta aranıyor", agent || "contact");
+  if (/e-posta|email|iletisim|İletişim|contact/i.test(raw)) {
+    return withAgent("Looking for a suitable application email", agent || "contact");
   }
-  if (/Sorgu:|Harici|şirket profili|Research/i.test(raw)) {
-    return withAgent("Şirket hakkında dış kaynaklardan bilgi toplanıyor", agent || "research");
+  if (/Sorgu:|Harici|şirket profili|Research|query/i.test(raw)) {
+    return withAgent("Gathering company info from external sources", agent || "research");
   }
   if (/Mail taslağı|Mail \(/i.test(raw)) {
-    return withAgent("Başvuru e-postası taslağı yazılıyor", agent || "writer");
+    return withAgent("Writing application email draft", agent || "writer");
   }
-  if (/skor|PASS|REWIND|Paket/i.test(raw)) {
-    return withAgent("Başvuru paketi puanlanıyor", agent || "reviewer");
+  if (/skor|PASS|REWIND|Paket|score/i.test(raw)) {
+    return withAgent("Scoring the application package", agent || "reviewer");
   }
-  if (/Model düşünüyor|↳/i.test(raw)) {
+  if (/Model düşünüyor|thinking|↳/i.test(raw)) {
     if (raw.startsWith("↳")) return null;
-    return withAgent("Durum değerlendiriliyor", agent);
+    return withAgent("Evaluating status", agent);
   }
   if (/bytes|preview:|stderr/i.test(raw)) {
     return null;

@@ -369,7 +369,7 @@ export async function matchMailsToGroups(
   if (dropped > 0) {
     log?.(
       "system",
-      `${dropped} kişisel/newsletter mail tracker dışı bırakıldı`,
+      `${dropped} personal/newsletter mails left out of tracker`,
     );
   }
 
@@ -378,7 +378,7 @@ export async function matchMailsToGroups(
     if (jobMails.length <= 80) {
       log?.(
         "think",
-        `AI gruplama (tek batch, ${jobMails.length} mail)…`,
+        `AI grouping (single batch, ${jobMails.length} mails)…`,
       );
       const one = await matchBatch(jobMails, searches, mailIntents);
       throwIfSyncCanceled(signal);
@@ -390,7 +390,7 @@ export async function matchMailsToGroups(
         log?.("ok", `AI: ${one.length} grup → consolidate ${merged.length}`);
         return merged;
       }
-      log?.("system", "AI yanıtı parse edilemedi → heuristic");
+      log?.("system", "Could not parse AI response → heuristic");
     } else if (jobMails.length > 0) {
       const batches = chunk(jobMails, 50);
       const all: AiGroup[] = [];
@@ -399,14 +399,14 @@ export async function matchMailsToGroups(
         const batch = batches[i]!;
         log?.(
           "think",
-          `AI gruplama batch ${i + 1}/${batches.length} (${batch.length} mail)…`,
+          `AI grouping batch ${i + 1}/${batches.length} (${batch.length} mails)…`,
         );
         const part = await matchBatch(batch, searches, mailIntents);
         if (part) {
           all.push(...part);
           log?.("ok", `batch ${i + 1}: ${part.length} grup`);
         } else {
-          log?.("system", `batch ${i + 1}: parse başarısız`);
+          log?.("system", `batch ${i + 1}: parse failed`);
         }
       }
       if (all.length) {
@@ -414,19 +414,19 @@ export async function matchMailsToGroups(
           mergeMissingSearches(all, searches),
           jobMails,
         );
-        log?.("ok", `consolidate → ${merged.length} satır`);
+        log?.("ok", `consolidate → ${merged.length} rows`);
         return merged;
       }
     }
   } catch (err) {
     if (err instanceof SyncCanceledError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
-    log?.("err", `AI match başarısız → heuristic: ${msg}`);
+    log?.("err", `AI match failed → heuristic: ${msg}`);
     console.warn("[tracker/match] AI match failed, using heuristic:", err);
   }
 
   throwIfSyncCanceled(signal);
-  log?.("system", "Heuristic gruplama kullanılıyor");
+  log?.("system", "Using heuristic grouping");
   return heuristicGroups(jobMails, searches);
 }
 

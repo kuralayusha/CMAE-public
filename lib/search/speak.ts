@@ -24,8 +24,8 @@ export function speak(
 
   let human = plain;
   if (human) {
-    // Ajan adı başta tekrarlanmasın; yoksa paranteze al
-    if (!/\([^)]+ajan[^)]*\)$/i.test(human) && !/\(Orkestra şefi\)$/i.test(human) && !/\(Sistem\)$/i.test(human)) {
+    // Avoid repeating the agent name at the start; otherwise wrap in parentheses
+    if (!/\([^)]+agent[^)]*\)$/i.test(human) && !/\(Conductor\)$/i.test(human) && !/\(System\)$/i.test(human)) {
       human = withAgent(human.replace(/\.$/, ""), agent);
     }
   } else {

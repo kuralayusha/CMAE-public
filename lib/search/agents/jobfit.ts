@@ -5,7 +5,7 @@ import { writeFile } from "../workspace";
 
 export async function runJobFit(ctx: RunContext) {
   const { jobId } = ctx;
-  speak(jobId, "jobfit", "system", "── jobfit online · CV ↔ ilan eşleşmesi");
+  speak(jobId, "jobfit", "system", "── jobfit online · CV ↔ job matching");
 
   if (ctx.redoFeedback.jobfit) {
     speak(jobId, "jobfit", "think", `Reviewer feedback: ${ctx.redoFeedback.jobfit}`);
@@ -35,7 +35,7 @@ Return ONLY JSON:
   "siteLanguage": "${ctx.siteLanguage}",
   "notes": ""
 }`,
-    "İlan–CV analizi…",
+    "Job–CV analysis…",
     "jobfit",
   );
 
@@ -55,23 +55,23 @@ Return ONLY JSON:
   ctx.siteLanguage = ctx.jobFit.siteLanguage;
 
   if (ctx.jobFit.hasMatchingJob) {
-    speak(jobId, "jobfit", "ok", `${ctx.jobFit.jobs.length} uygun ilan`);
+    speak(jobId, "jobfit", "ok", `${ctx.jobFit.jobs.length} matching jobs`);
     await writeFile(
       ctx.folderPath,
       "basvuru_linkleri.md",
-      `# Başvuru / ilan linkleri (jobfit)\n\n${ctx.jobFit.jobs
+      `# Application / job links (jobfit)\n\n${ctx.jobFit.jobs
         .map(
           (j, i) =>
-            `## ${i + 1}. ${j.title}\n- Link: ${j.url || ctx.url}\n- Uyum: ${j.whyFit}\n`,
+            `## ${i + 1}. ${j.title}\n- Link: ${j.url || ctx.url}\n- Fit: ${j.whyFit}\n`,
         )
-        .join("\n")}\n\nNotlar: ${ctx.jobFit.notes || "—"}\n`,
+        .join("\n")}\n\nNotes: ${ctx.jobFit.notes || "—"}\n`,
     );
   } else {
-    speak(jobId, "jobfit", "think", "Uygun ilan yok → cold başvuru hattı");
+    speak(jobId, "jobfit", "think", "No matching jobs → cold application path");
     await writeFile(
       ctx.folderPath,
       "basvuru_linkleri.md",
-      `# Başvuru / ilan linkleri (jobfit)\n\nUygun açık ilan yok.\nCold / inisiyatif başvuru.\n\nNotlar: ${ctx.jobFit.notes || "—"}\n`,
+      `# Application / job links (jobfit)\n\nNo matching open roles.\nCold / speculative application.\n\nNotes: ${ctx.jobFit.notes || "—"}\n`,
     );
   }
 }

@@ -32,7 +32,7 @@ export async function verifyGmailImap(): Promise<VerifyCheck> {
   if (!creds) {
     return {
       ok: false,
-      error: "Gmail adresi veya App Password eksik",
+      error: "Gmail address or App Password is missing",
     };
   }
 
@@ -71,7 +71,7 @@ export async function verifyGmailImap(): Promise<VerifyCheck> {
 export async function verifyCursorApiKey(): Promise<VerifyCheck> {
   const apiKey = resolveCursorApiKey();
   if (!apiKey) {
-    return { ok: false, error: "Cursor API key eksik" };
+    return { ok: false, error: "Cursor API key is missing" };
   }
 
   try {
@@ -87,7 +87,7 @@ export async function verifyCursorApiKey(): Promise<VerifyCheck> {
     if (result.status === "error" || !result.result) {
       return {
         ok: false,
-        error: `Cursor API yanıt vermedi (status=${result.status ?? "unknown"})`,
+        error: `Cursor API did not respond (status=${result.status ?? "unknown"})`,
       };
     }
     return { ok: true };
@@ -114,13 +114,13 @@ export async function verifyOnboardingConnections(): Promise<OnboardingVerifyRes
 function humanizeImapError(msg: string): string {
   const m = msg.toLowerCase();
   if (m.includes("invalid credentials") || m.includes("authentication failed")) {
-    return "Gmail girişi reddedildi — adresi ve App Password’ü kontrol et";
+    return "Gmail login rejected — check the address and App Password";
   }
   if (m.includes("application-specific password")) {
-    return "App Password gerekli — Google hesabında uygulama şifresi oluştur";
+    return "App Password required — create an app password in your Google account";
   }
   if (m.includes("timeout") || m.includes("timed out")) {
-    return "Gmail’e bağlanırken zaman aşımı — tekrar dene";
+    return "Timed out connecting to Gmail — try again";
   }
   return msg.slice(0, 200);
 }
@@ -133,10 +133,10 @@ function humanizeCursorError(msg: string): string {
     m.includes("invalid") ||
     m.includes("api key")
   ) {
-    return "Cursor API key geçersiz veya yetkisiz — dashboard’dan yeni key al";
+    return "Cursor API key is invalid or unauthorized — get a new key from the dashboard";
   }
   if (m.includes("timeout") || m.includes("timed out")) {
-    return "Cursor API zaman aşımı — tekrar dene";
+    return "Cursor API timed out — try again";
   }
   return msg.slice(0, 200);
 }

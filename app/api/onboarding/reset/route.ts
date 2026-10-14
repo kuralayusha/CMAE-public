@@ -10,7 +10,7 @@ export async function POST() {
     resetAppForOnboarding();
     if (isOnboardingFlagSet() || isOnboardingComplete()) {
       return NextResponse.json(
-        { error: "Sıfırlama sonrası onboarding hâlâ açık görünüyor" },
+        { error: "Onboarding still appears complete after reset" },
         { status: 500 },
       );
     }

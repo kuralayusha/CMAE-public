@@ -154,7 +154,7 @@ function formatWhen(iso: string | null): string {
   if (!iso) return "—";
   try {
     const d = new Date(iso);
-    return d.toLocaleString("tr-TR", {
+    return d.toLocaleString("en-US", {
       day: "2-digit",
       month: "short",
       hour: "2-digit",
@@ -166,14 +166,14 @@ function formatWhen(iso: string | null): string {
 }
 
 const STATUS_CHIP_LABEL: Record<string, string> = {
-  ready_to_send: "Gönder",
-  needs_reply: "Yanıt",
+  ready_to_send: "Send",
+  needs_reply: "Reply",
   needs_action: "Link / form",
   follow_up_due: "Follow-up",
-  waiting: "Beklemede",
-  in_progress: "Aktif",
-  rejected: "Red",
-  closed: "Kapalı",
+  waiting: "Waiting",
+  in_progress: "Active",
+  rejected: "Rejected",
+  closed: "Closed",
   inactive: "Inactive",
   ignored: "Ignored",
 };
@@ -181,15 +181,15 @@ const STATUS_CHIP_LABEL: Record<string, string> = {
 function statusDetail(item: TrackerItem): string {
   if (item.status === "needs_reply" && item.sentiment) {
     return item.sentiment === "positive"
-      ? "olumlu"
+      ? "positive"
       : item.sentiment === "negative"
-        ? "olumsuz"
-        : "nötr";
+        ? "negative"
+        : "neutral";
   }
   if (item.status === "waiting" && item.waitingUntil) {
     try {
       return new Date(`${item.waitingUntil}T12:00:00`).toLocaleDateString(
-        "tr-TR",
+        "en-US",
         { day: "2-digit", month: "short" },
       );
     } catch {
@@ -200,17 +200,17 @@ function statusDetail(item: TrackerItem): string {
     const unlock = Date.parse(item.nextFollowUpAt);
     if (Number.isFinite(unlock) && unlock > Date.now()) {
       try {
-        return `fu ${new Date(unlock).toLocaleDateString("tr-TR", {
+        return `fu ${new Date(unlock).toLocaleDateString("en-US", {
           day: "2-digit",
           month: "short",
         })}`;
       } catch {
-        return "fu bekliyor";
+        return "fu pending";
       }
     }
   }
   if (item.status === "in_progress" && item.waitingOn) {
-    return item.waitingOn === "us" ? "biz" : "onlar";
+    return item.waitingOn === "us" ? "us" : "them";
   }
   if (item.status === "follow_up_due" && item.followUpCount > 0) {
     return `${item.followUpCount}/2`;
@@ -297,7 +297,7 @@ export function TrackerList() {
         body: JSON.stringify({ action, ids }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Toplu işlem başarısız");
+      if (!res.ok) throw new Error(data.error || "Bulk action failed");
       if (data.sections) {
         setSections(data.sections);
         setSync(data.sync || null);
@@ -308,8 +308,8 @@ export function TrackerList() {
       setSelectedIds(new Set());
       setToast(
         action === "inactive"
-          ? `${data.updated ?? ids.length} başvuru pasife alındı`
-          : `${data.updated ?? ids.length} başvuru aktif edildi — sonraki sync’te yeniden sınıflandırılır`,
+          ? `${data.updated ?? ids.length} applications marked inactive`
+          : `${data.updated ?? ids.length} applications marked active — will be reclassified on next sync`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -330,7 +330,7 @@ export function TrackerList() {
   const load = useCallback(async () => {
     const res = await fetch("/api/tracker");
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Liste yüklenemedi");
+    if (!res.ok) throw new Error(data.error || "Could not load list");
     setSections(data.sections || []);
     setSync(data.sync || null);
     setTotal(data.total || 0);
@@ -354,15 +354,15 @@ export function TrackerList() {
         const parts = [
           data.mode === "hard" ? "Hard Sync" : "Sync",
           data.skippedImap
-            ? `IMAP atlandı${data.skipReason ? `: ${data.skipReason}` : ""}`
+            ? `IMAP skipped${data.skipReason ? `: ${data.skipReason}` : ""}`
             : `${data.upserted ?? 0} upsert`,
-          `${data.itemCount ?? data.total ?? 0} satır`,
+          `${data.itemCount ?? data.total ?? 0} rows`,
         ];
         if (
           typeof data.keptOutsideWindow === "number" &&
           data.keptOutsideWindow > 0
         ) {
-          parts.push(`${data.keptOutsideWindow} eski korundu`);
+          parts.push(`${data.keptOutsideWindow} older kept`);
         }
         setToast(parts.join(" · "));
       }
@@ -480,7 +480,7 @@ export function TrackerList() {
           body: JSON.stringify({ mode }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Sync başlatılamadı");
+        if (!res.ok) throw new Error(data.error || "Could not start sync");
         attachSyncStream(data.id as string, { showToast: !opts?.quiet });
       } catch (err) {
         setSyncing(false);
@@ -513,7 +513,7 @@ export function TrackerList() {
       }
     })();
 
-    // Search light-merge → listeyi anında yenile (Gmail sync değil)
+    // Search light-merge → refresh list immediately (not a Gmail sync)
     const live = new EventSource("/api/tracker/live");
     liveEsRef.current = live;
     live.onmessage = (ev) => {
@@ -553,8 +553,8 @@ export function TrackerList() {
         body: JSON.stringify({ kind }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Hazırlama başarısız");
-      setToast(`Taslak yazıldı: ${data.fileName}`);
+      if (!res.ok) throw new Error(data.error || "Prepare failed");
+      setToast(`Draft written: ${data.fileName}`);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -577,10 +577,10 @@ export function TrackerList() {
         body: JSON.stringify({ kind }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gmail taslağı oluşturulamadı");
+      if (!res.ok) throw new Error(data.error || "Could not create Gmail draft");
       {
-        const bits = [`Gmail Drafts’a yazıldı: ${data.subject}`];
-        if (data.attachedCv) bits.push(`ek: ${data.attachedCv}`);
+        const bits = [`Written to Gmail Drafts: ${data.subject}`];
+        if (data.attachedCv) bits.push(`attachment: ${data.attachedCv}`);
         if (data.cvWarning) bits.push(String(data.cvWarning));
         setToast(bits.join(" · "));
       }
@@ -604,8 +604,8 @@ export function TrackerList() {
           href={urls[0]}
           target="_blank"
           rel="noopener noreferrer"
-          title="Gmail'de aç"
-          aria-label="Gmail'de aç"
+          title="Open in Gmail"
+          aria-label="Open in Gmail"
         >
           <IconGmail />
         </a>
@@ -617,8 +617,8 @@ export function TrackerList() {
         type="button"
         variant="ghost"
         className="cmae-tracker-icon-btn"
-        title={`Gmail'de aç (${urls.length} thread)`}
-        aria-label={`Gmail'de aç, ${urls.length} thread`}
+        title={`Open in Gmail (${urls.length} threads)`}
+        aria-label={`Open in Gmail, ${urls.length} threads`}
         onClick={() => setGmailModal({ company: item.company, urls })}
       >
         <IconGmail count={urls.length} />
@@ -638,8 +638,8 @@ export function TrackerList() {
           type="button"
           className="cmae-tracker-icon-btn"
           disabled={spinning}
-          title="Gmail taslağı oluştur"
-          aria-label="Gmail taslağı oluştur"
+          title="Create Gmail draft"
+          aria-label="Create Gmail draft"
           onClick={() => void draft(item, "application")}
         >
           {busyId === `${item.id}:draft:application` ? "…" : <IconDraft />}
@@ -655,8 +655,8 @@ export function TrackerList() {
             variant="ghost"
             className="cmae-tracker-icon-btn"
             disabled={spinning}
-            title="Follow-up hazırla"
-            aria-label="Follow-up hazırla"
+            title="Prepare follow-up"
+            aria-label="Prepare follow-up"
             onClick={() => void prepare(item, "follow_up")}
           >
             {busyId === `${item.id}:prep:follow_up` ? "…" : <IconPrepare />}
@@ -668,8 +668,8 @@ export function TrackerList() {
           type="button"
           className="cmae-tracker-icon-btn"
           disabled={spinning}
-          title="Follow-up Gmail taslağı"
-          aria-label="Follow-up Gmail taslağı"
+          title="Follow-up Gmail draft"
+          aria-label="Follow-up Gmail draft"
           onClick={() => void draft(item, "follow_up")}
         >
           {busyId === `${item.id}:draft:follow_up` ? "…" : <IconDraft />}
@@ -690,8 +690,8 @@ export function TrackerList() {
         return (
           <span
             className="cmae-tracker-icon-btn is-static"
-            title="Dönüş tarihine kadar beklemede"
-            aria-label="Beklemede"
+            title="Waiting until response date"
+            aria-label="Waiting"
           >
             <IconWait />
           </span>
@@ -704,8 +704,8 @@ export function TrackerList() {
             variant="ghost"
             className="cmae-tracker-icon-btn"
             disabled={spinning}
-            title="Yanıt taslağı hazırla"
-            aria-label="Yanıt taslağı hazırla"
+            title="Prepare reply draft"
+            aria-label="Prepare reply draft"
             onClick={() => void prepare(item, "reply")}
           >
             {busyId === `${item.id}:prep:reply` ? "…" : <IconPrepare />}
@@ -717,8 +717,8 @@ export function TrackerList() {
           type="button"
           className="cmae-tracker-icon-btn"
           disabled={spinning}
-          title="Yanıt Gmail taslağı"
-          aria-label="Yanıt Gmail taslağı"
+          title="Reply Gmail draft"
+          aria-label="Reply Gmail draft"
           onClick={() => void draft(item, "reply")}
         >
           {busyId === `${item.id}:draft:reply` ? "…" : <IconDraft />}
@@ -734,8 +734,8 @@ export function TrackerList() {
             variant="ghost"
             className="cmae-tracker-icon-btn"
             disabled={spinning}
-            title="Teşekkür hazırla"
-            aria-label="Teşekkür hazırla"
+            title="Prepare thanks"
+            aria-label="Prepare thanks"
             onClick={() => void prepare(item, "thanks")}
           >
             {busyId === `${item.id}:prep:thanks` ? "…" : <IconPrepare />}
@@ -747,8 +747,8 @@ export function TrackerList() {
           type="button"
           className="cmae-tracker-icon-btn"
           disabled={spinning}
-          title="Teşekkür Gmail taslağı"
-          aria-label="Teşekkür Gmail taslağı"
+          title="Thanks Gmail draft"
+          aria-label="Thanks Gmail draft"
           onClick={() => void draft(item, "thanks")}
         >
           {busyId === `${item.id}:draft:thanks` ? "…" : <IconDraft />}
@@ -791,7 +791,7 @@ export function TrackerList() {
             className="cmae-tracker-checkbox"
             checked={checked}
             onChange={() => toggleSelect(item.id)}
-            aria-label={`${item.company} seç`}
+            aria-label={`Select ${item.company}`}
           />
         </span>
         <span className="cmae-tracker-company" role="cell">
@@ -829,14 +829,14 @@ export function TrackerList() {
       <div className="cmae-tracker-table" role="table">
         <div className="cmae-tracker-row is-head" role="row">
           <span role="columnheader" className="cmae-tracker-check">
-            <span className="cmae-sr-only">Seç</span>
+            <span className="cmae-sr-only">Select</span>
           </span>
-          <span role="columnheader">Şirket</span>
-          <span role="columnheader">Pozisyon</span>
-          <span role="columnheader">Durum</span>
-          <span role="columnheader">Son aktivite</span>
-          <span role="columnheader">Alıcı</span>
-          <span role="columnheader">Aksiyon</span>
+          <span role="columnheader">Company</span>
+          <span role="columnheader">Position</span>
+          <span role="columnheader">Status</span>
+          <span role="columnheader">Last activity</span>
+          <span role="columnheader">Recipient</span>
+          <span role="columnheader">Action</span>
         </div>
         {items.map(renderRow)}
       </div>
@@ -850,10 +850,10 @@ export function TrackerList() {
   return (
     <div className="cmae-tracker">
       {selectedCount > 0 ? (
-        <div className="cmae-tracker-selbar" role="region" aria-label="Seçim çubuğu">
+        <div className="cmae-tracker-selbar" role="region" aria-label="Selection bar">
           <div className="cmae-tracker-selbar-inner">
             <span className="cmae-tracker-selbar-count">
-              {selectedCount} seçili
+              {selectedCount} selected
             </span>
             <div className="cmae-tracker-selbar-actions">
               {selectedHasActive ? (
@@ -863,7 +863,7 @@ export function TrackerList() {
                   disabled={bulkBusy}
                   onClick={() => void bulkSet("inactive")}
                 >
-                  Inactive et
+                  Mark inactive
                 </Button>
               ) : null}
               {selectedHasInactive ? (
@@ -872,7 +872,7 @@ export function TrackerList() {
                   disabled={bulkBusy}
                   onClick={() => void bulkSet("active")}
                 >
-                  Aktif et
+                  Mark active
                 </Button>
               ) : null}
               <Button
@@ -881,7 +881,7 @@ export function TrackerList() {
                 disabled={bulkBusy}
                 onClick={() => setSelectedIds(new Set())}
               >
-                Seçimi temizle
+                Clear selection
               </Button>
             </div>
           </div>
@@ -891,11 +891,11 @@ export function TrackerList() {
       {!loading && total > 0 ? (
         <div className="cmae-tracker-toolbar">
           <div className="cmae-tracker-meta">
-            <span>{total} başvuru</span>
+            <span>{total} applications</span>
             <span className="cmae-tracker-dot">·</span>
             <span>
-              Son sync:{" "}
-              {sync?.lastSyncAt ? formatWhen(sync.lastSyncAt) : "henüz yok"}
+              Last sync:{" "}
+              {sync?.lastSyncAt ? formatWhen(sync.lastSyncAt) : "none yet"}
             </span>
             {sync?.lastError ? (
               <>
@@ -906,15 +906,15 @@ export function TrackerList() {
           </div>
           <div className="cmae-tracker-toolbar-right">
             <label className="cmae-tracker-sort">
-              <span>Sırala</span>
+              <span>Sort</span>
               <select
                 className="cmae-input cmae-tracker-sort-select"
                 value={sortMode}
                 onChange={(e) => writeSortMode(e.target.value as SortMode)}
-                aria-label="Liste sıralaması"
+                aria-label="List sort order"
               >
-                <option value="status">Duruma göre (öncelik)</option>
-                <option value="activity">Son aktiviteye göre</option>
+                <option value="status">By status (priority)</option>
+                <option value="activity">By last activity</option>
               </select>
             </label>
             <Button
@@ -922,7 +922,7 @@ export function TrackerList() {
               variant="ghost"
               onClick={() => void runSync({ mode: "hard" })}
               disabled={syncing || loading}
-              title="Son 30 günü baştan çeker; DB’deki eski mailler silinmez, messageId ile upsert"
+              title="Re-fetches the last 30 days; older DB emails are kept, upserted by messageId"
             >
               Hard Sync
             </Button>
@@ -930,7 +930,7 @@ export function TrackerList() {
               type="button"
               onClick={() => void runSync({ mode: "incremental" })}
               disabled={syncing || loading}
-              title="Yalnızca yeni UID’leri çeker (hızlı)"
+              title="Fetches only new UIDs (fast)"
             >
               {syncing ? "Sync…" : "Gmail sync"}
             </Button>
@@ -956,19 +956,19 @@ export function TrackerList() {
           >
             <header className="cmae-gmail-modal-head">
               <div>
-                <h2 id="cmae-gmail-modal-title">Gmail thread’leri</h2>
+                <h2 id="cmae-gmail-modal-title">Gmail threads</h2>
                 <p>
-                  {gmailModal.company} — {gmailModal.urls.length} parçalı thread.
-                  Normal tık yeni sekmeye geçer; burada kalmak için{" "}
+                  {gmailModal.company} — {gmailModal.urls.length} thread parts.
+                  A normal click opens a new tab; to stay here,{" "}
                   <kbd className="cmae-kbd">Cmd</kbd>/
-                  <kbd className="cmae-kbd">Ctrl</kbd>+tıkla.
+                  <kbd className="cmae-kbd">Ctrl</kbd>+click.
                 </p>
               </div>
               <button
                 type="button"
                 className="cmae-gmail-modal-close"
                 onClick={() => setGmailModal(null)}
-                aria-label="Kapat"
+                aria-label="Close"
               >
                 ×
               </button>
@@ -982,7 +982,7 @@ export function TrackerList() {
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Thread {i + 1} — Gmail&apos;de aç
+                  Thread {i + 1} — Open in Gmail
                 </a>
               ))}
             </div>
@@ -1006,12 +1006,12 @@ export function TrackerList() {
       ) : null}
 
       {loading ? (
-        <p className="cmae-tracker-empty">Yükleniyor…</p>
+        <p className="cmae-tracker-empty">Loading…</p>
       ) : total === 0 ? (
         <div className="cmae-tracker-empty cmae-tracker-empty-cta">
-          <p>Henüz başvuru yok.</p>
+          <p>No applications yet.</p>
           <p className="cmae-tracker-empty-hint">
-            Gmail’i senkronize et veya Araştır ile şirket ekle.
+            Sync Gmail or add companies via Search.
           </p>
           <div className="cmae-tracker-empty-actions">
             <Button
@@ -1026,7 +1026,7 @@ export function TrackerList() {
       ) : sortMode === "activity" ? (
         <section className="cmae-tracker-section">
           <header className="cmae-tracker-section-head">
-            <h2>Son aktivite</h2>
+            <h2>Last activity</h2>
             <span>{activityItems.length}</span>
           </header>
           {renderTable(activityItems)}

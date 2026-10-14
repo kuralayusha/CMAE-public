@@ -179,7 +179,7 @@ export async function addCvFromBuffer(
   ensureDir();
   const entries = syncCvLibrary();
   if (entries.length >= MAX_CV_COUNT) {
-    throw new Error(`En fazla ${MAX_CV_COUNT} CV saklanabilir`);
+    throw new Error(`At most ${MAX_CV_COUNT} CVs can be stored`);
   }
 
   let stem = sanitizeStem(originalName);
@@ -224,7 +224,7 @@ export function updateCvMeta(
 ): CvPublic {
   const entries = syncCvLibrary();
   const idx = entries.findIndex((e) => e.id === id);
-  if (idx < 0) throw new Error("CV bulunamadı");
+  if (idx < 0) throw new Error("CV not found");
 
   let next = entries.map((e) => ({ ...e }));
   const cur = next[idx]!;
@@ -251,7 +251,7 @@ export function updateCvMeta(
 export function deleteCv(id: string): void {
   const entries = syncCvLibrary();
   const entry = entries.find((e) => e.id === id);
-  if (!entry) throw new Error("CV bulunamadı");
+  if (!entry) throw new Error("CV not found");
   const abs = path.join(cvsDir(), entry.fileName);
   if (fs.existsSync(abs)) fs.unlinkSync(abs);
   let next = entries.filter((e) => e.id !== id);
