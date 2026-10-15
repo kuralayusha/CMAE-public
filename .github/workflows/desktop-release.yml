@@ -26,6 +26,12 @@ jobs:
   release-mac:
     runs-on: macos-latest
     timeout-minutes: 60
+    env:
+      MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,18 +48,18 @@ jobs:
         run: npm ci
 
       - name: Import Apple signing certificate
-        if: ${{ secrets.MAC_CSC_LINK != '' }}
+        if: env.MAC_CSC_LINK != ''
         uses: apple-actions/import-codesign-certs@v3
         with:
-          p12-file-base64: ${{ secrets.MAC_CSC_LINK }}
-          p12-password: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          p12-file-base64: ${{ env.MAC_CSC_LINK }}
+          p12-password: ${{ env.MAC_CSC_KEY_PASSWORD }}
 
       - name: "Allow Mac codesign (strip identity null)"
-        if: ${{ secrets.MAC_CSC_LINK != '' }}
+        if: env.MAC_CSC_LINK != ''
         run: node scripts/ci-enable-mac-signing.mjs
 
       - name: Verify signing identity
-        if: ${{ secrets.MAC_CSC_LINK != '' }}
+        if: env.MAC_CSC_LINK != ''
         run: security find-identity -v -p codesigning
 
       - name: Build + publish Mac
@@ -61,11 +67,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CMAE_OBFUSCATE: "1"
-          # Cert already in keychain — avoid electron-builder CSC_LINK bug
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' && 'true' || 'false' }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.MAC_CSC_LINK != '' && 'true' || 'false' }}
 
   release-win:
     runs-on: windows-2022
