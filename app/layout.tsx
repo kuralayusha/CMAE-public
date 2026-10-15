@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { I18nProvider } from "@/components/I18nProvider";
+import { VersionGate } from "@/components/VersionGate";
 import { loadActivePack, loadEnPack } from "@/lib/i18n/pack";
 import type { LocalePack } from "@/lib/i18n/types";
 import "./globals.css";
@@ -45,7 +46,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           initialPack={initialPack}
           initialEn={initialEn}
         >
-          {children}
+          <VersionGate>{children}</VersionGate>
         </I18nProvider>
       </body>
     </html>

@@ -1,0 +1,143 @@
+.cmae-version-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(40, 40, 40, 0.06), transparent),
+    var(--bg, #f7f6f3);
+  color: var(--ink, #1a1a1a);
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 48px 24px 64px;
+  box-sizing: border-box;
+}
+
+.cmae-version-lock-inner {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  padding-top: 24px;
+}
+
+.cmae-version-lock-brand {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8a8a8a);
+}
+
+.cmae-version-lock h1 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 1.75rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.cmae-version-lock p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-muted, #555);
+}
+
+.cmae-version-lock-meta {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--ink-faint, #8a8a8a);
+}
+
+.cmae-version-lock-notes {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  white-space: pre-wrap;
+}
+
+.cmae-version-lock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.cmae-version-lock-btn {
+  appearance: none;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--ink, #1a1a1a);
+  color: #fff;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cmae-version-lock-btn:hover {
+  opacity: 0.9;
+}
+
+.cmae-version-lock-btn.is-secondary {
+  background: transparent;
+  color: var(--ink, #1a1a1a);
+  border: 1.5px solid var(--line, #ccc);
+}
+
+.cmae-version-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 10px 16px;
+  background: #1a1a1a;
+  color: #f5f5f3;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.cmae-version-banner p {
+  margin: 0;
+  flex: 1 1 220px;
+}
+
+.cmae-version-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cmae-version-banner button,
+.cmae-version-banner a {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.cmae-version-banner a.is-primary,
+.cmae-version-banner button.is-primary {
+  background: #fff;
+  color: #1a1a1a;
+  border-color: #fff;
+}

@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import { throwIfSyncCanceled } from "./cancel";
 import { rebuildTrackerItems } from "./rebuild";
 import { syncMailsFromGmail, type SyncMode } from "./sync";
@@ -27,7 +28,7 @@ export async function runTrackerSync(opts?: {
   throwIfSyncCanceled(signal);
   log?.(
     "system",
-    mode === "hard" ? "Tracker hard sync started" : "Tracker sync started",
+    mode === "hard" ? t("sync.hardStarted") : t("sync.started"),
   );
 
   if (!opts?.skipImap) {
@@ -37,14 +38,17 @@ export async function runTrackerSync(opts?: {
     upserted = sync.upserted;
     keptOutsideWindow = sync.keptOutsideWindow;
   } else {
-    log?.("think", "IMAP skipped (skipImap)");
+    log?.("think", t("sync.imapSkipped"));
   }
 
   throwIfSyncCanceled(signal);
-  log?.("think", "Liste yeniden kuruluyor (mail + workspace + AI)…");
+  log?.("think", t("sync.rebuildingList"));
   const { itemCount } = await rebuildTrackerItems({ onProgress: log, signal });
   throwIfSyncCanceled(signal);
-  log?.("ok", `Sync complete · ${upserted} mails · ${itemCount} rows`);
+  log?.(
+    "ok",
+    t("sync.complete", { mails: upserted, rows: itemCount }),
+  );
   return {
     skippedImap,
     skipReason,

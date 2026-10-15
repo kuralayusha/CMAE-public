@@ -46,9 +46,12 @@ export default function SearchPage() {
       setHistory(hist);
       upsertCatalog([...hist, ...active]);
 
+      // Only force-pin live jobs; error/done stay until the user closes them.
       setPanelIds((prev) => {
         const set = new Set(prev);
-        for (const j of active) set.add(j.id);
+        for (const j of active) {
+          if (j.status === "queued" || j.status === "running") set.add(j.id);
+        }
         return [...set];
       });
     } catch (err) {
@@ -189,6 +192,7 @@ export default function SearchPage() {
                         jobId={j.id}
                         url={j.url}
                         initialFolder={j.folderName}
+                        onDismiss={() => removeFromPanel(j.id)}
                       />
                     </div>
                   ))}

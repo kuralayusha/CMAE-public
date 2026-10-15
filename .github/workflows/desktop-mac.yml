@@ -11,8 +11,11 @@ on:
       - "lib/**"
       - "desktop/**"
       - "scripts/prepare-desktop.mjs"
+      - "scripts/obfuscate-desktop.mjs"
+      - "scripts/notarize.cjs"
       - "scripts/desktop-dev.mjs"
       - "scripts/after-pack.cjs"
+      - "version-policy.json"
       - "electron-builder.yml"
       - "next.config.ts"
       - "package.json"
@@ -43,8 +46,13 @@ jobs:
       - name: Build Mac desktop app
         run: npm run desktop:build:mac
         env:
-          # Unsigned local distribution; friends open via right-click → Open
+          # Artefact-only builds stay unsigned. Use Desktop Release + tag for signed publish.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Upload DMG artefact
         uses: actions/upload-artifact@v4

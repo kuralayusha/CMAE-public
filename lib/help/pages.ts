@@ -54,7 +54,7 @@ export const PAGE_HELP: Record<AppPageId, PageHelp> = {
     navLabel: "Folders",
     title: "Folders",
     subtitle:
-      "Browse research outputs and company files like Finder, and preview what you need.",
+      "Browse research outputs and company files like your system file manager, and preview what you need.",
     helpTitle: "What Folders is for",
     helpBody: [
       "Each research run creates a company folder under workspace: notes, drafts, and attachments live here.",

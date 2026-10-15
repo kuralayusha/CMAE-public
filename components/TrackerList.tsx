@@ -8,7 +8,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useT } from "@/components/I18nProvider";
+import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import { SyncTerminal } from "@/components/SyncTerminal";
 import { TruncateTip } from "@/components/TruncateTip";
 import { Button } from "@/components/ui";
@@ -216,6 +216,7 @@ function statusDetail(
 
 export function TrackerList() {
   const t = useT();
+  const upper = useLocaleUpper();
   const [sections, setSections] = useState<Section[]>([]);
   const [sync, setSync] = useState<SyncMeta | null>(null);
   const [total, setTotal] = useState(0);
@@ -855,12 +856,12 @@ export function TrackerList() {
           <span role="columnheader" className="cmae-tracker-check">
             <span className="cmae-sr-only">{t("tracker.col.select")}</span>
           </span>
-          <span role="columnheader">{t("tracker.col.company")}</span>
-          <span role="columnheader">{t("tracker.col.position")}</span>
-          <span role="columnheader">{t("tracker.col.status")}</span>
-          <span role="columnheader">{t("tracker.col.lastActivity")}</span>
-          <span role="columnheader">{t("tracker.col.recipient")}</span>
-          <span role="columnheader">{t("tracker.col.action")}</span>
+          <span role="columnheader">{upper(t("tracker.col.company"))}</span>
+          <span role="columnheader">{upper(t("tracker.col.position"))}</span>
+          <span role="columnheader">{upper(t("tracker.col.status"))}</span>
+          <span role="columnheader">{upper(t("tracker.col.lastActivity"))}</span>
+          <span role="columnheader">{upper(t("tracker.col.recipient"))}</span>
+          <span role="columnheader">{upper(t("tracker.col.action"))}</span>
         </div>
         {items.map(renderRow)}
       </div>
@@ -1058,7 +1059,7 @@ export function TrackerList() {
       ) : sortMode === "activity" ? (
         <section className="cmae-tracker-section">
           <header className="cmae-tracker-section-head">
-            <h2>{t("tracker.sectionActivity")}</h2>
+            <h2>{upper(t("tracker.sectionActivity"))}</h2>
             <span>{activityItems.length}</span>
           </header>
           {renderTable(activityItems)}
@@ -1072,7 +1073,7 @@ export function TrackerList() {
               <header className="cmae-tracker-section-head">
                 <h2>
                   {section.status === "ignored" ? "! " : ""}
-                  {title === sectionKey ? section.title : title}
+                  {upper(title === sectionKey ? section.title : title)}
                 </h2>
                 <span>{section.items.length}</span>
               </header>

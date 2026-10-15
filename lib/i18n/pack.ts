@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import enFallback from "@/locales/en.json";
 import {
@@ -27,6 +28,15 @@ export function loadEnPack(): LocalePack {
   return enFallback as LocalePack;
 }
 
+/** Stable fingerprint of shipped English — used to invalidate stale user packs. */
+export function hashEnPack(en?: LocalePack): string {
+  const pack = en ?? loadEnPack();
+  return createHash("sha256")
+    .update(JSON.stringify(pack))
+    .digest("hex")
+    .slice(0, 24);
+}
+
 export function loadUserPack(): LocalePack | null {
   return readJsonFile<LocalePack>(getUserPackPath());
 }
@@ -39,6 +49,7 @@ export function saveUserPack(code: string, pack: LocalePack): LocaleMeta {
   const meta: LocaleMeta = {
     code: code.toLowerCase().slice(0, 16) || APP_LANGUAGE,
     updatedAt: new Date().toISOString(),
+    enSourceHash: hashEnPack(),
   };
   fs.writeFileSync(
     /*turbopackIgnore: true*/ getUserPackPath(),

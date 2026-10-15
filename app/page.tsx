@@ -1,11 +1,8 @@
 import { redirect } from "next/navigation";
-import { isOnboardingComplete } from "@/lib/onboarding/status";
 
 export const dynamic = "force-dynamic";
 
+/** Always land on Tracker; RequireOnboarded sends incomplete installs to onboarding. */
 export default function HomePage() {
-  if (!isOnboardingComplete()) {
-    redirect("/onboarding");
-  }
   redirect("/tracker");
 }

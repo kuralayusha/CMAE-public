@@ -7,6 +7,8 @@ import * as schema from "./schema";
 
 let sqlite: Database.Database | null = null;
 let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
+/** Path we opened — if getAppRoot flips (sticky/env), reopen the right file. */
+let openedDbPath: string | null = null;
 
 function dbPaths() {
   const dataDir = getDataDir();
@@ -14,14 +16,16 @@ function dbPaths() {
 }
 
 export function getDb() {
-  if (dbInstance) return dbInstance;
-
   const { dbPath } = dbPaths();
+  if (dbInstance && openedDbPath === dbPath) return dbInstance;
+  if (dbInstance) closeDb();
+
   sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
 
   dbInstance = drizzle(sqlite, { schema });
+  openedDbPath = dbPath;
   ensureSchema(sqlite);
   return dbInstance;
 }
@@ -42,6 +46,7 @@ export function closeDb() {
   }
   sqlite = null;
   dbInstance = null;
+  openedDbPath = null;
 }
 
 /**
@@ -65,6 +70,11 @@ export function wipeDatabaseContents() {
     INSERT INTO settings (id, follow_up_days, preferred_language)
       VALUES (1, 5, 'en');
   `);
+  try {
+    sqlite.pragma("wal_checkpoint(TRUNCATE)");
+  } catch {
+    /* ignore */
+  }
   // Touch drizzle so callers keep using the same wrapper
   void db;
 }

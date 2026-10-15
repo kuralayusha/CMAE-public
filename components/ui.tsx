@@ -1,4 +1,7 @@
+"use client";
+
 import type { CSSProperties, ReactNode } from "react";
+import { useLocaleUpper } from "@/components/I18nProvider";
 
 export function PageShell({
   title,
@@ -55,9 +58,10 @@ export function Field({
   children: ReactNode;
   hint?: string;
 }) {
+  const upper = useLocaleUpper();
   return (
     <label className="cmae-field">
-      <span className="cmae-field-label">{label}</span>
+      <span className="cmae-field-label">{upper(label)}</span>
       {children}
       {hint ? <span className="cmae-field-hint">{hint}</span> : null}
     </label>

@@ -12,7 +12,8 @@ import { createRunContext, type RunContext } from "./context";
 import { getJob, setJobStatus } from "./events";
 import { speak } from "./speak";
 import { SPECIALISTS, type SpecialistId } from "./types";
-import { writeFile } from "./workspace";
+import { markFolderError, writeFile } from "./workspace";
+import { hasFolderStatusSuffix } from "./folder-status";
 
 const PIPELINE: Exclude<SpecialistId, "reviewer">[] = [
   "scout",
@@ -48,6 +49,8 @@ export async function runConductor(jobId: string) {
     "Research starting; specialists will run in order: scout → jobfit → contact → research → writer → reviewer",
   );
 
+  let ctx: RunContext | null = null;
+
   try {
     const cfg = getDb().select().from(settings).where(eq(settings.id, 1)).get();
     const { getBestCvText } = await import("@/lib/cv/library");
@@ -61,7 +64,7 @@ export async function runConductor(jobId: string) {
       );
     }
 
-    const ctx = createRunContext(jobId, job.url, {
+    ctx = createRunContext(jobId, job.url, {
       fullName: cfg?.fullName || "Candidate",
       email: cfg?.gmailAddress || "",
       cvText,
@@ -176,7 +179,33 @@ export async function runConductor(jobId: string) {
     }
     const message = err instanceof Error ? err.message : String(err);
     speak(jobId, "conductor", "err", `FATAL: ${message}`);
-    setJobStatus(jobId, "error", { error: message });
+
+    let folderName = ctx?.folderName;
+    if (
+      ctx?.folderPath &&
+      !hasFolderStatusSuffix(folderName || ctx.folderPath)
+    ) {
+      try {
+        const renamed = await markFolderError(ctx.folderPath);
+        folderName = renamed.folderName;
+        ctx.folderName = renamed.folderName;
+        ctx.folderPath = renamed.folderPath;
+        const liveJob = getJob(jobId);
+        if (liveJob) {
+          liveJob.folderName = renamed.folderName;
+          liveJob.folderPath = renamed.folderPath;
+        }
+      } catch (renameErr) {
+        speak(
+          jobId,
+          "conductor",
+          "err",
+          `Folder rename failed: ${renameErr instanceof Error ? renameErr.message : String(renameErr)}`,
+        );
+      }
+    }
+
+    setJobStatus(jobId, "error", { error: message, folderName });
   }
 }
 

@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     "/**": [
       "./locales/**/*",
+      "./version-policy.json",
+      "./package.json",
       "./node_modules/better-sqlite3/**/*",
       "./node_modules/pdfjs-dist/**/*",
       "./node_modules/pdf-parse/**/*",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useT } from "@/components/I18nProvider";
+import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import { derivePlain } from "@/lib/search/plain";
 import type { JobStatus, TermKind, TermLine } from "@/lib/search/types";
 
@@ -11,6 +11,8 @@ type Props = {
   initialFolder?: string;
   hideChromeButtons?: boolean;
   fullscreen?: boolean;
+  /** Close / remove terminal from panel when job is finished (done / error / canceled). */
+  onDismiss?: () => void;
 };
 
 type LogMode = "simple" | "detail";
@@ -41,8 +43,10 @@ export function Terminal({
   initialFolder,
   hideChromeButtons = false,
   fullscreen = false,
+  onDismiss,
 }: Props) {
   const t = useT();
+  const upper = useLocaleUpper();
   const [lines, setLines] = useState<TermLine[]>([]);
   const [status, setStatus] = useState<JobStatus>("queued");
   const [folderName, setFolderName] = useState(
@@ -56,7 +60,7 @@ export function Terminal({
   const [logMode, setLogMode] = useState<LogMode>("simple");
   const scroller = useRef<HTMLDivElement>(null);
 
-  const statusLabel = t(`terminal.status.${status}`);
+  const statusLabel = upper(t(`terminal.status.${status}`));
 
   useEffect(() => {
     const es = new EventSource(`/api/search/${jobId}/stream`);
@@ -183,6 +187,7 @@ export function Terminal({
 
   const title = companyName || safeHost(url);
   const canCancel = status === "queued" || status === "running";
+  const canDismiss = !canCancel && Boolean(onDismiss);
 
   return (
     <>
@@ -201,13 +206,28 @@ export function Terminal({
               <button
                 type="button"
                 className="term-tl term-tl-close"
-                title={t("terminal.cancel")}
-                aria-label={t("terminal.cancel")}
-                disabled={!canCancel}
-                onClick={() => setConfirmOpen(true)}
+                title={
+                  canCancel
+                    ? t("terminal.cancel")
+                    : canDismiss
+                      ? t("terminal.close")
+                      : t("terminal.cancel")
+                }
+                aria-label={
+                  canCancel
+                    ? t("terminal.cancel")
+                    : canDismiss
+                      ? t("terminal.close")
+                      : t("terminal.cancel")
+                }
+                disabled={!canCancel && !canDismiss}
+                onClick={() => {
+                  if (canCancel) setConfirmOpen(true);
+                  else if (canDismiss) onDismiss?.();
+                }}
                 style={{
                   ...DOT_HIT,
-                  opacity: canCancel ? 1 : 0.35,
+                  opacity: canCancel || canDismiss ? 1 : 0.35,
                 }}
               >
                 <span
@@ -257,7 +277,7 @@ export function Terminal({
 
           <label className="term-mode-switch" title={t("terminal.logMode")}>
             <span className={logMode === "simple" ? "on" : ""}>
-              {t("terminal.simple")}
+              {upper(t("terminal.simple"))}
             </span>
             <button
               type="button"
@@ -269,7 +289,7 @@ export function Terminal({
               <span className="term-switch-knob" />
             </button>
             <span className={logMode === "detail" ? "on" : ""}>
-              {t("terminal.detail")}
+              {upper(t("terminal.detail"))}
             </span>
           </label>
 

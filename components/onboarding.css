@@ -54,7 +54,6 @@
 .cmae-onb-step-label {
   font-size: 12px;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--ink-faint, #8a8a8a);
   margin: 0;
 }
@@ -82,6 +81,13 @@
   color: var(--ink-muted, #555);
   border-left: 2px solid var(--line, #ccc);
   background: rgba(0, 0, 0, 0.02);
+}
+
+.cmae-onb-privacy {
+  margin-top: -4px;
+  border-left-color: var(--ink, #1a1a1a);
+  color: var(--ink, #1a1a1a);
+  font-weight: 500;
 }
 
 .cmae-onb-fields {
@@ -314,4 +320,33 @@
   flex-shrink: 0;
   padding: 6px 28px 6px 10px;
   font-size: 13px;
+}
+
+/* Full-app lock while rebuilding language pack from Settings */
+.cmae-locale-prep-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  background: var(--bg, #f7f7f5);
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 48px 24px 64px;
+  box-sizing: border-box;
+}
+
+.cmae-locale-prep-overlay-inner {
+  width: 100%;
+  max-width: var(--onb-max, 420px);
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.cmae-locale-prep-overlay .cmae-onb-brand {
+  margin-bottom: 8px;
+}
+
+.cmae-locale-prep-overlay .cmae-onb-boot {
+  padding-top: 12px;
 }

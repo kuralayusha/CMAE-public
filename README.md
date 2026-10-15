@@ -58,12 +58,43 @@ Packaged builds (DMG/EXE) do **not** inherit your project `.env` or shell secret
 (`CURSOR_API_KEY`, etc.). Testers always configure Gmail / Cursor in onboarding —
 same clean path every time. `desktop:dev` still loads `.env` for convenience.
 
-### CI
+### Updates (version gate)
 
-- Mac: [`.github/workflows/desktop-mac.yml`](.github/workflows/desktop-mac.yml) on `macos-latest` → artefact **CMAE-mac-dmg**
-- Windows: [`.github/workflows/desktop-win.yml`](.github/workflows/desktop-win.yml) on `windows-latest` → artefact **CMAE-win-nsis**
+Desktop compares `package.json` version against the remote policy at
+`https://cmae.vercel.app/api/version` (from [`version-policy.json`](version-policy.json)).
 
-Push to `main` (desktop-related paths) or **Actions → Desktop Mac / Desktop Win → Run workflow**.
+- Below `minSupported` (or `force: true`) → full-screen lock + download / install CTA
+- Behind `latest` only → dismissible banner; `electron-updater` also checks GitHub Releases
+- Reinstalling a newer DMG/NSIS **keeps** userData (do not use Settings → Uninstall)
+
+### Release (GitHub Releases)
+
+1. Bump `version` in `package.json` and mirror fields in `version-policy.json` (`latest`, download URLs, notes).
+2. Commit, tag `vX.Y.Z`, push the tag.
+3. [`.github/workflows/desktop-release.yml`](.github/workflows/desktop-release.yml) builds Mac + Win with `CMAE_OBFUSCATE=1` and publishes to the GitHub Release.
+4. Deploy the same commit to Vercel so `/api/version` serves the new policy.
+
+### Code signing secrets (GitHub Actions)
+
+| Secret | Platform | Purpose |
+|--------|----------|---------|
+| `MAC_CSC_LINK` | Mac | Base64 Developer ID Application `.p12` |
+| `MAC_CSC_KEY_PASSWORD` | Mac | p12 password |
+| `APPLE_ID` | Mac | Apple ID for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | Mac | App-specific password |
+| `APPLE_TEAM_ID` | Mac | Team ID |
+| `WIN_CSC_LINK` | Win | Base64 Authenticode `.pfx` |
+| `WIN_CSC_KEY_PASSWORD` | Win | pfx password |
+
+Without these, release builds still publish **unsigned** artefacts (Gatekeeper / SmartScreen warnings remain).
+
+Encode a cert: `base64 -i cert.p12 | pbcopy` (macOS) / `certutil -encode cert.pfx -` (Windows).
+
+### CI (artefacts only)
+
+- Mac: [`.github/workflows/desktop-mac.yml`](.github/workflows/desktop-mac.yml) → artefact **CMAE-mac-dmg**
+- Windows: [`.github/workflows/desktop-win.yml`](.github/workflows/desktop-win.yml) → artefact **CMAE-win-nsis**
+- Release: [`.github/workflows/desktop-release.yml`](.github/workflows/desktop-release.yml) on `v*` tags → GitHub Releases
 
 ### First open (unsigned)
 

@@ -14,29 +14,50 @@ const LINKS: { href: string; id: AppPageId }[] = [
 export function TopNav({
   active,
   onHelp,
+  locked,
 }: {
   active: AppPageId;
   onHelp?: () => void;
+  /** Block all navigation (e.g. while language pack is building). */
+  locked?: boolean;
 }) {
   const t = useT();
   return (
-    <nav className="cmae-nav" aria-label={t("nav.aria")}>
+    <nav
+      className={`cmae-nav${locked ? " is-locked" : ""}`}
+      aria-label={t("nav.aria")}
+      aria-disabled={locked || undefined}
+    >
       <div className="cmae-nav-inner">
-        <Link href="/tracker" className="cmae-nav-brand">
-          CMAE
-        </Link>
+        {locked ? (
+          <span className="cmae-nav-brand">CMAE</span>
+        ) : (
+          <Link href="/tracker" className="cmae-nav-brand">
+            CMAE
+          </Link>
+        )}
         <div className="cmae-nav-links">
-          {LINKS.map((link) => (
-            <Link
-              key={link.id}
-              href={link.href}
-              className={`cmae-nav-link${active === link.id ? " is-active" : ""}`}
-            >
-              {t(`nav.${link.id}`)}
-            </Link>
-          ))}
+          {LINKS.map((link) =>
+            locked ? (
+              <span
+                key={link.id}
+                className={`cmae-nav-link${active === link.id ? " is-active" : ""} is-disabled`}
+                aria-disabled="true"
+              >
+                {t(`nav.${link.id}`)}
+              </span>
+            ) : (
+              <Link
+                key={link.id}
+                href={link.href}
+                className={`cmae-nav-link${active === link.id ? " is-active" : ""}`}
+              >
+                {t(`nav.${link.id}`)}
+              </Link>
+            ),
+          )}
         </div>
-        {onHelp ? (
+        {onHelp && !locked ? (
           <button
             type="button"
             className="cmae-nav-help"

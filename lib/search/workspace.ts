@@ -1,8 +1,14 @@
 import { spawn } from "child_process";
 import fs from "fs/promises";
 import path from "path";
+import { t } from "@/lib/i18n/t";
 import { getWorkspaceRootPath } from "@/lib/paths";
 import { isTranslatedMailFile } from "@/lib/workspace/filenames";
+import {
+  folderStatusSuffix,
+  hasFolderStatusSuffix,
+  type FolderStatusKind,
+} from "./folder-status";
 
 function workspaceRoot() {
   return getWorkspaceRootPath();
@@ -173,6 +179,7 @@ export async function writeFile(
   if (!folderPath.startsWith(workspaceRoot() + path.sep)) {
     throw new Error("Invalid folder");
   }
+  await fs.mkdir(folderPath, { recursive: true });
   const full = path.join(folderPath, fileName);
   await fs.writeFile(full, content, "utf8");
   return full;
@@ -229,7 +236,7 @@ export async function revealInFileManager(relativePath = ""): Promise<{
 export type WorkspaceEntryBadge = {
   /** Shown next to filename, e.g. "(empty)", "(2)", "(for AI)" */
   text: string;
-  /** muted = faded empty; ok = has links; ai = internal agent notes */
+  /** muted = faded empty; ok = has links / for user; ai = internal agent notes */
   tone: "muted" | "ok" | "ai";
 };
 
@@ -244,8 +251,21 @@ const FOR_AI_FILES = new Set([
   "iletisim.md",
 ]);
 
-/** User-facing deliverables (no "for AI" badge). */
+function isCompanyInfoFile(name: string): boolean {
+  return /^(company_info|sirket_bilgileri)(_translated)?\.md$/i.test(name);
+}
+
+/** Site-language mail draft — used by both user and AI. */
+function isEmailOriginalFile(name: string): boolean {
+  return (
+    /^email_original\.md$/i.test(name) ||
+    /^email_site_language\.md$/i.test(name)
+  );
+}
+
+/** Other user-facing mail drafts (translated copies handled separately). */
 function isUserFacingMailDraft(name: string): boolean {
+  if (isEmailOriginalFile(name)) return false;
   return (
     /^email_/i.test(name) ||
     /^follow_up_/i.test(name) ||
@@ -263,7 +283,9 @@ export type WorkspaceEntry = {
   kind: "dir" | "file";
   size: number;
   mtime: number;
+  /** @deprecated prefer `badges` — kept as first badge for older clients */
   badge?: WorkspaceEntryBadge | null;
+  badges?: WorkspaceEntryBadge[];
 };
 
 /** Count job URLs in basvuru_linkleri.md (jobfit output). */
@@ -296,15 +318,28 @@ export function analyzeBasvuruLinkleri(content: string): {
   return { count, empty: count === 0 };
 }
 
-async function badgeForEntry(
+async function badgesForEntry(
   name: string,
   kind: "dir" | "file",
   fullPath: string,
-): Promise<WorkspaceEntryBadge | null> {
-  if (kind !== "file") return null;
+): Promise<WorkspaceEntryBadge[]> {
+  if (kind !== "file") return [];
 
-  if (isTranslatedMailFile(name)) {
-    return { text: "(for user)", tone: "ok" };
+  const forUser = (): WorkspaceEntryBadge => ({
+    text: t("folders.forUser"),
+    tone: "ok",
+  });
+  const forAi = (): WorkspaceEntryBadge => ({
+    text: t("folders.forAi"),
+    tone: "ai",
+  });
+
+  if (isCompanyInfoFile(name) || isTranslatedMailFile(name)) {
+    return [forUser()];
+  }
+
+  if (isEmailOriginalFile(name)) {
+    return [forUser(), forAi()];
   }
 
   if (/^(job_links|basvuru_linkleri)\.md$/i.test(name)) {
@@ -312,27 +347,23 @@ async function badgeForEntry(
       const raw = await fs.readFile(fullPath, "utf8");
       const { count, empty } = analyzeBasvuruLinkleri(raw);
       if (empty || count === 0) {
-        return { text: "(empty)", tone: "muted" };
+        return [{ text: t("folders.empty"), tone: "muted" }];
       }
-      return { text: `(${count})`, tone: "ok" };
+      return [{ text: `(${count})`, tone: "ok" }];
     } catch {
-      return null;
+      return [];
     }
   }
 
-  // User cares about: company info, application links, mail drafts
-  if (
-    /^(company_info|sirket_bilgileri)\.md$/i.test(name) ||
-    isUserFacingMailDraft(name)
-  ) {
-    return null;
+  if (isUserFacingMailDraft(name)) {
+    return [forUser()];
   }
 
   if (FOR_AI_FILES.has(name.toLowerCase())) {
-    return { text: "(for AI)", tone: "ai" };
+    return [forAi()];
   }
 
-  return null;
+  return [];
 }
 
 /** Resolve a relative path inside workspace; throws on traversal. */
@@ -405,14 +436,15 @@ export async function listWorkspace(relativePath = ""): Promise<{
     try {
       const s = await fs.stat(full);
       const kind = s.isDirectory() ? "dir" : "file";
-      const badge = await badgeForEntry(name, kind, full);
+      const badges = await badgesForEntry(name, kind, full);
       entries.push({
         name,
         relativePath: toRelative(full),
         kind,
         size: s.size,
         mtime: s.mtimeMs,
-        badge,
+        badges,
+        badge: badges[0] ?? null,
       });
     } catch {
       /* skip unreadable */
@@ -584,8 +616,11 @@ export async function deleteWorkspaceEntry(
   return { path: toRelative(full) };
 }
 
-/** Append " (canceled)" to folder name, keep numeric prefix */
-export async function markFolderCanceled(currentPath: string): Promise<{
+/** Append localized status suffix to folder name, keep numeric prefix. */
+export async function markFolderStatus(
+  currentPath: string,
+  kind: FolderStatusKind,
+): Promise<{
   folderName: string;
   folderPath: string;
 }> {
@@ -593,10 +628,11 @@ export async function markFolderCanceled(currentPath: string): Promise<{
     throw new Error("Invalid folder");
   }
   const base = path.basename(currentPath);
-  if (/\(canceled\)/i.test(base)) {
+  if (hasFolderStatusSuffix(base)) {
     return { folderName: base, folderPath: currentPath };
   }
-  const folderName = `${base} (canceled)`;
+  const suffix = folderStatusSuffix(kind);
+  const folderName = suffix ? `${base} ${suffix}` : base;
   const folderPath = path.join(workspaceRoot(), folderName);
   if (!folderPath.startsWith(workspaceRoot() + path.sep)) {
     throw new Error("Invalid destination folder");
@@ -607,4 +643,12 @@ export async function markFolderCanceled(currentPath: string): Promise<{
     await fs.mkdir(folderPath, { recursive: true });
   }
   return { folderName, folderPath };
+}
+
+export async function markFolderCanceled(currentPath: string) {
+  return markFolderStatus(currentPath, "canceled");
+}
+
+export async function markFolderError(currentPath: string) {
+  return markFolderStatus(currentPath, "error");
 }

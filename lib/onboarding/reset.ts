@@ -6,6 +6,7 @@ import {
   wipeDatabaseFiles,
 } from "@/lib/db/client";
 import {
+  clearOnboardingCompleteMarker,
   isOnboardingComplete,
   isOnboardingFlagSet,
 } from "@/lib/onboarding/status";
@@ -29,6 +30,7 @@ export function resetAppForOnboarding(): void {
 
   // 1) Always clear while connected (reliable)
   wipeDatabaseContents();
+  clearOnboardingCompleteMarker();
 
   // 2) Best-effort cold recreate (ignores lock failures; contents already empty)
   try {
@@ -37,10 +39,12 @@ export function resetAppForOnboarding(): void {
     /* contents already wiped */
   }
   getDb();
+  clearOnboardingCompleteMarker();
 
   // 3) Belt-and-suspenders if file recreate somehow restored junk
   if (isOnboardingFlagSet() || isOnboardingComplete()) {
     wipeDatabaseContents();
+    clearOnboardingCompleteMarker();
   }
 
   if (isOnboardingFlagSet() || isOnboardingComplete()) {

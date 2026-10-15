@@ -4,6 +4,7 @@ import {
   isOnboardingComplete,
   isOnboardingFlagSet,
 } from "@/lib/onboarding/status";
+import { getDataDir } from "@/lib/paths";
 import { getPublicSettings } from "@/lib/settings/service";
 import { listCvs } from "@/lib/cv/library";
 
@@ -24,5 +25,6 @@ export async function GET() {
     gaps: getOnboardingGaps(),
     settings,
     cvs,
+    dataDir: getDataDir(),
   });
 }

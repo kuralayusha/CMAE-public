@@ -6,6 +6,7 @@ import { spawn } from "child_process";
 import crypto from "crypto";
 import fs from "fs";
 import http from "http";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -21,6 +22,14 @@ if (fs.existsSync(keyPath)) {
 if (masterKey.length < 16) {
   masterKey = crypto.randomBytes(32).toString("hex");
   fs.writeFileSync(keyPath, masterKey, { encoding: "utf8", mode: 0o600 });
+}
+
+// Same sticky file Next workers read when CMAE_USER_DATA is missing on a child.
+try {
+  const home = process.env.HOME || os.homedir();
+  fs.writeFileSync(path.join(home, ".cmae-app-root"), `${userData}\n`, "utf8");
+} catch {
+  /* ignore */
 }
 
 const env = {

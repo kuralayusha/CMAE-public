@@ -1,0 +1,11 @@
+{
+  "latest": "0.1.0",
+  "minSupported": "0.1.0",
+  "force": false,
+  "releaseUrl": "https://github.com/kuralayusha/CMAE/releases/latest",
+  "downloads": {
+    "darwin-arm64": "https://github.com/kuralayusha/CMAE/releases/download/v0.1.0/CMAE-0.1.0-mac-arm64.dmg",
+    "win32-x64": "https://github.com/kuralayusha/CMAE/releases/download/v0.1.0/CMAE-0.1.0-win-x64.exe"
+  },
+  "notes": ""
+}

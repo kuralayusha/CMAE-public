@@ -5,6 +5,7 @@
 
 export const WS = {
   companyInfo: "company_info.md",
+  companyInfoTranslated: "company_info_translated.md",
   jobLinks: "job_links.md",
   summary: "summary.md",
   contact: "contact.md",
@@ -37,10 +38,11 @@ export const THANKS_TRANSLATED = "thanks_translated.md";
 export const REPLY_ORIGINAL = "reply.md";
 export const REPLY_TRANSLATED = "reply_translated.md";
 
-/** True for user-language mail copies shown with "(for user)" badge. */
+/** True for user-language copies shown with "(for user)" badge. */
 export function isTranslatedMailFile(name: string): boolean {
   return (
     /^email_translated\.md$/i.test(name) ||
+    /^company_info_translated\.md$/i.test(name) ||
     /_translated\.md$/i.test(name) ||
     /^thanks_translated\.md$/i.test(name) ||
     /^reply_translated\.md$/i.test(name)

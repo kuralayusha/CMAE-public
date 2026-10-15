@@ -4,21 +4,34 @@ copyright: Copyright CMAE
 directories:
   output: dist-desktop
   buildResources: desktop/build
+# Pack shell from desktop-pack/ (plain or obfuscated) as desktop/
 files:
-  - desktop/**/*
+  - from: desktop-pack
+    to: desktop
   - package.json
 afterPack: scripts/after-pack.cjs
-# Artefacts only — do not publish GitHub Releases from CI
-publish: null
+afterSign: scripts/notarize.cjs
+publish:
+  provider: github
+  owner: kuralayusha
+  repo: CMAE
+  releaseType: release
 mac:
   category: public.app-category.productivity
+  # zip required for electron-updater; dmg for humans
   target:
     - target: dmg
       arch:
         - arm64
-  identity: null
-  hardenedRuntime: false
+    - target: zip
+      arch:
+        - arm64
+  # Unsigned when CSC_LINK unset + CSC_IDENTITY_AUTO_DISCOVERY=false.
+  # CI sets MAC_CSC_LINK for Developer ID + notarize.
+  hardenedRuntime: true
   gatekeeperAssess: false
+  entitlements: desktop/build/entitlements.mac.plist
+  entitlementsInherit: desktop/build/entitlements.mac.plist
 dmg:
   artifactName: CMAE-${version}-mac-${arch}.${ext}
 win:
@@ -27,10 +40,10 @@ win:
       arch:
         - x64
   artifactName: CMAE-${version}-win-${arch}.${ext}
-  signAndEditExecutable: false
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-
+  # Keep %APPDATA%/CMAE across reinstalls (update scenario)
+  deleteAppDataOnUninstall: false

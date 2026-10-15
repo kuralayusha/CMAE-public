@@ -25,7 +25,10 @@ export async function PUT(req: Request) {
       typeof body.gmailAddress === "string" ? body.gmailAddress : undefined,
     gmailAppPassword,
     cursorApiKey,
-    followUpDays: body.followUpDays ? Number(body.followUpDays) : undefined,
+    followUpDays:
+      body.followUpDays != null && body.followUpDays !== ""
+        ? Number(body.followUpDays)
+        : undefined,
     preferredLanguage:
       typeof body.preferredLanguage === "string"
         ? body.preferredLanguage

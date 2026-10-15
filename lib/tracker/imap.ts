@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { ImapFlow } from "imapflow";
+import { t } from "@/lib/i18n/t";
 import { throwIfSyncCanceled } from "./cancel";
 import {
   getFolderCursor,
@@ -199,7 +200,10 @@ async function fetchByRange(
     if (!mail) continue;
     out.push(mail);
     if (out.length % 25 === 0) {
-      onProgress?.("think", `${folder}: ${out.length} messages…`);
+      onProgress?.(
+        "think",
+        t("sync.messageCount", { folder, count: out.length }),
+      );
     }
   }
   return out;
@@ -220,7 +224,10 @@ async function fetchFolder(
   signal?: AbortSignal,
 ): Promise<{ mails: FetchedMail[]; strategy: "incremental" | "window" }> {
   throwIfSyncCanceled(signal);
-  onProgress?.("curl", `${folder} reading (${mailbox})…`);
+  onProgress?.(
+    "curl",
+    t("sync.readingFolder", { folder, mailbox }),
+  );
   const lock = await client.getMailboxLock(mailbox);
   try {
     const uidValidity = uidValidityOf(client);
@@ -239,7 +246,11 @@ async function fetchFolder(
       const fromUid = stored.lastUid + 1;
       onProgress?.(
         "think",
-        `${folder}: incremental UID ${fromUid}:* (cursor ${stored.lastUid})`,
+        t("sync.incrementalUid", {
+          folder,
+          from: fromUid,
+          cursor: stored.lastUid,
+        }),
       );
       try {
         mails = await fetchByRange(
@@ -259,7 +270,7 @@ async function fetchFolder(
         const msg = err instanceof Error ? err.message : String(err);
         onProgress?.(
           "err",
-          `${folder}: incremental failed → window fallback (${msg})`,
+          t("sync.incrementalFallback", { folder, msg }),
         );
         mails = await fetchByRange(
           client,
@@ -273,15 +284,21 @@ async function fetchFolder(
     } else {
       if (mode === "incremental") {
         const why = !stored
-          ? "no cursor"
+          ? t("sync.whyNoCursor")
           : stored.uidValidity !== uidValidity
-            ? "UIDVALIDITY changed"
+            ? t("sync.whyUidValidity")
             : stored.mailboxPath !== mailbox
-              ? "mailbox path changed"
-              : "cursor empty";
-        onProgress?.("think", `${folder}: window sync (${why})`);
+              ? t("sync.whyMailboxChanged")
+              : t("sync.whyCursorEmpty");
+        onProgress?.(
+          "think",
+          t("sync.windowSync", { folder, why }),
+        );
       } else {
-        onProgress?.("think", `${folder}: hard sync · since window`);
+        onProgress?.(
+          "think",
+          t("sync.hardSyncWindow", { folder }),
+        );
       }
       mails = await fetchByRange(
         client,
@@ -309,7 +326,12 @@ async function fetchFolder(
 
     onProgress?.(
       "ok",
-      `${folder}: ${mails.length} messages (${strategy}) · cursor UID ${cursor.lastUid}`,
+      t("sync.cursorSummary", {
+        folder,
+        count: mails.length,
+        strategy,
+        uid: cursor.lastUid,
+      }),
     );
     return { mails, strategy };
   } finally {
@@ -354,17 +376,17 @@ export async function fetchRecentMail(
   log?.(
     "system",
     mode === "hard"
-      ? `Hard sync · last ${windowDays} days (older mails in DB are kept)`
-      : `Incremental sync · new UIDs (fallback: last ${windowDays} days)`,
+      ? t("sync.hardModeIntro", { days: windowDays })
+      : t("sync.incrementalIntro", { days: windowDays }),
   );
   log?.(
     "system",
-    `since ${since.toISOString().slice(0, 10)} · records outside the window are not deleted`,
+    t("sync.sinceNote", { date: since.toISOString().slice(0, 10) }),
   );
 
   return withClient(address, appPassword, async (client) => {
     throwIfSyncCanceled(signal);
-    log?.("ok", "IMAP connection established");
+    log?.("ok", t("sync.imapConnected"));
     const strategies: Partial<Record<MailFolder, "incremental" | "window">> =
       {};
 
@@ -383,7 +405,7 @@ export async function fetchRecentMail(
     const sentPath = await findSpecialMailbox(client, "\\Sent");
     let sentMails: FetchedMail[] = [];
     if (!sentPath) {
-      log?.("err", "Sent mailbox not found (SPECIAL-USE \\Sent)");
+      log?.("err", t("sync.sentNotFound"));
       console.warn("[tracker/imap] Sent mailbox not found (SPECIAL-USE \\Sent)");
     } else {
       try {
@@ -401,7 +423,7 @@ export async function fetchRecentMail(
       } catch (err) {
         throwIfSyncCanceled(signal);
         const msg = err instanceof Error ? err.message : String(err);
-        log?.("err", `Could not read Sent (${sentPath}): ${msg}`);
+        log?.("err", t("sync.sentReadFailed", { path: sentPath, msg }));
         console.warn(
           `[tracker/imap] Sent mailbox fetch failed (${sentPath}):`,
           err,

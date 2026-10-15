@@ -1,6 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
 import { listCvs } from "@/lib/cv/library";
 import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
+import { getDataDir } from "@/lib/paths";
 import { parseJobPreferences } from "@/lib/settings/preferences";
 import { eq } from "drizzle-orm";
 
@@ -8,6 +11,41 @@ export type OnboardingGaps = string[];
 
 function filled(v: string | null | undefined): boolean {
   return Boolean(v && String(v).trim());
+}
+
+function completeMarkerPath(): string {
+  return path.join(/*turbopackIgnore: true*/ getDataDir(), ".onboarding-complete");
+}
+
+export function writeOnboardingCompleteMarker(at: string): void {
+  try {
+    fs.writeFileSync(
+      /*turbopackIgnore: true*/ completeMarkerPath(),
+      `${at}\n`,
+      "utf8",
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearOnboardingCompleteMarker(): void {
+  try {
+    const p = completeMarkerPath();
+    if (fs.existsSync(/*turbopackIgnore: true*/ p)) {
+      fs.unlinkSync(/*turbopackIgnore: true*/ p);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function hasOnboardingCompleteMarker(): boolean {
+  try {
+    return fs.existsSync(/*turbopackIgnore: true*/ completeMarkerPath());
+  } catch {
+    return false;
+  }
 }
 
 /** Required fields for a finished onboarding — flag alone is not enough. */
@@ -55,15 +93,13 @@ export function getOnboardingGaps(): OnboardingGaps {
 
 export function isOnboardingFlagSet(): boolean {
   const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
-  return filled(row?.onboardingCompletedAt);
+  return filled(row?.onboardingCompletedAt) || hasOnboardingCompleteMarker();
 }
 
 /**
- * Wizard finished (flag set). Used for route gates.
- *
- * Gaps are validated once at `/api/onboarding/complete`. Re-checking them on
- * every navigation caused a desktop loop: env-only Cursor key / transient
- * paths made `complete` flip false → bounce back to onboarding + refresh.
+ * Wizard finished (SQLite flag and/or marker file).
+ * Marker covers rare desktop cases where a worker opens a different handle
+ * briefly; wipe deletes both.
  */
 export function isOnboardingComplete(): boolean {
   return isOnboardingFlagSet();
@@ -86,6 +122,21 @@ export class OnboardingRequiredError extends Error {
 export function markOnboardingComplete(): string {
   const at = new Date().toISOString();
   const db = getDb();
+  // Ensure row exists first (wipe can leave a brief gap before INSERT)
+  const existing = db.select().from(settings).where(eq(settings.id, 1)).get();
+  if (!existing) {
+    db.insert(settings)
+      .values({
+        id: 1,
+        followUpDays: 5,
+        preferredLanguage: "en",
+        onboardingCompletedAt: at,
+        updatedAt: at,
+      })
+      .onConflictDoNothing()
+      .run();
+  }
+
   const result = db
     .update(settings)
     .set({
@@ -96,7 +147,6 @@ export function markOnboardingComplete(): string {
     .run();
 
   if (!result.changes) {
-    // Row missing — create it rather than silently no-op
     db.insert(settings)
       .values({
         id: 1,
@@ -117,5 +167,6 @@ export function markOnboardingComplete(): string {
   if (!filled(saved)) {
     throw new Error("Failed to persist onboarding completion flag");
   }
+  writeOnboardingCompleteMarker(String(saved));
   return String(saved);
 }

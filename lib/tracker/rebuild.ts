@@ -21,6 +21,7 @@ import { matchMailsToGroups, type MailBrief } from "./match";
 import { extractPrimaryEmailFromWorkspace } from "./parse-mail-md";
 import { normalizeMailText } from "./signals";
 import { resolveStatus } from "./status";
+import { t } from "@/lib/i18n/t";
 import { throwIfSyncCanceled } from "./cancel";
 import type { SyncProgressFn } from "./types";
 import { listWorkspaceCandidates } from "./workspace-merge";
@@ -89,7 +90,10 @@ export async function rebuildTrackerItems(opts?: {
   const searches = listWorkspaceCandidates();
   log?.(
     "think",
-    `${briefs.length} mails · ${searches.length} workspace candidates…`,
+    t("sync.briefsSummary", {
+      mails: briefs.length,
+      searches: searches.length,
+    }),
   );
 
   // Pass 1: language-agnostic per-mail intent (AI + regex)
@@ -106,7 +110,10 @@ export async function rebuildTrackerItems(opts?: {
     mailIntents,
   });
   throwIfSyncCanceled(signal);
-  log?.("think", `${groups.length} groups → writing tracker rows…`);
+  log?.(
+    "think",
+    t("sync.writingGroups", { count: groups.length }),
+  );
 
   // Preserve draft flags + inactive keyed by searchJobId / company
   const prev = db.select().from(trackerItems).all();

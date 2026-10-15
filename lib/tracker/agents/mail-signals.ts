@@ -3,6 +3,7 @@
  * Meaning over keywords — works in any language the model understands.
  */
 
+import { t } from "@/lib/i18n/t";
 import { SyncCanceledError, throwIfSyncCanceled } from "../cancel";
 import { askTrackerLlm, extractJson } from "../llm";
 import type { MailBrief } from "../match";
@@ -133,7 +134,10 @@ export async function classifyMailSignals(
     const batches = chunk(inbox, 40);
     log?.(
       "think",
-      `AI mail intent (${inbox.length} inbound, ${batches.length} batch)…`,
+      t("sync.intentStart", {
+        count: inbox.length,
+        batches: batches.length,
+      }),
     );
 
     for (let i = 0; i < batches.length; i++) {
@@ -144,18 +148,25 @@ export async function classifyMailSignals(
         for (const row of rows) aiById.set(row.mailId, row);
         log?.(
           "ok",
-          `intent batch ${i + 1}/${batches.length}: ${rows.length} etiket`,
+          t("sync.intentBatchOk", {
+            n: i + 1,
+            total: batches.length,
+            labels: rows.length,
+          }),
         );
       } catch (err) {
         if (err instanceof SyncCanceledError) throw err;
         const msg = err instanceof Error ? err.message : String(err);
-        log?.("system", `intent batch ${i + 1} failed → regex: ${msg}`);
+        log?.(
+          "system",
+          t("sync.intentBatchFailed", { n: i + 1, msg }),
+        );
       }
     }
   } catch (err) {
     if (err instanceof SyncCanceledError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
-    log?.("system", `AI intent skipped → regex: ${msg}`);
+    log?.("system", t("sync.intentSkipped", { msg }));
   }
 
   let aiHits = 0;
@@ -172,7 +183,11 @@ export async function classifyMailSignals(
   ).length;
   log?.(
     "ok",
-    `Mail intent: ${map.size} inbound · AI net ${aiHits} · sinyal ${noise}`,
+    t("sync.intentSummary", {
+      inbound: map.size,
+      ai: aiHits,
+      signals: noise,
+    }),
   );
 
   return map;

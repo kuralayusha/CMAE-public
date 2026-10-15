@@ -1,5 +1,9 @@
 import fs from "fs";
 import path from "path";
+import {
+  hasFolderStatusSuffix,
+  stripFolderStatusSuffix,
+} from "@/lib/search/folder-status";
 import { loadJobsFromDisk } from "@/lib/search/persist";
 import { getWorkspaceRoot } from "@/lib/search/workspace";
 import {
@@ -24,8 +28,7 @@ function displayCompany(job: {
   url: string;
 }): string {
   if (job.companyName?.trim()) return job.companyName.trim();
-  const cleaned = job.folderName
-    .replace(/\s*\(canceled\)\s*$/i, "")
+  const cleaned = stripFolderStatusSuffix(job.folderName)
     .replace(/^\d+\s*-\s*/, "")
     .trim();
   if (cleaned && cleaned !== "(pending)") return cleaned;
@@ -54,7 +57,7 @@ function candidateFromJob(job: {
         ? path.join(root, job.folderName)
         : "";
   if (!folderPath || !fs.existsSync(folderPath)) return null;
-  if (/\(canceled\)/i.test(path.basename(folderPath))) return null;
+  if (hasFolderStatusSuffix(path.basename(folderPath))) return null;
 
   const draft = findEmailDraftInFolder(folderPath);
   return {

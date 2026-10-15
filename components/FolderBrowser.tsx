@@ -8,7 +8,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useT } from "@/components/I18nProvider";
+import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui";
 import {
   couldNotOpenFileManager,
@@ -16,13 +16,16 @@ import {
   type FileManagerKind,
 } from "@/lib/platform/file-manager";
 
+type EntryBadge = { text: string; tone: "muted" | "ok" | "ai" };
+
 type Entry = {
   name: string;
   relativePath: string;
   kind: "dir" | "file";
   size: number;
   mtime: number;
-  badge?: { text: string; tone: "muted" | "ok" | "ai" } | null;
+  badge?: EntryBadge | null;
+  badges?: EntryBadge[];
 };
 
 type Crumb = { name: string; path: string };
@@ -112,6 +115,7 @@ function FileGlyph() {
 
 export function FolderBrowser() {
   const t = useT();
+  const upper = useLocaleUpper();
   const router = useRouter();
   const searchParams = useSearchParams();
   const path = searchParams.get("path") || "";
@@ -431,9 +435,9 @@ export function FolderBrowser() {
         <div className={`cmae-fb-body${preview ? " is-split" : ""}`}>
           <div className="cmae-fb-list-pane">
             <div className="cmae-fb-cols" aria-hidden>
-              <span>{t("folders.colName")}</span>
-              <span>{t("folders.colSize")}</span>
-              <span>{t("folders.colModified")}</span>
+              <span>{upper(t("folders.colName"))}</span>
+              <span>{upper(t("folders.colSize"))}</span>
+              <span>{upper(t("folders.colModified"))}</span>
             </div>
 
             {loading && !listing ? (
@@ -488,22 +492,28 @@ export function FolderBrowser() {
                           </span>
                           <span className="cmae-fb-name">
                             <span className="cmae-fb-name-text">{entry.name}</span>
-                            {entry.badge ? (
+                            {(entry.badges?.length
+                              ? entry.badges
+                              : entry.badge
+                                ? [entry.badge]
+                                : []
+                            ).map((badge, i) => (
                               <span
-                                className={`cmae-fb-badge is-${entry.badge.tone}`}
+                                key={`${badge.text}-${i}`}
+                                className={`cmae-fb-badge is-${badge.tone}`}
                                 title={
-                                  entry.badge.tone === "muted"
+                                  badge.tone === "muted"
                                     ? t("folders.badgeNoLink")
-                                    : entry.badge.tone === "ai"
+                                    : badge.tone === "ai"
                                       ? t("folders.badgeAiOnly")
                                       : t("folders.badgeLinked", {
-                                          status: entry.badge.text,
+                                          status: badge.text,
                                         })
                                 }
                               >
-                                {entry.badge.text}
+                                {badge.text}
                               </span>
-                            ) : null}
+                            ))}
                           </span>
                           <span className="cmae-fb-cell">
                             {entry.kind === "dir" ? "—" : formatSize(entry.size)}

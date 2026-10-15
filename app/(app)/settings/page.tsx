@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useI18n, useT } from "@/components/I18nProvider";
+import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
 import { TopNav } from "@/components/TopNav";
 import { Button, Field, PageShell } from "@/components/ui";
-import type { LocalePack } from "@/lib/i18n/types";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
 
 type WorkType = "fulltime" | "parttime" | "contracted";
@@ -65,13 +65,14 @@ function SettingsAcc({
   children: React.ReactNode;
   danger?: boolean;
 }) {
+  const upper = useLocaleUpper();
   return (
     <details
       className={`cmae-form-acc${danger ? " is-danger" : ""}`}
       name="cmae-settings"
     >
       <summary className="cmae-form-acc-sum">
-        <span className="cmae-form-section-title">{title}</span>
+        <span className="cmae-form-section-title">{upper(title)}</span>
       </summary>
       <div className="cmae-form-section">{children}</div>
     </details>
@@ -80,7 +81,7 @@ function SettingsAcc({
 
 export default function SettingsPage() {
   const t = useT();
-  const { setPack } = useI18n();
+  const upper = useLocaleUpper();
   const help = usePageHelp("settings");
   const [form, setForm] = useState({
     fullName: "",
@@ -100,6 +101,12 @@ export default function SettingsPage() {
   const [wipeOpen, setWipeOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  /** When set, full-screen locale prep locks the UI until pack is ready. */
+  const [localePrep, setLocalePrep] = useState<{
+    next: string;
+    prev: string;
+  } | null>(null);
+  const localeLocked = Boolean(localePrep);
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cmaeDesktop?.isDesktop));
@@ -117,6 +124,7 @@ export default function SettingsPage() {
     const res = await fetch("/api/settings");
     const data: Settings = await res.json();
     setMeta(data);
+    const lang = (data.preferredLanguage || "en").toLowerCase();
     setForm((f) => ({
       ...f,
       fullName: data.fullName || "",
@@ -127,6 +135,19 @@ export default function SettingsPage() {
     }));
     setPrefs({ ...DEFAULT_PREFS, ...(data.jobPreferences || {}) });
     await loadCvs().catch(() => undefined);
+
+    // Shipped en.json changed → old user pack mixes EN+TR; refresh automatically
+    if (lang && lang !== "en" && !lang.startsWith("en")) {
+      try {
+        const packRes = await fetch("/api/i18n/pack", { cache: "no-store" });
+        const packData = packRes.ok ? await packRes.json() : null;
+        if (packData?.needsTranslation) {
+          setLocalePrep({ next: lang, prev: lang });
+        }
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   useEffect(() => {
@@ -147,6 +168,7 @@ export default function SettingsPage() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (localeLocked) return;
     setBusy(true);
     setStatus(null);
     const prevLang = (meta?.preferredLanguage || "en").toLowerCase();
@@ -164,21 +186,11 @@ export default function SettingsPage() {
       setForm((f) => ({ ...f, gmailAppPassword: "", cursorApiKey: "" }));
 
       if (nextLang && nextLang !== prevLang) {
-        setStatus(t("settings.languageUpdating"));
-        const tr = await fetch("/api/i18n/translate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ targetLanguage: nextLang }),
-        });
-        const trData = await tr.json();
-        if (!tr.ok) {
-          throw new Error(trData.error || t("settings.languageFailed"));
-        }
-        setPack(String(trData.code || nextLang), trData.pack as LocalePack);
-        setStatus(t("settings.languageUpdated"));
-      } else {
-        setStatus(t("settings.saved"));
+        setBusy(false);
+        setLocalePrep({ next: nextLang, prev: prevLang });
+        return;
       }
+      setStatus(t("settings.saved"));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -262,6 +274,13 @@ export default function SettingsPage() {
         for (const k of Object.keys(localStorage)) {
           if (k.startsWith("cmae.help.seen.")) localStorage.removeItem(k);
         }
+        sessionStorage.removeItem("cmae.onb.redirectGuard");
+      } catch {
+        /* ignore */
+      }
+      // Align Next workers onto the same data root after wipe
+      try {
+        await fetch("/api/onboarding/reconcile", { method: "POST" });
       } catch {
         /* ignore */
       }
@@ -300,12 +319,21 @@ export default function SettingsPage() {
 
   return (
     <>
-      <TopNav active="settings" onHelp={help.reopen} />
+      <TopNav
+        active="settings"
+        onHelp={localeLocked ? undefined : help.reopen}
+        locked={localeLocked}
+      />
       <PageShell
         title={t("help.settings.title")}
         subtitle={t("help.settings.subtitle")}
       >
-        <form className="cmae-form" onSubmit={save}>
+        <form
+          className="cmae-form"
+          onSubmit={save}
+          {...(localeLocked ? { inert: true } : {})}
+          aria-busy={localeLocked || busy}
+        >
           <SettingsAcc title={t("settings.accProfile")}>
             <Field
               label={t("fields.fullName")}
@@ -369,9 +397,11 @@ export default function SettingsPage() {
                 }
               />
             </Field>
+            <p className="cmae-field-hint">{t("onboarding.gmailPrivacy")}</p>
           </SettingsAcc>
 
           <SettingsAcc title={t("settings.accCursor")}>
+            <p className="cmae-field-hint">{t("onboarding.cursorPrivacy")}</p>
             <Field
               label={t("fields.cursorApiKeyShort")}
               hint={
@@ -474,7 +504,9 @@ export default function SettingsPage() {
               />
             </Field>
 
-            <h3 className="cmae-form-subsection">{t("fields.salarySection")}</h3>
+            <h3 className="cmae-form-subsection">
+              {upper(t("fields.salarySection"))}
+            </h3>
             <div className="cmae-form-grid">
               <Field label={t("fields.period")}>
                 <select
@@ -665,7 +697,7 @@ export default function SettingsPage() {
           </SettingsAcc>
 
           <div className="cmae-form-actions">
-            <Button type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy || localeLocked}>
               {busy ? t("common.saving") : t("common.save")}
             </Button>
             {status ? <span className="cmae-form-status">{status}</span> : null}
@@ -700,6 +732,38 @@ export default function SettingsPage() {
           </SettingsAcc>
         </form>
       </PageShell>
+
+      {localePrep ? (
+        <LocalePrepOverlay
+          mode="overlay"
+          targetLanguage={localePrep.next}
+          doneKey="settings.localePrepDone"
+          failKey="settings.localePrepFail"
+          onComplete={() => {
+            setLocalePrep(null);
+            setStatus(t("settings.languageUpdated"));
+            void load();
+          }}
+          onError={(message) => {
+            const prev = localePrep.prev;
+            setLocalePrep(null);
+            setStatus(message || t("settings.languageFailed"));
+            setForm((f) => ({ ...f, preferredLanguage: prev }));
+            void (async () => {
+              try {
+                await fetch("/api/settings", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ preferredLanguage: prev }),
+                });
+              } catch {
+                /* ignore */
+              }
+              await load();
+            })();
+          }}
+        />
+      ) : null}
 
       <PageHelpModal
         pageId="settings"

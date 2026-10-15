@@ -125,6 +125,16 @@ select {
   font-weight: 500;
 }
 
+.cmae-nav.is-locked {
+  pointer-events: none;
+  user-select: none;
+}
+
+.cmae-nav-link.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .cmae-nav-help {
   flex: 0 0 auto;
   margin-left: auto;
@@ -349,7 +359,7 @@ select {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
+  /* Uppercase via localeUpper() — CSS uppercase breaks Turkish İ/I */
   color: var(--ink-muted);
 }
 
@@ -428,7 +438,6 @@ select.cmae-input {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--ink-faint);
 }
 
@@ -564,7 +573,6 @@ select.cmae-input {
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink-faint);
 }
 
@@ -832,7 +840,6 @@ select.cmae-input {
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   line-height: 1;
   border: 1px solid var(--line);
   color: var(--ink-muted);
@@ -873,7 +880,6 @@ select.cmae-input {
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--ink-faint);
 }
 
@@ -1284,7 +1290,6 @@ body:has(.term-live-page) {
   font-size: 9px;
   font-family: var(--font-mono);
   letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: #525252;
 }
 
@@ -1327,7 +1332,6 @@ body:has(.term-live-page) {
 .term-status {
   font-size: 10px;
   font-family: var(--font-mono);
-  text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 3px 7px;
   border-radius: var(--radius);
@@ -1771,7 +1775,6 @@ a.cmae-btn {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  text-transform: uppercase;
 }
 
 .cmae-tracker-section-head span {
@@ -1845,7 +1848,6 @@ a.cmae-btn {
   padding: 6px 0;
   color: var(--ink-faint);
   font-size: 11px;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   border-bottom-color: var(--line-strong);
 }

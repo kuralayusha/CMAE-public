@@ -36,9 +36,24 @@ function hasDecryptableSecret(enc: string | null | undefined): boolean {
   }
 }
 
-export function getPublicSettings(): SettingsPublic {
+function ensureSettingsRow() {
   const db = getDb();
   const row = db.select().from(settings).where(eq(settings.id, 1)).get();
+  if (row) return row;
+  db.insert(settings)
+    .values({
+      id: 1,
+      followUpDays: 5,
+      preferredLanguage: "en",
+      updatedAt: new Date().toISOString(),
+    })
+    .onConflictDoNothing()
+    .run();
+  return db.select().from(settings).where(eq(settings.id, 1)).get() ?? null;
+}
+
+export function getPublicSettings(): SettingsPublic {
+  const row = ensureSettingsRow();
   return {
     fullName: row?.fullName ?? null,
     gmailAddress: row?.gmailAddress ?? null,
@@ -71,7 +86,7 @@ export function updateSettings(input: {
   jobPreferences?: JobPreferences | Partial<JobPreferences>;
 }) {
   const db = getDb();
-  const current = db.select().from(settings).where(eq(settings.id, 1)).get();
+  const current = ensureSettingsRow();
 
   let jobPreferencesJson = current?.jobPreferencesJson ?? null;
   if (input.jobPreferences !== undefined) {
@@ -88,32 +103,69 @@ export function updateSettings(input: {
     );
   }
 
-  db.update(settings)
-    .set({
-      fullName: input.fullName ?? current?.fullName,
-      gmailAddress: input.gmailAddress ?? current?.gmailAddress,
-      gmailAppPasswordEnc:
-        input.gmailAppPassword !== undefined && input.gmailAppPassword !== ""
-          ? encryptOptional(input.gmailAppPassword)
-          : current?.gmailAppPasswordEnc,
-      cursorApiKeyEnc:
-        input.cursorApiKey !== undefined && input.cursorApiKey !== ""
-          ? encryptOptional(input.cursorApiKey)
-          : current?.cursorApiKeyEnc,
-      followUpDays: input.followUpDays ?? current?.followUpDays ?? 5,
-      preferredLanguage:
-        input.preferredLanguage ?? current?.preferredLanguage ?? "en",
-      emailSignature:
-        input.emailSignature !== undefined
-          ? input.emailSignature.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
-          : current?.emailSignature,
-      cvText: input.cvText ?? current?.cvText,
-      cvFileName: input.cvFileName ?? current?.cvFileName,
-      jobPreferencesJson,
-      updatedAt: new Date().toISOString(),
-    })
+  // Empty strings must not clobber already-saved fields (wipe→wizard race /
+  // Strict Mode hydrate then accidental empty PUT).
+  const keepOrSet = (
+    incoming: string | undefined,
+    existing: string | null | undefined,
+  ) => {
+    if (incoming === undefined) return existing;
+    if (incoming.trim()) return incoming;
+    return existing?.trim() ? existing : incoming;
+  };
+
+  const next = {
+    fullName: keepOrSet(input.fullName, current?.fullName),
+    gmailAddress: keepOrSet(input.gmailAddress, current?.gmailAddress),
+    gmailAppPasswordEnc:
+      input.gmailAppPassword !== undefined && input.gmailAppPassword !== ""
+        ? encryptOptional(input.gmailAppPassword)
+        : current?.gmailAppPasswordEnc,
+    cursorApiKeyEnc:
+      input.cursorApiKey !== undefined && input.cursorApiKey !== ""
+        ? encryptOptional(input.cursorApiKey)
+        : current?.cursorApiKeyEnc,
+    followUpDays: input.followUpDays ?? current?.followUpDays ?? 5,
+    preferredLanguage:
+      keepOrSet(input.preferredLanguage, current?.preferredLanguage) ?? "en",
+    emailSignature:
+      input.emailSignature !== undefined
+        ? (() => {
+            const normalized = input.emailSignature
+              .replace(/\r\n/g, "\n")
+              .replace(/\r/g, "\n");
+            if (normalized.trim()) return normalized;
+            return current?.emailSignature?.trim()
+              ? current.emailSignature
+              : normalized;
+          })()
+        : current?.emailSignature,
+    cvText: input.cvText !== undefined ? input.cvText : current?.cvText,
+    cvFileName:
+      input.cvFileName !== undefined ? input.cvFileName : current?.cvFileName,
+    jobPreferencesJson,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const result = db
+    .update(settings)
+    .set(next)
     .where(eq(settings.id, 1))
     .run();
+
+  if (!result.changes) {
+    db.insert(settings)
+      .values({
+        id: 1,
+        ...next,
+        onboardingCompletedAt: current?.onboardingCompletedAt ?? null,
+      })
+      .onConflictDoUpdate({
+        target: settings.id,
+        set: next,
+      })
+      .run();
+  }
 
   return getPublicSettings();
 }
@@ -126,8 +178,7 @@ export function getGmailCredentials(): {
   address: string;
   appPassword: string;
 } | null {
-  const db = getDb();
-  const row = db.select().from(settings).where(eq(settings.id, 1)).get();
+  const row = ensureSettingsRow();
   const address = row?.gmailAddress?.trim();
   const appPassword = decryptOptional(row?.gmailAppPasswordEnc)?.replace(
     /\s+/g,
@@ -138,6 +189,5 @@ export function getGmailCredentials(): {
 }
 
 export function getSettingsRow() {
-  const db = getDb();
-  return db.select().from(settings).where(eq(settings.id, 1)).get() ?? null;
+  return ensureSettingsRow();
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { runSearchAgent } from "./agent";
 import { getJobs } from "./events";
+import { stripFolderStatusSuffix } from "./folder-status";
 import { listAllJobs, listUnfinishedJobs, persistJobNow } from "./persist";
 import type { SearchJob } from "./types";
 
@@ -27,10 +28,10 @@ function toUiRow(j: SearchJob): JobUiRow {
     j.companyName ||
     (j.folderName !== "(pending)" ? j.folderName : host) ||
     host;
-  const displayName = raw
-    .replace(/\s*\(canceled\)\s*$/i, "")
-    .replace(/^\d+\s*-\s*/, "")
-    .trim() || raw;
+  const displayName =
+    stripFolderStatusSuffix(raw)
+      .replace(/^\d+\s*-\s*/, "")
+      .trim() || raw;
   return {
     id: j.id,
     url: j.url,

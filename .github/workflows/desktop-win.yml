@@ -11,8 +11,11 @@ on:
       - "lib/**"
       - "desktop/**"
       - "scripts/prepare-desktop.mjs"
+      - "scripts/obfuscate-desktop.mjs"
+      - "scripts/notarize.cjs"
       - "scripts/desktop-dev.mjs"
       - "scripts/after-pack.cjs"
+      - "version-policy.json"
       - "electron-builder.yml"
       - "next.config.ts"
       - "package.json"
@@ -44,8 +47,10 @@ jobs:
       - name: Build Windows desktop app
         run: npm run desktop:build:win
         env:
-          # Unsigned local distribution; SmartScreen may warn on first open
+          # Artefact-only builds. Use Desktop Release + tag for signed publish.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Upload NSIS artefact
         uses: actions/upload-artifact@v4

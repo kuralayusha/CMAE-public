@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { localeUpper } from "@/lib/i18n/case";
 import { tFromPacks, type TVars } from "@/lib/i18n/lookup";
 import { APP_LANGUAGE, type LocalePack } from "@/lib/i18n/types";
 
@@ -70,6 +71,13 @@ export function I18nProvider({
     void reload();
   }, [reload]);
 
+  // Keep <html lang> in sync so CSS / a11y / locale casing (TR İ/I) stay correct
+  // after client-side language changes (no full reload).
+  useEffect(() => {
+    const lang = (code || APP_LANGUAGE).trim().slice(0, 2).toLowerCase() || "en";
+    document.documentElement.lang = lang;
+  }, [code]);
+
   const setPack = useCallback((nextCode: string, nextPack: LocalePack) => {
     setCode(nextCode);
     setPackState(nextPack);
@@ -108,4 +116,10 @@ export function useI18n(): I18nContextValue {
 
 export function useT() {
   return useI18n().t;
+}
+
+/** Uppercase for UI chrome (labels, badges) using the active locale. */
+export function useLocaleUpper() {
+  const { code } = useI18n();
+  return useCallback((text: string) => localeUpper(text, code), [code]);
 }

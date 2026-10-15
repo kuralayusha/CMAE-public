@@ -1,4 +1,8 @@
 import { emitLine, getJob, setJobStatus } from "./events";
+import {
+  folderStatusSuffix,
+  hasFolderStatusSuffix,
+} from "./folder-status";
 import { markFolderCanceled } from "./workspace";
 
 export class JobCanceledError extends Error {
@@ -33,7 +37,7 @@ export async function cancelJob(jobId: string): Promise<{
   let folderName = job.folderName;
   let folderPath = job.folderPath;
 
-  if (folderPath && !folderName.includes("(canceled)")) {
+  if (folderPath && !hasFolderStatusSuffix(folderName || pathBasename(folderPath))) {
     try {
       const renamed = await markFolderCanceled(folderPath);
       folderName = renamed.folderName;
@@ -47,8 +51,9 @@ export async function cancelJob(jobId: string): Promise<{
         `Folder rename failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
-  } else if (folderName && !folderName.includes("(canceled)")) {
-    folderName = `${folderName} (canceled)`;
+  } else if (folderName && !hasFolderStatusSuffix(folderName)) {
+    const suffix = folderStatusSuffix("canceled");
+    folderName = suffix ? `${folderName} ${suffix}` : folderName;
     job.folderName = folderName;
   }
 
@@ -59,4 +64,9 @@ export async function cancelJob(jobId: string): Promise<{
   emitLine(jobId, "system", `[conductor] stopped · folder → ${folderName}`);
 
   return { folderName };
+}
+
+function pathBasename(p: string): string {
+  const parts = p.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || p;
 }

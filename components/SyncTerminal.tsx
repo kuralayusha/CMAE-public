@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { useT } from "@/components/I18nProvider";
+import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import type { SyncLogKind, SyncLogLine } from "@/lib/tracker/types";
 
 type SyncTermStatus = "running" | "done" | "error" | "canceled";
@@ -23,6 +23,7 @@ const KIND_COLOR: Record<SyncLogKind, string> = {
 
 export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
   const t = useT();
+  const upper = useLocaleUpper();
   const [stuckBottom, setStuckBottom] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -98,7 +99,7 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
         </div>
         <div className={`term-status term-status-${status}`}>
           {status === "running" ? <span className="term-pulse" /> : null}
-          {t(`terminal.status.${status}`)}
+          {upper(t(`terminal.status.${status}`))}
         </div>
       </div>
 

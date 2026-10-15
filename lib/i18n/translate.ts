@@ -10,6 +10,7 @@ import { settings } from "@/lib/db/schema";
 import { getAgentCwd } from "@/lib/paths";
 import { updateSettings } from "@/lib/settings/service";
 import {
+  hashEnPack,
   loadEnPack,
   loadLocaleMeta,
   loadUserPack,
@@ -132,10 +133,13 @@ Translate the following JSON object of UI strings from English into language cod
 Rules:
 - Return ONLY a valid JSON object (no markdown fences, no commentary).
 - Keep the exact same keys and nesting.
-- Keep placeholders like {name}, {count}, {url}, {agent} unchanged.
+- Keep placeholders like {name}, {count}, {url}, {agent}, {link}, {app}, {fileManager} unchanged (including the braces).
+- When a string is one full sentence with a {link}/{app}/{name} slot, translate the whole sentence naturally for that language's word order — do not leave English fragments around the placeholder.
 - Keep product name "CMAE" unchanged.
 - Keep technical tokens like Gmail, IMAP, Cursor, PDF, UID unchanged when they are product/protocol names.
 - Natural, concise UI tone for ${targetLanguage}.
+- Prefer sentence case / title case in values (not ALL CAPS). The app uppercases labels in the UI with correct locale rules.
+- If target is Turkish (tr): never confuse İ/I/i/ı — dotted i uppercases to İ, dotless ı to I. Do not write ASCII "I" where Turkish "İ" is required.
 
 Section key: ${sectionKey}
 JSON:
@@ -219,7 +223,7 @@ export async function translateLocalePack(
   return { code, pack, meta, skippedLlm };
 }
 
-/** True when user pack is missing or for a different language. */
+/** True when user pack is missing, for another language, or built from an older en.json. */
 export function needsLocaleTranslation(preferredLanguage: string): boolean {
   const code =
     preferredLanguage.toLowerCase().trim().slice(0, 16) || APP_LANGUAGE;
@@ -229,5 +233,8 @@ export function needsLocaleTranslation(preferredLanguage: string): boolean {
   const meta = loadLocaleMeta();
   const pack = loadUserPack();
   if (!pack || !meta?.code) return true;
-  return meta.code.toLowerCase() !== code;
+  if (meta.code.toLowerCase() !== code) return true;
+  // Old packs have no hash — force a fresh translate so mixed EN/TR UI cannot linger
+  if (!meta.enSourceHash) return true;
+  return meta.enSourceHash !== hashEnPack();
 }

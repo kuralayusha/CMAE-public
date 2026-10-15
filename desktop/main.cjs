@@ -5,6 +5,12 @@ const fs = require("fs");
 const http = require("http");
 const net = require("net");
 const path = require("path");
+const {
+  initAutoUpdater,
+  checkForUpdates,
+  quitAndInstall,
+  getVersion,
+} = require("./updater.cjs");
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.CMAE_DEV_URL || "http://127.0.0.1:3000";
@@ -14,6 +20,13 @@ let serverProcess = null;
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 
+/**
+ * Per-OS user data (never hardcoded to a username):
+ * - macOS: ~/Library/Application Support/<app>
+ * - Windows: %APPDATA%\\<app>
+ * - Linux: ~/.config/<app>
+ * Electron resolves the current account; we inject it as CMAE_USER_DATA for Next.
+ */
 function userDataRoot() {
   return app.getPath("userData");
 }
@@ -104,6 +117,27 @@ ipcMain.handle("cmae:uninstall", async () => {
   setTimeout(() => app.exit(0), 150);
   return { ok: true };
 });
+
+ipcMain.handle("cmae:get-version", async () => getVersion());
+
+ipcMain.handle("cmae:open-external", async (_event, url) => {
+  const target = String(url || "").trim();
+  if (!/^https?:\/\//i.test(target)) {
+    return { ok: false, error: "invalid-url" };
+  }
+  await shell.openExternal(target);
+  return { ok: true };
+});
+
+ipcMain.handle("cmae:check-updates", async () => checkForUpdates());
+
+ipcMain.handle("cmae:quit-and-install", async () => quitAndInstall());
+
+function broadcastUpdateEvent(payload) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send("cmae:update-event", payload);
+  }
+}
 
 function ensureMasterKey() {
   const keyPath = path.join(userDataRoot(), "master.key");
@@ -285,10 +319,21 @@ function createWindow(url) {
   return mainWindow.loadURL(url);
 }
 
+function writeStickyAppRoot(root) {
+  try {
+    const home = process.env.HOME || require("os").homedir();
+    fs.writeFileSync(path.join(home, ".cmae-app-root"), `${root}\n`, "utf8");
+  } catch {
+    /* ignore */
+  }
+}
+
 async function boot() {
   const masterKey = ensureMasterKey();
-  process.env.CMAE_USER_DATA = userDataRoot();
+  const dataRoot = userDataRoot();
+  process.env.CMAE_USER_DATA = dataRoot;
   process.env.CMAE_MASTER_KEY = masterKey;
+  writeStickyAppRoot(dataRoot);
 
   if (isDev) {
     await createWindow(DEV_URL);
@@ -302,6 +347,7 @@ async function boot() {
 }
 
 app.whenReady().then(() => {
+  initAutoUpdater(broadcastUpdateEvent);
   boot().catch((err) => {
     console.error(err);
     dialog.showErrorBox(

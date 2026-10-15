@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import { SyncCanceledError, throwIfSyncCanceled } from "./cancel";
 import { consolidateAiGroups } from "./consolidate";
 import { askTrackerLlm, extractJson } from "./llm";
@@ -369,7 +370,7 @@ export async function matchMailsToGroups(
   if (dropped > 0) {
     log?.(
       "system",
-      `${dropped} personal/newsletter mails left out of tracker`,
+      t("sync.droppedNoise", { count: dropped }),
     );
   }
 
@@ -378,7 +379,7 @@ export async function matchMailsToGroups(
     if (jobMails.length <= 80) {
       log?.(
         "think",
-        `AI grouping (single batch, ${jobMails.length} mails)…`,
+        t("sync.aiGroupingSingle", { count: jobMails.length }),
       );
       const one = await matchBatch(jobMails, searches, mailIntents);
       throwIfSyncCanceled(signal);
@@ -387,10 +388,16 @@ export async function matchMailsToGroups(
           mergeMissingSearches(one, searches),
           jobMails,
         );
-        log?.("ok", `AI: ${one.length} grup → consolidate ${merged.length}`);
+        log?.(
+          "ok",
+          t("sync.aiConsolidate", {
+            groups: one.length,
+            rows: merged.length,
+          }),
+        );
         return merged;
       }
-      log?.("system", "Could not parse AI response → heuristic");
+      log?.("system", t("sync.aiParseFailed"));
     } else if (jobMails.length > 0) {
       const batches = chunk(jobMails, 50);
       const all: AiGroup[] = [];
@@ -399,14 +406,21 @@ export async function matchMailsToGroups(
         const batch = batches[i]!;
         log?.(
           "think",
-          `AI grouping batch ${i + 1}/${batches.length} (${batch.length} mails)…`,
+          t("sync.aiGroupingBatch", {
+            n: i + 1,
+            total: batches.length,
+            count: batch.length,
+          }),
         );
         const part = await matchBatch(batch, searches, mailIntents);
         if (part) {
           all.push(...part);
-          log?.("ok", `batch ${i + 1}: ${part.length} grup`);
+          log?.(
+            "ok",
+            t("sync.batchOk", { n: i + 1, groups: part.length }),
+          );
         } else {
-          log?.("system", `batch ${i + 1}: parse failed`);
+          log?.("system", t("sync.batchParseFailed", { n: i + 1 }));
         }
       }
       if (all.length) {
@@ -414,19 +428,22 @@ export async function matchMailsToGroups(
           mergeMissingSearches(all, searches),
           jobMails,
         );
-        log?.("ok", `consolidate → ${merged.length} rows`);
+        log?.(
+          "ok",
+          t("sync.consolidateRows", { rows: merged.length }),
+        );
         return merged;
       }
     }
   } catch (err) {
     if (err instanceof SyncCanceledError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
-    log?.("err", `AI match failed → heuristic: ${msg}`);
+    log?.("err", t("sync.aiMatchFailed", { msg }));
     console.warn("[tracker/match] AI match failed, using heuristic:", err);
   }
 
   throwIfSyncCanceled(signal);
-  log?.("system", "Using heuristic grouping");
+  log?.("system", t("sync.heuristicGrouping"));
   return heuristicGroups(jobMails, searches);
 }
 

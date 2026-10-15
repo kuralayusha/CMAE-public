@@ -1,6 +1,6 @@
 "use client";
 
-import { useT } from "@/components/I18nProvider";
+import { useLocaleUpper, useT } from "@/components/I18nProvider";
 
 export type SearchHistoryJob = {
   id: string;
@@ -39,6 +39,11 @@ export function SearchHistory({
   onSelect,
 }: Props) {
   const t = useT();
+  const upper = useLocaleUpper();
+  const statusSuffixes = [
+    t("folders.suffixCanceled"),
+    t("folders.suffixError"),
+  ];
   return (
     <aside className="cmae-hist" aria-label={t("search.historyAria")}>
       <div className="cmae-hist-scroll">
@@ -63,12 +68,14 @@ export function SearchHistory({
                   job.companyName ||
                   job.folderName ||
                   hostOf(job.url),
+                statusSuffixes,
               );
               const tone = STATUS_TONE[job.status] || "idle";
               const statusKey = `terminal.status.${job.status}`;
               const statusLabel = t(statusKey);
-              const label =
-                statusLabel === statusKey ? job.status : statusLabel;
+              const label = upper(
+                statusLabel === statusKey ? job.status : statusLabel,
+              );
               const inPanel = panelIds.includes(job.id);
               const selected = selectedId === job.id;
 
@@ -101,7 +108,7 @@ export function SearchHistory({
                         </span>
                         {inPanel ? (
                           <span className="cmae-hist-open">
-                            {t("common.open")}
+                            {upper(t("common.open"))}
                           </span>
                         ) : null}
                       </span>
@@ -117,13 +124,18 @@ export function SearchHistory({
   );
 }
 
-function cleanName(raw: string) {
-  return (
-    raw
-      .replace(/\s*\(canceled\)\s*$/i, "")
-      .replace(/^\d+\s*-\s*/, "")
-      .trim() || raw
-  );
+function cleanName(raw: string, statusSuffixes: string[] = []) {
+  let out = String(raw || "").trim();
+  const needles = [...statusSuffixes, "(canceled)", "(error)"];
+  for (const s of needles) {
+    const needle = s.trim();
+    if (!needle) continue;
+    if (out.toLowerCase().endsWith(needle.toLowerCase())) {
+      out = out.slice(0, out.length - needle.length).trim();
+      break;
+    }
+  }
+  return out.replace(/^\d+\s*-\s*/, "").trim() || raw;
 }
 
 function hostOf(url: string) {

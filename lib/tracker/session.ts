@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { EventEmitter } from "events";
+import { t } from "@/lib/i18n/t";
 import { SyncCanceledError } from "./cancel";
 import { listTrackerSections } from "./list";
 import { runTrackerSync } from "./run";
@@ -178,7 +179,7 @@ export function startTrackerSyncSession(opts?: {
       });
 
       if (session.cancelRequested || abort.signal.aborted) {
-        appendLine(session, "err", "Sync canceled");
+        appendLine(session, "err", t("sync.canceled"));
         finish(session, "canceled");
         return;
       }
@@ -201,7 +202,7 @@ export function startTrackerSyncSession(opts?: {
         session.cancelRequested ||
         abort.signal.aborted
       ) {
-        appendLine(session, "err", "Sync canceled");
+        appendLine(session, "err", t("sync.canceled"));
         finish(session, "canceled");
         return;
       }
@@ -225,7 +226,7 @@ export function cancelTrackerSyncSession(id?: string): SyncSessionPublic | null 
   } catch {
     /* ignore */
   }
-  appendLine(session, "err", "Cancel requested…");
+  appendLine(session, "err", t("sync.cancelRequested"));
   return toPublic(session);
 }
 

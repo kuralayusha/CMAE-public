@@ -1,11 +1,8 @@
-import { redirect } from "next/navigation";
-import { isOnboardingComplete } from "@/lib/onboarding/status";
+import { RequireOnboarded } from "@/components/RequireOnboarded";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  if (!isOnboardingComplete()) {
-    redirect("/onboarding");
-  }
-  return children;
+  return <RequireOnboarded>{children}</RequireOnboarded>;
 }

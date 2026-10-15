@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { mailMessages, syncState } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/t";
 import { getGmailCredentials } from "@/lib/settings/service";
 import { fetchRecentMail, WINDOW_DAYS, type ImapSyncMode } from "./imap";
 import { SyncCanceledError, throwIfSyncCanceled } from "./cancel";
@@ -111,7 +112,7 @@ export async function syncMailsFromGmail(opts?: {
 
   if (isSyncDisabled()) {
     setSyncState({ lastError: null });
-    log?.("system", "IMAP disabled (CMAE_DISABLE_SYNC=1)");
+    log?.("system", t("sync.imapDisabled"));
     return {
       skipped: true,
       reason: "CMAE_DISABLE_SYNC=1",
@@ -123,7 +124,7 @@ export async function syncMailsFromGmail(opts?: {
 
   const creds = getGmailCredentials();
   if (!creds) {
-    const msg = "Gmail address or App Password missing — add them in Settings";
+    const msg = t("sync.gmailMissing");
     setSyncState({ lastError: msg });
     log?.("err", msg);
     return {
@@ -137,7 +138,10 @@ export async function syncMailsFromGmail(opts?: {
 
   try {
     throwIfSyncCanceled(signal);
-    log?.("curl", `Connecting to Gmail IMAP (${creds.address})…`);
+    log?.(
+      "curl",
+      t("sync.connectingImap", { address: creds.address }),
+    );
     const fetched = await fetchRecentMail(
       creds.address,
       creds.appPassword,
@@ -156,7 +160,10 @@ export async function syncMailsFromGmail(opts?: {
     cutoff.setDate(cutoff.getDate() - WINDOW_DAYS);
     const cutoffIso = cutoff.toISOString();
 
-    log?.("think", `Writing ${fetched.mails.length} mails to the database (upsert)…`);
+    log?.(
+      "think",
+      t("sync.writingUpsert", { count: fetched.mails.length }),
+    );
     const upserted = upsertMails(fetched.mails);
 
     // Safety: row count must never drop after sync (no deletes)
@@ -178,23 +185,24 @@ export async function syncMailsFromGmail(opts?: {
     setSyncState({ lastSyncAt: new Date().toISOString(), lastError: null });
     log?.(
       "ok",
-      `${upserted} upsert · DB ${afterCount} mails · kept outside window ${keptOutsideWindow}`,
+      t("sync.upsertSummary", {
+        upserted,
+        total: afterCount,
+        kept: keptOutsideWindow,
+      }),
     );
     if (mode === "hard") {
-      log?.(
-        "system",
-        "Hard sync: 30d+ records were not deleted; same messageId is not rewritten",
-      );
+      log?.("system", t("sync.hardSyncNote"));
     }
     return { skipped: false, upserted, mode, keptOutsideWindow };
   } catch (err) {
     if (err instanceof SyncCanceledError) {
-      log?.("err", "IMAP canceled");
+      log?.("err", t("sync.imapCanceled"));
       throw err;
     }
     const msg = err instanceof Error ? err.message : String(err);
     setSyncState({ lastError: msg });
-    log?.("err", `IMAP error: ${msg}`);
+    log?.("err", t("sync.imapError", { msg }));
     throw err;
   }
 }

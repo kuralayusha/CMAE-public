@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useI18n } from "@/components/I18nProvider";
+import { useI18n, useLocaleUpper } from "@/components/I18nProvider";
+import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
+import { RichText } from "@/components/RichText";
 import { Button, Field } from "@/components/ui";
 import { APP_LANGUAGE, type LocalePack } from "@/lib/i18n/types";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
@@ -67,47 +69,8 @@ const BOOT_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
   { id: "unlock", label: "Unlocking Tracker / Search" },
 ];
 
-const LOCALE_PREP_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
-  { id: "selected", label: "Language locked in" },
-  { id: "connecting", label: "Opening translation channel" },
-  { id: "catalog", label: "Reading English UI catalog" },
-  { id: "nav", label: "Translating navigation & settings" },
-  { id: "mail", label: "Translating mail & workspace labels" },
-  { id: "polish", label: "Polishing phrasing & punctuation" },
-  { id: "assembling", label: "Assembling your language pack" },
-  { id: "writing", label: "Saving locale files" },
-  { id: "switching", label: "Applying language to the UI" },
-];
-
-/** Steps advanced while the translate request is in flight (slow, realistic). */
-const LOCALE_PREP_WORK_IDS = [
-  "catalog",
-  "nav",
-  "mail",
-  "polish",
-  "assembling",
-] as const;
-
-/** Dwell per work step before advancing; last step holds until translate resolves. */
-const LOCALE_PREP_WORK_DWELL_MS = [4200, 7800, 10000, 12000] as const;
-
-const LOCALE_PREP_WAIT_HINT_KEYS = [
-  "onboarding.localePrepWait0",
-  "onboarding.localePrepWait1",
-  "onboarding.localePrepWait2",
-] as const;
-
-const LOCALE_PREP_MIN_MS = 5200;
-
 function freshBootItems(): BootItem[] {
   return BOOT_TEMPLATE.map((b) => ({ ...b, status: "pending" as const }));
-}
-
-function freshLocalePrepItems(): BootItem[] {
-  return LOCALE_PREP_TEMPLATE.map((b) => ({
-    ...b,
-    status: "pending" as const,
-  }));
 }
 
 const DEFAULT_PREFS: JobPreferences = {
@@ -121,9 +84,18 @@ const DEFAULT_PREFS: JobPreferences = {
   salaryNegotiable: true,
 };
 
+/** Survives React Strict Mode remounts in the same JS realm. */
+let wizardHydratedOnce = false;
+
+function pickFilled(local: string, server: string | null | undefined): string {
+  if (local.trim()) return local;
+  return server?.trim() ? String(server) : local;
+}
+
 export function OnboardingWizard() {
   const router = useRouter();
   const { t, setPack } = useI18n();
+  const upper = useLocaleUpper();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,13 +106,6 @@ export function OnboardingWizard() {
   const [bootItems, setBootItems] = useState<BootItem[]>(freshBootItems);
   const [bootDone, setBootDone] = useState(false);
   const [bootFailMsg, setBootFailMsg] = useState<string | null>(null);
-  const [localePrepItems, setLocalePrepItems] = useState<BootItem[]>(
-    freshLocalePrepItems,
-  );
-  const [localePrepDone, setLocalePrepDone] = useState(false);
-  const [localePrepFailMsg, setLocalePrepFailMsg] = useState<string | null>(
-    null,
-  );
 
   const [form, setForm] = useState({
     fullName: "",
@@ -152,34 +117,54 @@ export function OnboardingWizard() {
     emailSignature: "",
   });
   const [prefs, setPrefs] = useState<JobPreferences>(DEFAULT_PREFS);
+  const formRef = useRef(form);
+  const prefsRef = useRef(prefs);
+  formRef.current = form;
+  prefsRef.current = prefs;
 
   const stepId: StepId = STEPS[step] ?? "language";
 
   useEffect(() => {
     void (async () => {
       try {
-        const res = await fetch("/api/onboarding/status");
+        await fetch("/api/onboarding/reconcile", {
+          method: "POST",
+          cache: "no-store",
+        }).catch(() => null);
+        const res = await fetch("/api/onboarding/status", { cache: "no-store" });
         const data = await res.json();
+        // Same API path as Start system / RequireOnboarded — safe to enter app
         if (data.complete || data.flagSet) {
-          window.location.assign("/tracker");
+          window.location.replace("/tracker");
           return;
         }
+        if (wizardHydratedOnce) return;
+        wizardHydratedOnce = true;
         const s = data.settings || {};
         setForm((f) => ({
           ...f,
-          fullName: s.fullName || "",
-          gmailAddress: s.gmailAddress || "",
-          followUpDays: s.followUpDays || 5,
-          preferredLanguage: s.preferredLanguage || "en",
-          emailSignature: s.emailSignature || "",
+          fullName: pickFilled(f.fullName, s.fullName),
+          gmailAddress: pickFilled(f.gmailAddress, s.gmailAddress),
+          followUpDays: f.followUpDays || s.followUpDays || 5,
+          preferredLanguage: pickFilled(
+            f.preferredLanguage,
+            s.preferredLanguage,
+          ) || "en",
+          emailSignature: pickFilled(f.emailSignature, s.emailSignature),
         }));
         if (s.jobPreferences) {
-          setPrefs({ ...DEFAULT_PREFS, ...s.jobPreferences });
+          setPrefs((p) => {
+            const hasLocal = p.workTypes.length > 0 || p.salaryMin != null;
+            if (hasLocal) return p;
+            return { ...DEFAULT_PREFS, ...s.jobPreferences };
+          });
         }
         setHasGmailPw(Boolean(s.hasGmailAppPassword));
         setHasCursorKey(Boolean(s.hasCursorApiKey));
         setCursorFromEnv(Boolean(s.cursorApiKeyFromEnv));
-        setCvs(data.cvs || []);
+        if (Array.isArray(data.cvs) && data.cvs.length) {
+          setCvs(data.cvs);
+        }
       } catch {
         /* first boot */
       }
@@ -229,20 +214,25 @@ export function OnboardingWizard() {
     }
   }, [stepId, form, prefs, cvs, hasGmailPw, hasCursorKey, cursorFromEnv]);
 
-  async function persistPartial() {
+  async function persistPartial(snapshot?: {
+    form: typeof form;
+    prefs: JobPreferences;
+  }) {
+    const f = snapshot?.form ?? formRef.current;
+    const p = snapshot?.prefs ?? prefsRef.current;
     const body: Record<string, unknown> = {
-      fullName: form.fullName,
-      gmailAddress: form.gmailAddress,
-      followUpDays: form.followUpDays,
-      preferredLanguage: form.preferredLanguage,
-      emailSignature: form.emailSignature,
-      jobPreferences: prefs,
+      fullName: f.fullName,
+      gmailAddress: f.gmailAddress,
+      followUpDays: f.followUpDays,
+      preferredLanguage: f.preferredLanguage,
+      emailSignature: f.emailSignature,
+      jobPreferences: p,
     };
-    if (form.gmailAppPassword.trim()) {
-      body.gmailAppPassword = form.gmailAppPassword;
+    if (f.gmailAppPassword.trim()) {
+      body.gmailAppPassword = f.gmailAppPassword;
     }
-    if (form.cursorApiKey.trim()) {
-      body.cursorApiKey = form.cursorApiKey;
+    if (f.cursorApiKey.trim()) {
+      body.cursorApiKey = f.cursorApiKey;
     }
     const res = await fetch("/api/settings", {
       method: "PUT",
@@ -254,7 +244,7 @@ export function OnboardingWizard() {
     setHasGmailPw(Boolean(data.hasGmailAppPassword) || hasGmailPw);
     setHasCursorKey(Boolean(data.hasCursorApiKey));
     setCursorFromEnv(Boolean(data.cursorApiKeyFromEnv));
-    setForm((f) => ({ ...f, gmailAppPassword: "", cursorApiKey: "" }));
+    setForm((prev) => ({ ...prev, gmailAppPassword: "", cursorApiKey: "" }));
   }
 
   async function skipToWelcomeWithLang(code: string, pack: LocalePack) {
@@ -307,7 +297,8 @@ export function OnboardingWizard() {
             packData.pack &&
             typeof packData.pack === "object" &&
             Object.keys(packData.pack as object).length > 0;
-          if (hasPack) {
+          // Reuse only a fresh pack — stale en.json fingerprint ⇒ retranslate
+          if (hasPack && !packData.needsTranslation) {
             await skipToWelcomeWithLang(existing, packData.pack as LocalePack);
             return;
           }
@@ -319,7 +310,6 @@ export function OnboardingWizard() {
       }
 
       setStep(STEPS.indexOf("localePrep"));
-      void runLocalePrep();
       return;
     }
     if (stepId === "localePrep") return;
@@ -393,169 +383,8 @@ export function OnboardingWizard() {
     );
   }
 
-  function patchLocalePrep(id: string, patch: Partial<BootItem>) {
-    setLocalePrepItems((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-    );
-  }
-
   function sleep(ms: number) {
     return new Promise<void>((r) => window.setTimeout(r, ms));
-  }
-
-  async function runLocalePrep() {
-    setLocalePrepItems(freshLocalePrepItems());
-    setLocalePrepDone(false);
-    setLocalePrepFailMsg(null);
-    const lang = form.preferredLanguage.trim() || "en";
-    const started = Date.now();
-
-    const translate = async () => {
-      const res = await fetch("/api/i18n/translate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetLanguage: lang }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        const errMsg = String(data.error || "Language pack translation failed");
-        // No Cursor key yet — save preference and continue in English UI;
-        // boot will retry translation after the key is verified.
-        if (/api key/i.test(errMsg) && lang.toLowerCase().slice(0, 2) !== "en") {
-          await fetch("/api/settings", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ preferredLanguage: lang }),
-          });
-          const packRes = await fetch("/api/i18n/pack");
-          if (packRes.ok) {
-            const packData = await packRes.json();
-            setPack(APP_LANGUAGE, (packData.en || packData.pack) as LocalePack);
-          }
-          setForm((f) => ({ ...f, preferredLanguage: lang }));
-          return { deferred: true as const };
-        }
-        throw new Error(errMsg);
-      }
-      setPack(String(data.code || lang), data.pack as LocalePack);
-      setForm((f) => ({
-        ...f,
-        preferredLanguage: String(data.code || lang),
-      }));
-      return { deferred: false as const };
-    };
-
-    /** Advance work steps slowly while `work` runs; never finish early before it. */
-    async function paceWorkSteps(work: Promise<unknown>) {
-      let settled = false;
-      let failure: unknown = null;
-      const tracked = work.then(
-        (value) => {
-          settled = true;
-          return value;
-        },
-        (err) => {
-          settled = true;
-          failure = err;
-          throw err;
-        },
-      );
-
-      for (let i = 0; i < LOCALE_PREP_WORK_IDS.length; i++) {
-        const id = LOCALE_PREP_WORK_IDS[i]!;
-        const isLast = i === LOCALE_PREP_WORK_IDS.length - 1;
-        patchLocalePrep(id, { status: "running", detail: undefined });
-
-        if (isLast) {
-          let hintIdx = 0;
-          while (!settled) {
-            patchLocalePrep(id, {
-              status: "running",
-              detail:
-                LOCALE_PREP_WAIT_HINT_KEYS[
-                  hintIdx % LOCALE_PREP_WAIT_HINT_KEYS.length
-                ],
-            });
-            hintIdx += 1;
-            await Promise.race([
-              sleep(5200),
-              tracked.catch(() => undefined),
-            ]);
-          }
-          if (failure) throw failure;
-          await tracked;
-          patchLocalePrep(id, { status: "ok", detail: undefined });
-          return;
-        }
-
-        const dwell = LOCALE_PREP_WORK_DWELL_MS[i] ?? 8000;
-        await Promise.race([
-          sleep(dwell),
-          tracked.catch(() => undefined),
-        ]);
-
-        if (failure) throw failure;
-
-        if (settled) {
-          patchLocalePrep(id, { status: "ok", detail: undefined });
-          for (let j = i + 1; j < LOCALE_PREP_WORK_IDS.length; j++) {
-            const nextId = LOCALE_PREP_WORK_IDS[j]!;
-            patchLocalePrep(nextId, { status: "running" });
-            await sleep(340);
-            patchLocalePrep(nextId, { status: "ok" });
-          }
-          await tracked;
-          return;
-        }
-
-        patchLocalePrep(id, { status: "ok", detail: undefined });
-      }
-
-      await tracked;
-    }
-
-    try {
-      patchLocalePrep("selected", { status: "running" });
-      await sleep(520);
-      patchLocalePrep("selected", { status: "ok" });
-
-      patchLocalePrep("connecting", { status: "running" });
-      const translatePromise = translate();
-      await sleep(900);
-      patchLocalePrep("connecting", { status: "ok" });
-
-      await paceWorkSteps(translatePromise);
-
-      patchLocalePrep("writing", { status: "running" });
-      await sleep(480);
-      patchLocalePrep("writing", { status: "ok" });
-
-      patchLocalePrep("switching", { status: "running" });
-      await sleep(520);
-      patchLocalePrep("switching", { status: "ok" });
-
-      const elapsed = Date.now() - started;
-      if (elapsed < LOCALE_PREP_MIN_MS) {
-        await sleep(LOCALE_PREP_MIN_MS - elapsed);
-      }
-      setLocalePrepDone(true);
-      await sleep(700);
-      setStep(STEPS.indexOf("welcome"));
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setLocalePrepFailMsg(msg);
-      setError(msg);
-      setLocalePrepItems((prev) =>
-        prev.map((b) => {
-          if (b.status === "running") {
-            return { ...b, status: "fail" as const, detail: msg };
-          }
-          return b;
-        }),
-      );
-      await sleep(1600);
-      setStep(STEPS.indexOf("language"));
-    }
   }
 
   /**
@@ -582,7 +411,7 @@ export function OnboardingWizard() {
           packData.pack &&
           typeof packData.pack === "object" &&
           Object.keys(packData.pack as object).length > 0;
-        if (hasPack) {
+        if (hasPack && !packData.needsTranslation) {
           setPack(code, packData.pack as LocalePack);
           await softOk("locale");
           return;
@@ -620,6 +449,12 @@ export function OnboardingWizard() {
     setBootItems(freshBootItems());
     setBootDone(false);
     setBootFailMsg(null);
+
+    // Snapshot before any await — persistPartial clears secrets from state
+    const snapshot = {
+      form: { ...formRef.current },
+      prefs: { ...prefsRef.current },
+    };
 
     const softOk = async (id: string) => {
       patchBoot(id, { status: "running" });
@@ -691,10 +526,26 @@ export function OnboardingWizard() {
 
       patchBoot("unlock", { status: "running" });
 
+      // Re-save full wizard state — empty {} after wipe left gaps / empty settings
+      await persistPartial(snapshot);
+
       const completeRes = await fetch("/api/onboarding/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          fullName: snapshot.form.fullName,
+          gmailAddress: snapshot.form.gmailAddress,
+          followUpDays: snapshot.form.followUpDays,
+          preferredLanguage: snapshot.form.preferredLanguage,
+          emailSignature: snapshot.form.emailSignature,
+          jobPreferences: snapshot.prefs,
+          ...(snapshot.form.gmailAppPassword.trim()
+            ? { gmailAppPassword: snapshot.form.gmailAppPassword }
+            : {}),
+          ...(snapshot.form.cursorApiKey.trim()
+            ? { cursorApiKey: snapshot.form.cursorApiKey }
+            : {}),
+        }),
       });
       const completeData = await completeRes.json();
       if (!completeRes.ok) {
@@ -709,22 +560,29 @@ export function OnboardingWizard() {
         throw new Error("Onboarding flag was not saved — try Start system again");
       }
 
-      // Confirm the same process that serves /tracker sees the flag
-      const statusRes = await fetch("/api/onboarding/status", {
+      // Reopen SQLite on the sticky app-root so RSC layout sees the same flag
+      const reconcileRes = await fetch("/api/onboarding/reconcile", {
+        method: "POST",
         cache: "no-store",
       });
-      const statusData = await statusRes.json().catch(() => ({}));
-      if (!statusData.complete && !statusData.flagSet) {
+      const reconcileData = await reconcileRes.json().catch(() => ({}));
+      if (
+        !reconcileRes.ok ||
+        (!reconcileData.complete && !reconcileData.flagSet)
+      ) {
         throw new Error(
-          "Onboarding finished but status check failed — restart the app and open Tracker",
+          reconcileData.error ||
+            "Onboarding finished but the unlock flag could not be confirmed — try Start system again",
         );
       }
 
       patchBoot("unlock", { status: "ok" });
       setBootDone(true);
       await sleep(800);
-      // Hard navigation — soft replace + refresh bounced desktop back to onboarding
-      window.location.href = "/tracker";
+      wizardHydratedOnce = false;
+      // Tracker uses RequireOnboarded (same status API) — no RSC DB gate bounce
+      window.location.replace("/tracker");
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setBootFailMsg(msg);
@@ -803,54 +661,24 @@ export function OnboardingWizard() {
 
   if (stepId === "localePrep") {
     return (
-      <div className="cmae-onb">
-        <div className="cmae-onb-brand">CMAE</div>
-        <div className="cmae-onb-boot">
-          <h1 className="cmae-onb-boot-title">
-            {t("onboarding.localePrepTitle")}
-          </h1>
-          <p className="cmae-onb-boot-lead">{t("onboarding.localePrepLead")}</p>
-          <ul className="cmae-onb-boot-list">
-            {localePrepItems.map((item) => (
-              <li
-                key={item.id}
-                className={`cmae-onb-boot-item is-visible is-${item.status}`}
-              >
-                <span className="cmae-onb-tick" aria-hidden>
-                  {item.status === "ok"
-                    ? "✓"
-                    : item.status === "fail"
-                      ? "!"
-                      : item.status === "running"
-                        ? "…"
-                        : ""}
-                </span>
-                <span className="cmae-onb-boot-text">
-                  <span>{t(`onboarding.localePrepSteps.${item.id}`)}</span>
-                  {item.detail ? (
-                    <span className="cmae-onb-boot-detail">
-                      {item.detail.startsWith("onboarding.")
-                        ? t(item.detail)
-                        : item.detail}
-                    </span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-          {localePrepFailMsg ? (
-            <p className="cmae-onb-boot-fail is-visible">
-              {localePrepFailMsg} {t("onboarding.localePrepFail")}
-            </p>
-          ) : (
-            <p
-              className={`cmae-onb-boot-done${localePrepDone ? " is-visible" : ""}`}
-            >
-              {t("onboarding.localePrepDone")}
-            </p>
-          )}
-        </div>
-      </div>
+      <LocalePrepOverlay
+        mode="page"
+        targetLanguage={form.preferredLanguage}
+        allowDeferWithoutKey
+        onComplete={(result) => {
+          setForm((f) => ({
+            ...f,
+            preferredLanguage: result.deferred
+              ? f.preferredLanguage
+              : result.code,
+          }));
+          setStep(STEPS.indexOf("welcome"));
+        }}
+        onError={(msg) => {
+          setError(msg);
+          setStep(STEPS.indexOf("language"));
+        }}
+      />
     );
   }
 
@@ -927,10 +755,12 @@ export function OnboardingWizard() {
               ))}
             </div>
             <p className="cmae-onb-step-label">
-              {t("onboarding.stepLabel", {
-                current: flowIndex + 1,
-                total: FLOW_STEPS.length,
-              })}
+              {upper(
+                t("onboarding.stepLabel", {
+                  current: flowIndex + 1,
+                  total: FLOW_STEPS.length,
+                }),
+              )}
             </p>
           </>
         ) : null}
@@ -990,23 +820,34 @@ export function OnboardingWizard() {
         {stepId === "gmail" ? (
           <>
             <h1 className="cmae-onb-title">{t("onboarding.gmailTitle")}</h1>
-            <p className="cmae-onb-why">{t("onboarding.gmailWhy")}</p>
+            <p className="cmae-onb-why cmae-onb-privacy">
+              {t("onboarding.gmailWhy")}
+            </p>
             <ol className="cmae-onb-guide">
               <li>{t("onboarding.gmailGuide0")}</li>
               <li>
-                {t("onboarding.gmailGuide1Before")}{" "}
-                <a
-                  href="https://myaccount.google.com/apppasswords"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {t("onboarding.gmailGuide1Link")}
-                </a>{" "}
-                {t("onboarding.gmailGuide1After")}
+                <RichText
+                  text={t("onboarding.gmailGuide1")}
+                  parts={{
+                    link: (
+                      <a
+                        href="https://myaccount.google.com/apppasswords"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t("onboarding.gmailGuide1Link")}
+                      </a>
+                    ),
+                  }}
+                />
               </li>
               <li>
-                {t("onboarding.gmailGuide2Before")} <strong>CMAE</strong>{" "}
-                {t("onboarding.gmailGuide2After")}
+                <RichText
+                  text={t("onboarding.gmailGuide2")}
+                  parts={{
+                    app: <strong>CMAE</strong>,
+                  }}
+                />
               </li>
               <li>{t("onboarding.gmailGuide3")}</li>
             </ol>
@@ -1047,23 +888,33 @@ export function OnboardingWizard() {
         {stepId === "cursor" ? (
           <>
             <h1 className="cmae-onb-title">{t("onboarding.cursorTitle")}</h1>
-            <p className="cmae-onb-why">{t("onboarding.cursorWhy")}</p>
+            <p className="cmae-onb-why cmae-onb-privacy">
+              {t("onboarding.cursorWhy")}
+            </p>
             <ol className="cmae-onb-guide">
               <li>
-                {t("onboarding.cursorGuide0Before")}{" "}
-                <a
-                  href="https://cursor.com/dashboard/api"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {t("onboarding.cursorGuide0Link")}
-                </a>
-                {t("onboarding.cursorGuide0After")}
+                <RichText
+                  text={t("onboarding.cursorGuide0")}
+                  parts={{
+                    link: (
+                      <a
+                        href="https://cursor.com/dashboard/api"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t("onboarding.cursorGuide0Link")}
+                      </a>
+                    ),
+                  }}
+                />
               </li>
               <li>
-                {t("onboarding.cursorGuide1Before")}{" "}
-                <strong>CMAE local</strong>
-                {t("onboarding.cursorGuide1After")}
+                <RichText
+                  text={t("onboarding.cursorGuide1")}
+                  parts={{
+                    name: <strong>CMAE local</strong>,
+                  }}
+                />
               </li>
               <li>{t("onboarding.cursorGuide2")}</li>
             </ol>
