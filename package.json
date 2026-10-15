@@ -13,8 +13,8 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "desktop:dev": "node scripts/desktop-dev.mjs",
     "desktop:prepare": "node scripts/prepare-desktop.mjs",
-    "desktop:build:mac": "npm run build && npm run desktop:prepare && electron-builder --mac --config electron-builder.yml",
-    "desktop:build:win": "npm run build && npm run desktop:prepare && electron-builder --win --config electron-builder.yml"
+    "desktop:build:mac": "npm run build && npm run desktop:prepare && electron-builder --mac --config electron-builder.yml --publish never",
+    "desktop:build:win": "npm run build && npm run desktop:prepare && electron-builder --win --config electron-builder.yml --publish never"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.37",

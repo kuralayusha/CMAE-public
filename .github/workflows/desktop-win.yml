@@ -25,7 +25,8 @@ concurrency:
 
 jobs:
   build-nsis:
-    runs-on: windows-latest
+    # windows-latest (2025) ships VS 18; better-sqlite3/node-gyp does not support it yet
+    runs-on: windows-2022
     timeout-minutes: 45
     steps:
       - name: Checkout

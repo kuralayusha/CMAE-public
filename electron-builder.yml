@@ -8,6 +8,8 @@ files:
   - desktop/**/*
   - package.json
 afterPack: scripts/after-pack.cjs
+# Artefacts only — do not publish GitHub Releases from CI
+publish: null
 mac:
   category: public.app-category.productivity
   target:
