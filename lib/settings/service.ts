@@ -27,14 +27,24 @@ export type SettingsPublic = {
   updatedAt: string | null;
 };
 
+function hasDecryptableSecret(enc: string | null | undefined): boolean {
+  if (!enc?.trim()) return false;
+  try {
+    return Boolean(decryptOptional(enc)?.trim());
+  } catch {
+    return false;
+  }
+}
+
 export function getPublicSettings(): SettingsPublic {
   const db = getDb();
   const row = db.select().from(settings).where(eq(settings.id, 1)).get();
   return {
     fullName: row?.fullName ?? null,
     gmailAddress: row?.gmailAddress ?? null,
-    hasGmailAppPassword: Boolean(row?.gmailAppPasswordEnc),
-    hasCursorApiKey: Boolean(row?.cursorApiKeyEnc),
+    hasGmailAppPassword: hasDecryptableSecret(row?.gmailAppPasswordEnc),
+    /** Decryptable key in SQLite only — .env alone does not count as "saved". */
+    hasCursorApiKey: hasDecryptableSecret(row?.cursorApiKeyEnc),
     cursorApiKeyFromEnv: Boolean(process.env.CURSOR_API_KEY?.trim()),
     cvFileName: row?.cvFileName ?? null,
     hasCv: Boolean(row?.cvText),

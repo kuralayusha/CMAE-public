@@ -251,10 +251,24 @@ for (const junk of ["workspace", "data", "dist-desktop", ".desktop-data"]) {
   rmSync(path.join(standalone, junk), { recursive: true, force: true });
 }
 
+/** Local .env must never ship inside DMG/EXE — builds stay clean for testers. */
+function stripEnvFiles(dir) {
+  if (!existsSync(dir)) return;
+  for (const name of readdirSync(dir)) {
+    if (name === ".env" || name.startsWith(".env.")) {
+      rmSync(path.join(dir, name), { force: true });
+      console.log(`Removed ${name} from standalone payload`);
+    }
+  }
+}
+stripEnvFiles(standalone);
+stripEnvFiles(path.join(standalone, ".next"));
+
 // Flatten into desktop-resources/standalone (no broken symlinks for electron-builder)
 rmSync(payloadDir, { recursive: true, force: true });
 mkdirSync(payloadDir, { recursive: true });
 copyDeref(standalone, payloadDir);
+stripEnvFiles(payloadDir);
 console.log(`Flattened standalone → ${payloadDir}`);
 
 const nm = path.join(payloadDir, "node_modules");

@@ -49,10 +49,14 @@ Native modules (`better-sqlite3`, `@napi-rs/canvas`) must be built on the target
 ### Local
 
 ```bash
-npm run desktop:dev          # Next + Electron window
+npm run desktop:dev          # Next + Electron window (uses project .env)
 npm run desktop:build:mac    # macOS only → dist-desktop/*.dmg
 npm run desktop:build:win    # Windows only → dist-desktop/*.exe
 ```
+
+Packaged builds (DMG/EXE) do **not** inherit your project `.env` or shell secrets
+(`CURSOR_API_KEY`, etc.). Testers always configure Gmail / Cursor in onboarding —
+same clean path every time. `desktop:dev` still loads `.env` for convenience.
 
 ### CI
 

@@ -175,6 +175,56 @@ function nodeBinary() {
   return path.join(process.resourcesPath, name);
 }
 
+/**
+ * Env for the packaged Next server.
+ * Do NOT inherit developer secrets (.env / shell CURSOR_API_KEY, etc.)
+ * so local DMG builds always behave like a clean install for testers.
+ */
+function buildProductionServerEnv(port, masterKey) {
+  const keepExact = new Set([
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "HOME",
+    "USERPROFILE",
+    "USER",
+    "USERNAME",
+    "LOGNAME",
+    "SHELL",
+    "TMPDIR",
+    "TEMP",
+    "TMP",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TZ",
+    "SSL_CERT_FILE",
+    "NODE_EXTRA_CA_CERTS",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "SystemRoot",
+    "APPDIR",
+  ]);
+
+  const env = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value == null || value === "") continue;
+    if (keepExact.has(key) || key.startsWith("LC_")) {
+      env[key] = value;
+    }
+  }
+
+  env.NODE_ENV = "production";
+  env.PORT = String(port);
+  env.HOSTNAME = "127.0.0.1";
+  env.CMAE_USER_DATA = userDataRoot();
+  env.CMAE_MASTER_KEY = masterKey;
+  // Explicitly absent: CURSOR_API_KEY, CMAE_I18N_URL, project .env vars
+  return env;
+}
+
 function startProductionServer(port, masterKey) {
   const root = standaloneDir();
   const serverJs = path.join(root, "server.js");
@@ -187,13 +237,7 @@ function startProductionServer(port, masterKey) {
     throw new Error(`Bundled Node binary missing: ${nodeBin}`);
   }
 
-  const env = {
-    ...process.env,
-    PORT: String(port),
-    HOSTNAME: "127.0.0.1",
-    CMAE_USER_DATA: userDataRoot(),
-    CMAE_MASTER_KEY: masterKey,
-  };
+  const env = buildProductionServerEnv(port, masterKey);
 
   serverProcess = spawn(nodeBin, [serverJs], {
     cwd: root,

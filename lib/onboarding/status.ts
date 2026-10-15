@@ -85,7 +85,8 @@ export class OnboardingRequiredError extends Error {
 
 export function markOnboardingComplete(): string {
   const at = new Date().toISOString();
-  getDb()
+  const db = getDb();
+  const result = db
     .update(settings)
     .set({
       onboardingCompletedAt: at,
@@ -93,5 +94,28 @@ export function markOnboardingComplete(): string {
     })
     .where(eq(settings.id, 1))
     .run();
-  return at;
+
+  if (!result.changes) {
+    // Row missing — create it rather than silently no-op
+    db.insert(settings)
+      .values({
+        id: 1,
+        followUpDays: 5,
+        preferredLanguage: "en",
+        onboardingCompletedAt: at,
+        updatedAt: at,
+      })
+      .onConflictDoUpdate({
+        target: settings.id,
+        set: { onboardingCompletedAt: at, updatedAt: at },
+      })
+      .run();
+  }
+
+  const row = db.select().from(settings).where(eq(settings.id, 1)).get();
+  const saved = row?.onboardingCompletedAt;
+  if (!filled(saved)) {
+    throw new Error("Failed to persist onboarding completion flag");
+  }
+  return String(saved);
 }

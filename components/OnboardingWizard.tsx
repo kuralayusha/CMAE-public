@@ -352,6 +352,23 @@ export function OnboardingWizard() {
     setBusy(true);
     try {
       await persistPartial();
+      // Cursor step: env key alone used to look "ready" then vanish after restart
+      if (stepId === "cursor" && !hasCursorKey && cursorFromEnv) {
+        const check = await fetch("/api/onboarding/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ check: "cursor" }),
+        });
+        const checkData = await check.json().catch(() => ({}));
+        if (!check.ok || !checkData.ok) {
+          throw new Error(
+            checkData.cursor?.error ||
+              checkData.error ||
+              t("fields.cursorKeyRequired"),
+          );
+        }
+        setHasCursorKey(true);
+      }
       setStep((s) => Math.min(s + 1, STEPS.length - 1));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -688,12 +705,26 @@ export function OnboardingWizard() {
               : "Could not complete"),
         );
       }
+      if (!completeData.complete && !completeData.onboardingCompletedAt) {
+        throw new Error("Onboarding flag was not saved — try Start system again");
+      }
+
+      // Confirm the same process that serves /tracker sees the flag
+      const statusRes = await fetch("/api/onboarding/status", {
+        cache: "no-store",
+      });
+      const statusData = await statusRes.json().catch(() => ({}));
+      if (!statusData.complete && !statusData.flagSet) {
+        throw new Error(
+          "Onboarding finished but status check failed — restart the app and open Tracker",
+        );
+      }
 
       patchBoot("unlock", { status: "ok" });
       setBootDone(true);
-      await sleep(1200);
+      await sleep(800);
       // Hard navigation — soft replace + refresh bounced desktop back to onboarding
-      window.location.assign("/tracker");
+      window.location.href = "/tracker";
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setBootFailMsg(msg);
