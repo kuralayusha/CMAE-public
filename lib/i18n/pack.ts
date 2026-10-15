@@ -1,6 +1,7 @@
 import "server-only";
 
 import fs from "node:fs";
+import enFallback from "@/locales/en.json";
 import {
   getEnPackPath,
   getLocaleMetaPath,
@@ -20,11 +21,10 @@ function readJsonFile<T>(filePath: string): T | null {
 }
 
 export function loadEnPack(): LocalePack {
-  const pack = readJsonFile<LocalePack>(getEnPackPath());
-  if (!pack || typeof pack !== "object") {
-    throw new Error("English locale pack (locales/en.json) is missing or invalid");
-  }
-  return pack;
+  const fromDisk = readJsonFile<LocalePack>(getEnPackPath());
+  if (fromDisk && typeof fromDisk === "object") return fromDisk;
+  // Bundled fallback — required on Vercel when file tracing misses locales/
+  return enFallback as LocalePack;
 }
 
 export function loadUserPack(): LocalePack | null {

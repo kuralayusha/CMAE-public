@@ -3,14 +3,20 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 
+function isVercel(): boolean {
+  return Boolean(process.env.VERCEL || process.env.VERCEL_ENV);
+}
+
 /**
  * App data root.
- * - Dev / `next start`: process.cwd()
- * - Electron: CMAE_USER_DATA set by the desktop shell (app.getPath("userData"))
+ * - Electron: CMAE_USER_DATA (app.getPath("userData"))
+ * - Vercel: /tmp/cmae (ephemeral, writable)
+ * - Dev / local: process.cwd()
  */
 export function getAppRoot(): string {
   const fromEnv = process.env.CMAE_USER_DATA?.trim();
   if (fromEnv) return path.resolve(/*turbopackIgnore: true*/ fromEnv);
+  if (isVercel()) return "/tmp/cmae";
   return process.cwd();
 }
 

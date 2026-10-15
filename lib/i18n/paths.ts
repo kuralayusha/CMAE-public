@@ -6,11 +6,21 @@ import { getDataDir } from "@/lib/paths";
 
 /** Shipped English source pack (repo / standalone bundle). */
 export function getEnPackPath(): string {
-  // Prefer cwd (Next / Electron standalone ships locales next to app)
+  const cwd = process.cwd();
   const candidates = [
-    path.join(/*turbopackIgnore: true*/ process.cwd(), "locales", "en.json"),
+    path.join(/*turbopackIgnore: true*/ cwd, "locales", "en.json"),
+    path.join(/*turbopackIgnore: true*/ cwd, "..", "locales", "en.json"),
+    // Next standalone on Vercel
     path.join(
-      /*turbopackIgnore: true*/ process.cwd(),
+      /*turbopackIgnore: true*/ cwd,
+      ".next",
+      "standalone",
+      "locales",
+      "en.json",
+    ),
+    path.join(
+      /*turbopackIgnore: true*/ cwd,
+      "..",
       "..",
       "locales",
       "en.json",

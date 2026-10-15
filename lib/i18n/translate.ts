@@ -114,13 +114,23 @@ export type TranslateResult = {
   skippedLlm: boolean;
 };
 
+export type TranslateOptions = {
+  /**
+   * Persist pack to disk + update preferredLanguage.
+   * False for remote/Vercel translation-only servers (caller saves locally).
+   */
+  persist?: boolean;
+};
+
 /**
  * Build user locale pack from shipped English JSON.
- * Writes data/locales/user.json and updates preferredLanguage.
+ * When persist=true (default locally), writes data/locales/user.json.
  */
 export async function translateLocalePack(
   targetLanguage: string,
+  opts?: TranslateOptions,
 ): Promise<TranslateResult> {
+  const persist = opts?.persist !== false;
   const code = targetLanguage.toLowerCase().trim().slice(0, 16) || APP_LANGUAGE;
   const en = loadEnPack();
 
@@ -156,8 +166,14 @@ export async function translateLocalePack(
     pack = mergeShape(en, out);
   }
 
-  const meta = saveUserPack(code, pack);
-  updateSettings({ preferredLanguage: code });
+  let meta: LocaleMeta = {
+    code,
+    updatedAt: new Date().toISOString(),
+  };
+  if (persist) {
+    meta = saveUserPack(code, pack);
+    updateSettings({ preferredLanguage: code });
+  }
   return { code, pack, meta, skippedLlm };
 }
 

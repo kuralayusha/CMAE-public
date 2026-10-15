@@ -7,12 +7,21 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const en = loadEnPack();
-    const active = loadActivePack();
-    return NextResponse.json({
-      code: active.code,
-      pack: active.pack,
-      en,
-    });
+    try {
+      const active = loadActivePack();
+      return NextResponse.json({
+        code: active.code,
+        pack: active.pack,
+        en,
+      });
+    } catch {
+      // Ephemeral hosts (Vercel) may have no user pack yet
+      return NextResponse.json({
+        code: "en",
+        pack: en,
+        en,
+      });
+    }
   } catch (err) {
     return NextResponse.json(
       {
