@@ -7,14 +7,30 @@ export type ParsedMailDraft = {
   fileName: string;
 };
 
-export function parseSubjectBody(content: string): { subject: string; body: string } | null {
-  const subjectMatch = content.match(/^SUBJECT:\s*(.+)$/im);
-  const bodyMatch = content.match(/^BODY:\s*\r?\n([\s\S]*)$/im);
+/**
+ * Parse SUBJECT:/BODY: mail fields.
+ * LLMs sometimes wrap labels as **SUBJECT:** / **BODY:** — accept that so
+ * email_site_language.md is not skipped in favor of email_tr.md.
+ */
+export function parseSubjectBody(
+  content: string,
+): { subject: string; body: string } | null {
+  const text = String(content || "").replace(/^\uFEFF/, "");
+  const subjectMatch = text.match(/^\*{0,2}SUBJECT:\*{0,2}\s*(.+)$/im);
+  const bodyMatch = text.match(/^\*{0,2}BODY:\*{0,2}\s*\r?\n([\s\S]*)$/im);
   if (!subjectMatch || !bodyMatch) return null;
-  const subject = subjectMatch[1].trim();
-  const body = bodyMatch[1].trim();
+  const subject = subjectMatch[1]!
+    .trim()
+    .replace(/^\*{1,2}\s*/, "")
+    .replace(/\s*\*{1,2}$/, "");
+  const body = bodyMatch[1]!.trim();
   if (!subject || !body) return null;
   return { subject, body };
+}
+
+/** Re-serialize to canonical SUBJECT:/BODY: (no markdown on labels). */
+export function formatSubjectBody(subject: string, body: string): string {
+  return `SUBJECT: ${subject.trim()}\nBODY:\n${body.trim()}\n`;
 }
 
 export function findEmailDraftInFolder(
@@ -76,10 +92,10 @@ export function findNamedDraft(
 export function extractPrimaryEmailFromWorkspace(folderPath: string): string | null {
   if (!folderPath || !fs.existsSync(folderPath)) return null;
   for (const name of ["iletisim.md", "ozet.md"]) {
-    const full = path.join(folderPath, name);
-    if (!fs.existsSync(full)) continue;
+    const full = path.join(/*turbopackIgnore: true*/ folderPath, name);
+    if (!fs.existsSync(/*turbopackIgnore: true*/ full)) continue;
     try {
-      const text = fs.readFileSync(full, "utf8");
+      const text = fs.readFileSync(/*turbopackIgnore: true*/ full, "utf8");
       const m = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
       if (m) return m[0];
     } catch {

@@ -1,8 +1,7 @@
 import fs from "fs";
 import path from "path";
+import { getSearchJobsDir } from "@/lib/paths";
 import type { SearchJob } from "./types";
-
-const DIR = path.join(process.cwd(), "data", "search-jobs");
 
 declare global {
   // eslint-disable-next-line no-var
@@ -12,11 +11,11 @@ declare global {
 }
 
 function ensureDir() {
-  fs.mkdirSync(DIR, { recursive: true });
+  getSearchJobsDir();
 }
 
 function jobPath(id: string) {
-  return path.join(DIR, `${id}.json`);
+  return path.join(getSearchJobsDir(), `${id}.json`);
 }
 
 export function persistJobNow(job: SearchJob) {
@@ -50,13 +49,15 @@ export function persistJobDebounced(job: SearchJob, ms = 250) {
 
 export function loadJobsFromDisk(): SearchJob[] {
   try {
-    ensureDir();
+    const dir = getSearchJobsDir();
     return fs
-      .readdirSync(DIR)
+      .readdirSync(dir)
       .filter((f) => f.endsWith(".json"))
       .map((f) => {
         try {
-          return JSON.parse(fs.readFileSync(path.join(DIR, f), "utf8")) as SearchJob;
+          return JSON.parse(
+            fs.readFileSync(path.join(dir, f), "utf8"),
+          ) as SearchJob;
         } catch {
           return null;
         }
@@ -114,10 +115,11 @@ export function clearAllSearchJobs(): void {
   globalThis.__cmaeJobsHydrated = false;
 
   try {
-    if (!fs.existsSync(DIR)) return;
-    for (const name of fs.readdirSync(DIR)) {
+    const dir = getSearchJobsDir();
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
       try {
-        fs.unlinkSync(path.join(DIR, name));
+        fs.unlinkSync(path.join(dir, name));
       } catch {
         /* ignore */
       }

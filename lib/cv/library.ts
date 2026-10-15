@@ -1,7 +1,6 @@
 import fs from "fs";
 import path from "path";
 import { getWorkspaceRoot } from "@/lib/search/workspace";
-import { parseCvPdf } from "./parse";
 
 export const MAX_CV_COUNT = 4;
 
@@ -144,6 +143,7 @@ async function ensureEntryText(entry: CvEntry): Promise<CvEntry> {
   const abs = path.join(cvsDir(), entry.fileName);
   if (!fs.existsSync(abs)) return entry;
   try {
+    const { parseCvPdf } = await import("./parse");
     const { text } = await parseCvPdf(fs.readFileSync(abs));
     const index = readIndexRaw();
     const updated = index.entries.map((e) =>
@@ -190,6 +190,7 @@ export async function addCvFromBuffer(
     n += 1;
   }
 
+  const { parseCvPdf } = await import("./parse");
   const { text } = await parseCvPdf(buffer);
   fs.writeFileSync(path.join(cvsDir(), fileName), buffer);
 
@@ -369,10 +370,12 @@ export function detectSiteLanguageFromFolder(
   if (!folderPath || !fs.existsSync(folderPath)) return null;
   const tryFiles = ["ozet.md", "email_site_language.md"];
   for (const name of tryFiles) {
-    const full = path.join(folderPath, name);
-    if (!fs.existsSync(full)) continue;
+    const full = path.join(/*turbopackIgnore: true*/ folderPath, name);
+    if (!fs.existsSync(/*turbopackIgnore: true*/ full)) continue;
     try {
-      const text = fs.readFileSync(full, "utf8").slice(0, 2000);
+      const text = fs
+        .readFileSync(/*turbopackIgnore: true*/ full, "utf8")
+        .slice(0, 2000);
       const m =
         text.match(/Site dili:\s*([a-zA-Z]{2,8})/i) ||
         text.match(/site dili\s*\(([^)]+)\)/i) ||

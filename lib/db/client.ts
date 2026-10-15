@@ -2,18 +2,21 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import fs from "fs";
 import path from "path";
+import { getDataDir } from "@/lib/paths";
 import * as schema from "./schema";
-
-const dataDir = path.join(process.cwd(), "data");
-const dbPath = path.join(dataDir, "cmae.db");
 
 let sqlite: Database.Database | null = null;
 let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
+function dbPaths() {
+  const dataDir = getDataDir();
+  return { dataDir, dbPath: path.join(dataDir, "cmae.db") };
+}
+
 export function getDb() {
   if (dbInstance) return dbInstance;
 
-  fs.mkdirSync(dataDir, { recursive: true });
+  const { dbPath } = dbPaths();
   sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
@@ -69,18 +72,19 @@ export function wipeDatabaseContents() {
 /** Delete local SQLite files so the next getDb() is a cold empty schema. */
 export function wipeDatabaseFiles() {
   closeDb();
+  const { dataDir, dbPath } = dbPaths();
   const errors: string[] = [];
   for (const name of ["cmae.db", "cmae.db-wal", "cmae.db-shm"] as const) {
-    const p = path.join(dataDir, name);
+    const p = path.join(/*turbopackIgnore: true*/ dataDir, name);
     try {
-      if (fs.existsSync(p)) fs.unlinkSync(p);
+      if (fs.existsSync(/*turbopackIgnore: true*/ p)) fs.unlinkSync(p);
     } catch (err) {
       errors.push(
         `${name}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
-  if (errors.length && fs.existsSync(dbPath)) {
+  if (errors.length && fs.existsSync(/*turbopackIgnore: true*/ dbPath)) {
     // File still there — contents wipe already ran; reopen and ensure empty
     getDb();
     wipeDatabaseContents();

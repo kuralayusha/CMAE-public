@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { decryptOptional } from "@/lib/crypto/encryption";
 import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
+import { getAgentCwd } from "@/lib/paths";
 
 async function resolveApiKey(): Promise<string> {
   if (process.env.CURSOR_API_KEY) return process.env.CURSOR_API_KEY;
@@ -21,7 +22,7 @@ export async function askTrackerLlm(prompt: string): Promise<string> {
   const result = await Agent.prompt(prompt, {
     apiKey,
     model: { id: "composer-2.5" },
-    local: { cwd: process.cwd() },
+    local: { cwd: getAgentCwd() },
   });
   if (result.status === "error" || !result.result) {
     throw new Error(

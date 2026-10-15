@@ -19,7 +19,11 @@ import {
 } from "@/lib/search/workspace";
 import { assertItemActiveForDrafts } from "../inactive";
 import { askTrackerLlm } from "../llm";
-import { findEmailDraftInFolder, parseSubjectBody } from "../parse-mail-md";
+import {
+  findEmailDraftInFolder,
+  formatSubjectBody,
+  parseSubjectBody,
+} from "../parse-mail-md";
 import { replySubject, resolveThreadReplyTarget } from "../reply-thread";
 import type { DraftKind } from "../types";
 
@@ -263,12 +267,19 @@ ${JSON.stringify(recent, null, 2)}
   );
 
   const withSig = applySignatureToMailDraft(
-    `SUBJECT: ${subjectThreaded}\nBODY:\n${parsed.body}\n`,
+    formatSubjectBody(subjectThreaded, parsed.body),
     settings?.emailSignature,
   );
-  fs.writeFileSync(path.join(folder, fileName), withSig, "utf8");
   const signed = parseSubjectBody(withSig);
-  const subjectOut = signed?.subject || parsed.subject;
+  const subjectOut = signed?.subject || subjectThreaded;
+  const toWrite = signed
+    ? formatSubjectBody(signed.subject, signed.body)
+    : withSig;
+  fs.writeFileSync(
+    path.join(/*turbopackIgnore: true*/ folder, fileName),
+    toWrite,
+    "utf8",
+  );
 
   const patch: Partial<typeof trackerItems.$inferInsert> = {
     updatedAt: new Date().toISOString(),

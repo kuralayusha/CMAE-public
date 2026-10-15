@@ -133,7 +133,7 @@ export async function rebuildTrackerItems(opts?: {
     let workspaceFolder = search?.workspaceFolder ?? null;
     let folderPath = search?.folderPath ?? null;
     if (!folderPath && workspaceFolder) {
-      folderPath = path.join(root, workspaceFolder);
+      folderPath = path.join(/*turbopackIgnore: true*/ root, workspaceFolder);
     }
 
     // try attach search by company name if AI omitted id

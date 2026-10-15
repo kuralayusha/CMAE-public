@@ -51,11 +51,17 @@ export function applySignatureToMailDraft(
   signature: string | null | undefined,
 ): string {
   const text = String(raw || "").replace(/^\uFEFF/, "");
-  const match = text.match(/^(SUBJECT:\s*[^\n]+)\r?\nBODY:\s*\r?\n([\s\S]*)$/im);
+  // Tolerate **SUBJECT:** / **BODY:** from LLM markdown wrapping
+  const match = text.match(
+    /^\*{0,2}SUBJECT:\*{0,2}\s*([^\n]+)\r?\n\*{0,2}BODY:\*{0,2}\s*\r?\n([\s\S]*)$/im,
+  );
   if (!match) {
     return appendEmailSignature(text, signature);
   }
-  const subjectLine = match[1]!;
+  const subject = match[1]!
+    .trim()
+    .replace(/^\*{1,2}\s*/, "")
+    .replace(/\s*\*{1,2}$/, "");
   const body = match[2]!;
-  return `${subjectLine}\nBODY:\n${appendEmailSignature(body, signature)}`;
+  return `SUBJECT: ${subject}\nBODY:\n${appendEmailSignature(body, signature)}`;
 }

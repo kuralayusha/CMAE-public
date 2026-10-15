@@ -1,8 +1,11 @@
 import { spawn } from "child_process";
 import fs from "fs/promises";
 import path from "path";
+import { getWorkspaceRootPath } from "@/lib/paths";
 
-const ROOT = path.resolve(process.cwd(), "workspace");
+function workspaceRoot() {
+  return getWorkspaceRootPath();
+}
 
 /** Serializes create / renumber so concurrent runs never share the same index. */
 let folderIndexLock: Promise<void> = Promise.resolve();
@@ -35,15 +38,15 @@ function parseNumberedFolder(
 async function listNumberedTopLevel(): Promise<
   { index: number; name: string; rest: string }[]
 > {
-  await fs.mkdir(ROOT, { recursive: true });
-  const entries = await fs.readdir(ROOT);
+  await fs.mkdir(workspaceRoot(), { recursive: true });
+  const entries = await fs.readdir(workspaceRoot());
   const out: { index: number; name: string; rest: string }[] = [];
   for (const e of entries) {
     if (e.startsWith(".")) continue;
     const parsed = parseNumberedFolder(e);
     if (!parsed) continue;
     try {
-      const st = await fs.stat(path.join(ROOT, e));
+      const st = await fs.stat(path.join(workspaceRoot(), e));
       if (!st.isDirectory()) continue;
     } catch {
       continue;
@@ -80,16 +83,16 @@ export async function compactTopLevelFolderIndices(
       const finalName = `${targetIndex}- ${item.rest}`;
       if (item.name === finalName) continue;
       const tempPath = path.join(
-        ROOT,
+        workspaceRoot(),
         `.__renum_${targetIndex}_${Date.now()}_${i}`,
       );
-      await fs.rename(path.join(ROOT, item.name), tempPath);
+      await fs.rename(path.join(workspaceRoot(), item.name), tempPath);
       pending.push({ oldName: item.name, tempPath, finalName });
     }
 
     for (const p of pending) {
-      const dest = path.join(ROOT, p.finalName);
-      if (!dest.startsWith(ROOT + path.sep)) {
+      const dest = path.join(workspaceRoot(), p.finalName);
+      if (!dest.startsWith(workspaceRoot() + path.sep)) {
         throw new Error("Invalid workspace path");
       }
       await fs.rename(p.tempPath, dest);
@@ -107,15 +110,15 @@ export async function createCompanyFolder(companyName: string): Promise<{
   folderPath: string;
 }> {
   return withFolderIndexLock(async () => {
-    await fs.mkdir(ROOT, { recursive: true });
+    await fs.mkdir(workspaceRoot(), { recursive: true });
     let index = await nextIndexUnlocked();
     const base = safeName(companyName);
 
     // Retry on rare name clash (e.g. leftover folder)
     for (let attempt = 0; attempt < 50; attempt++) {
       const folderName = `${index}- ${base}`;
-      const folderPath = path.join(ROOT, folderName);
-      if (!folderPath.startsWith(ROOT + path.sep) && folderPath !== ROOT) {
+      const folderPath = path.join(workspaceRoot(), folderName);
+      if (!folderPath.startsWith(workspaceRoot() + path.sep) && folderPath !== workspaceRoot()) {
         throw new Error("Invalid workspace path");
       }
       try {
@@ -143,8 +146,8 @@ export async function renameCompanyFolder(
     const parsed = parseNumberedFolder(base);
     const index = parsed ? String(parsed.index) : String(await nextIndexUnlocked());
     const folderName = `${index}- ${safeName(companyName)}`;
-    const folderPath = path.join(ROOT, folderName);
-    if (!folderPath.startsWith(ROOT + path.sep)) {
+    const folderPath = path.join(workspaceRoot(), folderName);
+    if (!folderPath.startsWith(workspaceRoot() + path.sep)) {
       throw new Error("Invalid workspace path");
     }
     if (folderPath !== currentPath) {
@@ -166,7 +169,7 @@ export async function writeFile(
   if (fileName.includes("..") || fileName.includes("/") || fileName.includes("\\")) {
     throw new Error("Invalid file name");
   }
-  if (!folderPath.startsWith(ROOT + path.sep)) {
+  if (!folderPath.startsWith(workspaceRoot() + path.sep)) {
     throw new Error("Invalid folder");
   }
   const full = path.join(folderPath, fileName);
@@ -175,7 +178,7 @@ export async function writeFile(
 }
 
 export function getWorkspaceRoot() {
-  return ROOT;
+  return workspaceRoot();
 }
 
 /** Open path in OS file manager (Finder / Explorer / xdg-open). */
@@ -333,16 +336,16 @@ export function resolveWorkspacePath(relativePath = ""): string {
   if (cleaned.includes("\0") || cleaned.split("/").some((p) => p === "..")) {
     throw new Error("Invalid path");
   }
-  const full = path.resolve(ROOT, cleaned);
-  if (full !== ROOT && !full.startsWith(ROOT + path.sep)) {
+  const full = path.resolve(workspaceRoot(), cleaned);
+  if (full !== workspaceRoot() && !full.startsWith(workspaceRoot() + path.sep)) {
     throw new Error("Invalid workspace path");
   }
   return full;
 }
 
 function toRelative(full: string): string {
-  if (full === ROOT) return "";
-  return path.relative(ROOT, full).split(path.sep).join("/");
+  if (full === workspaceRoot()) return "";
+  return path.relative(workspaceRoot(), full).split(path.sep).join("/");
 }
 
 export async function listWorkspace(relativePath = ""): Promise<{
@@ -357,7 +360,7 @@ export async function listWorkspace(relativePath = ""): Promise<{
   }
 
   const dir = resolveWorkspacePath(relativePath);
-  await fs.mkdir(ROOT, { recursive: true });
+  await fs.mkdir(workspaceRoot(), { recursive: true });
 
   let st;
   try {
@@ -446,7 +449,7 @@ export async function readWorkspaceFile(relativePath: string): Promise<{
   binary: boolean;
 }> {
   const full = resolveWorkspacePath(relativePath);
-  if (full === ROOT) throw new Error("File path required");
+  if (full === workspaceRoot()) throw new Error("File path required");
 
   let st;
   try {
@@ -516,7 +519,7 @@ export async function renameWorkspaceEntry(
   newName: string,
 ): Promise<{ path: string; name: string; kind: "dir" | "file" }> {
   const full = resolveWorkspacePath(relativePath);
-  if (full === ROOT) throw new Error("workspace root cannot be renamed");
+  if (full === workspaceRoot()) throw new Error("workspace root cannot be renamed");
 
   let st;
   try {
@@ -528,7 +531,7 @@ export async function renameWorkspaceEntry(
   const nextName = safeEntryName(newName);
   const parent = path.dirname(full);
   const target = path.join(parent, nextName);
-  if (target !== ROOT && !target.startsWith(ROOT + path.sep)) {
+  if (target !== workspaceRoot() && !target.startsWith(workspaceRoot() + path.sep)) {
     throw new Error("Invalid target path");
   }
   if (target === full) {
@@ -561,7 +564,7 @@ export async function deleteWorkspaceEntry(
   relativePath: string,
 ): Promise<{ path: string }> {
   const full = resolveWorkspacePath(relativePath);
-  if (full === ROOT) throw new Error("workspace root cannot be deleted");
+  if (full === workspaceRoot()) throw new Error("workspace root cannot be deleted");
 
   try {
     await fs.stat(full);
@@ -578,7 +581,7 @@ export async function markFolderCanceled(currentPath: string): Promise<{
   folderName: string;
   folderPath: string;
 }> {
-  if (!currentPath.startsWith(ROOT + path.sep)) {
+  if (!currentPath.startsWith(workspaceRoot() + path.sep)) {
     throw new Error("Invalid folder");
   }
   const base = path.basename(currentPath);
@@ -586,8 +589,8 @@ export async function markFolderCanceled(currentPath: string): Promise<{
     return { folderName: base, folderPath: currentPath };
   }
   const folderName = `${base} (canceled)`;
-  const folderPath = path.join(ROOT, folderName);
-  if (!folderPath.startsWith(ROOT + path.sep)) {
+  const folderPath = path.join(workspaceRoot(), folderName);
+  if (!folderPath.startsWith(workspaceRoot() + path.sep)) {
     throw new Error("Invalid destination folder");
   }
   try {

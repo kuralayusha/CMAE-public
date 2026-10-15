@@ -31,7 +31,7 @@ Reviewer scores (threshold ~72). If it dislikes the pack it rewinds to `rewindTo
 
 Terminals: lines tagged `[scout]`, `[writer]`, `[reviewer]`, …
 
-## Run
+## Run (web / local Next)
 
 ```bash
 npm install
@@ -39,3 +39,30 @@ cp .env.example .env
 npm run db:migrate
 npm run dev
 ```
+
+## Desktop
+
+Electron shell + Next standalone. Data lives under the app userData folder (not the project directory). First launch creates `CMAE_MASTER_KEY` automatically; friends configure Gmail (and API keys) in onboarding.
+
+Native modules (`better-sqlite3`, `@napi-rs/canvas`) must be built on the target OS — Mac build on macOS, Windows build on Windows (or CI).
+
+### Local
+
+```bash
+npm run desktop:dev          # Next + Electron window
+npm run desktop:build:mac    # macOS only → dist-desktop/*.dmg
+npm run desktop:build:win    # Windows only → dist-desktop/*.exe
+```
+
+### CI
+
+- Mac: [`.github/workflows/desktop-mac.yml`](.github/workflows/desktop-mac.yml) on `macos-latest` → artefact **CMAE-mac-dmg**
+- Windows: [`.github/workflows/desktop-win.yml`](.github/workflows/desktop-win.yml) on `windows-latest` → artefact **CMAE-win-nsis**
+
+Push to `main` (desktop-related paths) or **Actions → Desktop Mac / Desktop Win → Run workflow**.
+
+### First open (unsigned)
+
+**Mac (Gatekeeper):** Open the `.dmg`, drag **CMAE** to Applications. Right-click **CMAE** → **Open** → confirm **Open**. After that, normal double-click works.
+
+**Windows (SmartScreen):** Run the `.exe` installer. If SmartScreen warns, choose **More info** → **Run anyway**, then finish the NSIS wizard.

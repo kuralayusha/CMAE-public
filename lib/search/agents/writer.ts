@@ -4,10 +4,21 @@ import {
 } from "@/lib/mail/signature";
 import { formatPreferencesForApplication } from "@/lib/settings/preferences";
 import { getJobPreferences, getSettingsRow } from "@/lib/settings/service";
+import {
+  formatSubjectBody,
+  parseSubjectBody,
+} from "@/lib/tracker/parse-mail-md";
 import type { RunContext } from "../context";
 import { askLlm } from "../llm";
 import { speak } from "../speak";
 import { writeFile } from "../workspace";
+
+/** Canonical SUBJECT:/BODY: so tracker draft picker never skips site language. */
+function canonicalizeMailDraft(raw: string): string {
+  const parsed = parseSubjectBody(raw);
+  if (!parsed) return raw;
+  return formatSubjectBody(parsed.subject, parsed.body);
+}
 
 /** Hard rules — draft is copy/paste or sync-to-Gmail ready. */
 const MAIL_FIELD_RULES = `
@@ -144,8 +155,12 @@ ${MAIL_FIELD_RULES}`,
   );
 
   const signature = getSettingsRow()?.emailSignature ?? null;
-  ctx.draftSite = applySignatureToMailDraft(ctx.draftSite, signature);
-  ctx.draftPreferred = applySignatureToMailDraft(ctx.draftPreferred, signature);
+  ctx.draftSite = canonicalizeMailDraft(
+    applySignatureToMailDraft(ctx.draftSite, signature),
+  );
+  ctx.draftPreferred = canonicalizeMailDraft(
+    applySignatureToMailDraft(ctx.draftPreferred, signature),
+  );
 
   await writeFile(
     ctx.folderPath,

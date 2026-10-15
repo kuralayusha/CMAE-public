@@ -1,6 +1,66 @@
-import { PDFParse } from "pdf-parse";
+import fs from "fs";
+import { createRequire } from "module";
+import path from "path";
+
+/** Resolve modules from the running server cwd (standalone or project root). */
+const requireFromCwd = createRequire(path.join(process.cwd(), "package.json"));
+
+type PdfParseModule = typeof import("pdf-parse");
+
+/**
+ * Lazy-load pdf-parse so pages that only list CVs (onboarding / tracker layout)
+ * do not pull pdfjs + @napi-rs/canvas at request time.
+ */
+async function loadPdfParse(): Promise<PdfParseModule> {
+  // pdfjs polyfills DOMMatrix via @napi-rs/canvas when available
+  try {
+    await import("@napi-rs/canvas");
+  } catch {
+    /* optional at runtime; prepare-desktop should ship it for packaged apps */
+  }
+  return import("pdf-parse");
+}
+
+/** Point pdf.js at a real worker file (standalone NFT often drops pdf.worker.mjs). */
+function ensurePdfWorker(PDFParse: PdfParseModule["PDFParse"]) {
+  // Prefer cwd-local package first so a parent project node_modules cannot steal resolve.
+  const candidates = [
+    path.join(
+      process.cwd(),
+      "node_modules",
+      "pdfjs-dist",
+      "legacy",
+      "build",
+      "pdf.worker.mjs",
+    ),
+    path.join(
+      process.cwd(),
+      "node_modules",
+      "pdfjs-dist",
+      "legacy",
+      "build",
+      "pdf.worker.min.mjs",
+    ),
+  ];
+  try {
+    candidates.push(
+      requireFromCwd.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs"),
+    );
+  } catch {
+    /* ignore */
+  }
+
+  for (const worker of candidates) {
+    if (fs.existsSync(/*turbopackIgnore: true*/ worker)) {
+      PDFParse.setWorker(worker);
+      return;
+    }
+  }
+}
 
 export async function parseCvPdf(buffer: Buffer): Promise<{ text: string }> {
+  const { PDFParse } = await loadPdfParse();
+  ensurePdfWorker(PDFParse);
   const parser = new PDFParse({ data: buffer });
   try {
     const result = await parser.getText();

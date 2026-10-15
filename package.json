@@ -2,12 +2,19 @@
   "name": "cmae",
   "version": "0.1.0",
   "private": true,
+  "description": "CMAE — Cold Mail AI Engine (desktop)",
+  "author": "CMAE",
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "tsx scripts/migrate.ts"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "desktop:dev": "node scripts/desktop-dev.mjs",
+    "desktop:prepare": "node scripts/prepare-desktop.mjs",
+    "desktop:build:mac": "npm run build && npm run desktop:prepare && electron-builder --mac --config electron-builder.yml",
+    "desktop:build:win": "npm run build && npm run desktop:prepare && electron-builder --win --config electron-builder.yml"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.37",
@@ -35,6 +42,8 @@
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.2",
     "drizzle-kit": "^0.31.11",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.0.12",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "playwright": "^1.64.0",
@@ -48,6 +57,8 @@
     "esbuild@0.25.12": true,
     "esbuild@0.28.2": true,
     "unrs-resolver@1.12.2": true,
-    "fsevents@2.3.3": true
+    "fsevents@2.3.3": true,
+    "electron@39.2.7": true,
+    "electron-winstaller@5.4.0": true
   }
 }

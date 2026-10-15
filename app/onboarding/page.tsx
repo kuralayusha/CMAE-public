@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { OnboardingWizard } from "@/components/OnboardingWizard";
 import { isOnboardingComplete } from "@/lib/onboarding/status";
 
+export const dynamic = "force-dynamic";
+
 export default function OnboardingPage() {
   if (isOnboardingComplete()) {
     redirect("/tracker");

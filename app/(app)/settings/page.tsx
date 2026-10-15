@@ -97,6 +97,12 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [wipeOpen, setWipeOpen] = useState(false);
+  const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    setIsDesktop(Boolean(window.cmaeDesktop?.isDesktop));
+  }, []);
 
   async function loadCvs() {
     const res = await fetch("/api/settings/cv");
@@ -240,6 +246,31 @@ export default function SettingsPage() {
       }
       // Hard navigation — soft router can keep stale (app) layout / RSC cache
       window.location.assign(data.redirectTo || "/onboarding");
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  async function confirmUninstall() {
+    if (!window.cmaeDesktop?.uninstallApp) {
+      setStatus("Uninstall is only available in the desktop app");
+      setUninstallOpen(false);
+      return;
+    }
+    setBusy(true);
+    setStatus(null);
+    try {
+      try {
+        for (const k of Object.keys(localStorage)) {
+          if (k.startsWith("cmae.help.seen.")) localStorage.removeItem(k);
+        }
+      } catch {
+        /* ignore */
+      }
+      await window.cmaeDesktop.uninstallApp();
+      // App exits; if it somehow stays open:
+      setStatus("Uninstalling… the app will close shortly.");
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -633,6 +664,25 @@ export default function SettingsPage() {
             >
               Delete All Data
             </Button>
+
+            {isDesktop ? (
+              <>
+                <p className="cmae-form-hint" style={{ marginTop: "1.25rem" }}>
+                  Removes CMAE from this Mac: all local data under Application
+                  Support and the installed app. Your{" "}
+                  <code>.dmg</code> installer file is not deleted — you can
+                  reinstall from it later.
+                </p>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => setUninstallOpen(true)}
+                >
+                  Uninstall CMAE
+                </Button>
+              </>
+            ) : null}
           </SettingsAcc>
         </form>
       </PageShell>
@@ -677,6 +727,48 @@ export default function SettingsPage() {
                 disabled={busy}
               >
                 {busy ? "Deleting…" : "Yes, delete everything"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {uninstallOpen ? (
+        <div
+          className="term-modal-backdrop"
+          role="presentation"
+          onClick={() => !busy && setUninstallOpen(false)}
+        >
+          <div
+            className="term-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="uninstall-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 id="uninstall-title">Uninstall CMAE?</h3>
+            <p>
+              This removes the app and all of its data on this Mac (database,
+              workspace, settings, CVs). The{" "}
+              <code>.dmg</code> file itself is left alone so you can install
+              again later. The app will quit immediately.
+            </p>
+            <div className="term-modal-actions">
+              <button
+                type="button"
+                className="term-modal-btn term-modal-btn-ghost"
+                onClick={() => setUninstallOpen(false)}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="term-modal-btn term-modal-btn-danger"
+                onClick={() => void confirmUninstall()}
+                disabled={busy}
+              >
+                {busy ? "Uninstalling…" : "Yes, uninstall"}
               </button>
             </div>
           </div>

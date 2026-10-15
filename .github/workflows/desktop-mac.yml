@@ -1,0 +1,55 @@
+name: Desktop Mac
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "components/**"
+      - "lib/**"
+      - "desktop/**"
+      - "scripts/prepare-desktop.mjs"
+      - "scripts/desktop-dev.mjs"
+      - "scripts/after-pack.cjs"
+      - "electron-builder.yml"
+      - "next.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/desktop-mac.yml"
+
+concurrency:
+  group: desktop-mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dmg:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Mac desktop app
+        run: npm run desktop:build:mac
+        env:
+          # Unsigned local distribution; friends open via right-click → Open
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Upload DMG artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CMAE-mac-dmg
+          path: dist-desktop/*.dmg
+          if-no-files-found: error
+          retention-days: 14

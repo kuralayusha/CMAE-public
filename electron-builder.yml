@@ -1,0 +1,34 @@
+appId: app.cmae.desktop
+productName: CMAE
+copyright: Copyright CMAE
+directories:
+  output: dist-desktop
+  buildResources: desktop/build
+files:
+  - desktop/**/*
+  - package.json
+afterPack: scripts/after-pack.cjs
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+dmg:
+  artifactName: CMAE-${version}-mac-${arch}.${ext}
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: CMAE-${version}-win-${arch}.${ext}
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+

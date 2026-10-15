@@ -346,6 +346,8 @@ export function TrackerList() {
       upserted?: number;
       itemCount?: number;
       showToast?: boolean;
+      mode?: "incremental" | "hard";
+      keptOutsideWindow?: number;
     }) => {
       setSections(data.sections || []);
       setSync(data.sync || null);
