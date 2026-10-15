@@ -1,10 +1,6 @@
+/**
+ * Client-safe i18n exports only.
+ * Server modules (pack / t / translate) must be imported from their own files.
+ */
 export { APP_LANGUAGE, type LocaleMeta, type LocalePack } from "./types";
-export {
-  clearUserPack,
-  loadActivePack,
-  loadEnPack,
-  loadLocaleMeta,
-  loadUserPack,
-  saveUserPack,
-} from "./pack";
-export { interpolate, t, tFromPacks, type TVars } from "./t";
+export { interpolate, tFromPacks, type TVars } from "./lookup";

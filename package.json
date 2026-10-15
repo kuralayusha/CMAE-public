@@ -29,6 +29,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sanitize-html": "^2.18.0",
+    "server-only": "^0.0.1",
     "slugify": "^1.6.9",
     "zod": "^4.6.6"
   },

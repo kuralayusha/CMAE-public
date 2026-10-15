@@ -1,5 +1,7 @@
-import fs from "fs";
-import path from "path";
+import "server-only";
+
+import fs from "node:fs";
+import path from "node:path";
 
 /**
  * App data root.

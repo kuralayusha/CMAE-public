@@ -1,4 +1,6 @@
-import fs from "fs";
+import "server-only";
+
+import fs from "node:fs";
 import {
   getEnPackPath,
   getLocaleMetaPath,
@@ -76,20 +78,4 @@ export function loadActivePack(): { code: string; pack: LocalePack } {
   return { code: APP_LANGUAGE, pack: loadEnPack() };
 }
 
-export function getNested(
-  pack: LocalePack,
-  key: string,
-): string | LocalePack | undefined {
-  const parts = key.split(".").filter(Boolean);
-  let cur: string | LocalePack | undefined = pack;
-  for (const part of parts) {
-    if (cur == null || typeof cur === "string") return undefined;
-    cur = cur[part];
-  }
-  return cur;
-}
-
-export function lookupString(pack: LocalePack, key: string): string | undefined {
-  const v = getNested(pack, key);
-  return typeof v === "string" ? v : undefined;
-}
+export { getNested, lookupString } from "./lookup";

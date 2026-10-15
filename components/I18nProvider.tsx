@@ -9,8 +9,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { tFromPacks, type TVars } from "@/lib/i18n/lookup";
 import { APP_LANGUAGE, type LocalePack } from "@/lib/i18n/types";
-import { tFromPacks, type TVars } from "@/lib/i18n/t";
 
 type I18nContextValue = {
   code: string;
@@ -28,11 +28,27 @@ type PackResponse = {
   en: LocalePack;
 };
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [code, setCode] = useState<string>(APP_LANGUAGE);
-  const [pack, setPackState] = useState<LocalePack>({});
-  const [en, setEn] = useState<LocalePack>({});
-  const [ready, setReady] = useState(false);
+type Props = {
+  children: ReactNode;
+  /** SSR seed — avoids key flash on first paint / refresh */
+  initialCode?: string;
+  initialPack?: LocalePack;
+  initialEn?: LocalePack;
+};
+
+export function I18nProvider({
+  children,
+  initialCode = APP_LANGUAGE,
+  initialPack = {},
+  initialEn = {},
+}: Props) {
+  const hasSeed = Object.keys(initialEn).length > 0;
+  const [code, setCode] = useState<string>(initialCode || APP_LANGUAGE);
+  const [pack, setPackState] = useState<LocalePack>(
+    Object.keys(initialPack).length ? initialPack : initialEn,
+  );
+  const [en, setEn] = useState<LocalePack>(initialEn);
+  const [ready, setReady] = useState(hasSeed);
 
   const reload = useCallback(async () => {
     try {
@@ -50,12 +66,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Background refresh only — seed already painted the correct language
     void reload();
   }, [reload]);
 
   const setPack = useCallback((nextCode: string, nextPack: LocalePack) => {
     setCode(nextCode);
     setPackState(nextPack);
+    setReady(true);
   }, []);
 
   const value = useMemo<I18nContextValue>(

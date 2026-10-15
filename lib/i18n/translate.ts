@@ -1,3 +1,5 @@
+import "server-only";
+
 import { Agent } from "@cursor/sdk";
 import { eq } from "drizzle-orm";
 import { decryptOptional } from "@/lib/crypto/encryption";

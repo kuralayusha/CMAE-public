@@ -1,5 +1,7 @@
-import fs from "fs";
-import path from "path";
+import "server-only";
+
+import fs from "node:fs";
+import path from "node:path";
 import { getDataDir } from "@/lib/paths";
 
 /** Shipped English source pack (repo / standalone bundle). */
