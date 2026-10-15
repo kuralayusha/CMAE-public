@@ -2,6 +2,8 @@ import "server-only";
 
 import { Agent } from "@cursor/sdk";
 import { eq } from "drizzle-orm";
+import fs from "node:fs";
+import path from "node:path";
 import { decryptOptional } from "@/lib/crypto/encryption";
 import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
@@ -13,10 +15,19 @@ import {
   loadUserPack,
   saveUserPack,
 } from "./pack";
+import { isVercelRuntime } from "./remote";
 import { APP_LANGUAGE, type LocaleMeta, type LocalePack } from "./types";
 
 async function resolveApiKey(): Promise<string> {
-  if (process.env.CURSOR_API_KEY) return process.env.CURSOR_API_KEY;
+  if (process.env.CURSOR_API_KEY?.trim()) {
+    return process.env.CURSOR_API_KEY.trim();
+  }
+  // On the remote host, only env key is supported (no local Settings DB).
+  if (isVercelRuntime()) {
+    throw new Error(
+      "CURSOR_API_KEY must be set on the translation server (Vercel env)",
+    );
+  }
   const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
   const key = decryptOptional(row?.cursorApiKeyEnc);
   if (!key) {
@@ -27,12 +38,43 @@ async function resolveApiKey(): Promise<string> {
   return key;
 }
 
+/**
+ * Cursor SDK persists under `$HOME/.cursor/projects/...`.
+ * Vercel home is not writable — relocate HOME + cwd to /tmp before Agent.prompt.
+ */
+function ensureWritableCursorHome(): string {
+  if (isVercelRuntime()) {
+    const home = "/tmp/cmae-home";
+    const cwd = "/tmp/cmae-agent";
+    process.env.HOME = home;
+    process.env.TMPDIR = "/tmp";
+    process.env.XDG_CONFIG_HOME = path.join(home, ".config");
+    process.env.XDG_DATA_HOME = path.join(home, ".local", "share");
+    process.env.XDG_CACHE_HOME = path.join(home, ".cache");
+    for (const dir of [
+      home,
+      cwd,
+      path.join(home, ".cursor", "projects"),
+      process.env.XDG_CONFIG_HOME,
+      process.env.XDG_DATA_HOME,
+      process.env.XDG_CACHE_HOME,
+    ]) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return cwd;
+  }
+  const cwd = getAgentCwd();
+  fs.mkdirSync(cwd, { recursive: true });
+  return cwd;
+}
+
 async function askTranslateLlm(prompt: string): Promise<string> {
+  const cwd = ensureWritableCursorHome();
   const apiKey = await resolveApiKey();
   const result = await Agent.prompt(prompt, {
     apiKey,
     model: { id: "composer-2.5" },
-    local: { cwd: getAgentCwd() },
+    local: { cwd },
   });
   if (result.status === "error" || !result.result) {
     throw new Error(

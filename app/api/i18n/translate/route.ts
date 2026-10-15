@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadEnPack, saveUserPack } from "@/lib/i18n/pack";
-import {
-  DEFAULT_I18N_REMOTE_BASE,
-  getRemoteTranslateUrl,
-  isVercelRuntime,
-} from "@/lib/i18n/remote";
+import { getRemoteTranslateUrl, isVercelRuntime } from "@/lib/i18n/remote";
 import { translateLocalePack } from "@/lib/i18n/translate";
 import type { LocalePack } from "@/lib/i18n/types";
 import { updateSettings } from "@/lib/settings/service";
@@ -13,18 +9,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 /** Locale pack translation can take a while (chunked LLM). */
 export const maxDuration = 300;
-
-function preferRemoteHost(): boolean {
-  // On Vercel we are the translation host — run LLM here.
-  if (isVercelRuntime()) return false;
-  const raw = (
-    process.env.CMAE_I18N_URL ||
-    process.env.NEXT_PUBLIC_CMAE_I18N_URL ||
-    DEFAULT_I18N_REMOTE_BASE
-  ).trim();
-  if (!raw || raw === "local" || raw === "0" || raw === "false") return false;
-  return true;
-}
 
 export async function POST(req: Request) {
   try {
@@ -39,7 +23,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Remote translation server (this deployment on Vercel)
+    // Vercel = translation host (key lives here only)
     if (isVercelRuntime()) {
       const result = await translateLocalePack(targetLanguage, {
         persist: false,
@@ -54,9 +38,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // Local / desktop: call remote host, then persist pack locally
-    if (preferRemoteHost()) {
-      const remoteUrl = getRemoteTranslateUrl();
+    // Desktop / local Next: proxy to remote host, then save pack on this device
+    const remoteUrl = getRemoteTranslateUrl();
+    if (remoteUrl) {
       const remoteRes = await fetch(remoteUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,7 +52,6 @@ export async function POST(req: Request) {
         pack?: LocalePack;
         en?: LocalePack;
         skippedLlm?: boolean;
-        meta?: { code: string; updatedAt: string };
       };
       if (!remoteRes.ok) {
         return NextResponse.json(
@@ -100,7 +83,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // Explicit local LLM translate (CMAE_I18N_URL=local)
+    // Opt-out: CMAE_I18N_URL=local → translate with this machine's key
     const result = await translateLocalePack(targetLanguage, {
       persist: true,
     });

@@ -1,21 +1,33 @@
 /**
- * Client + server safe helpers for the remote i18n translation host.
- * Default production host: https://cmae.vercel.app
+ * Remote i18n translation host.
+ *
+ * Desktop/local apps proxy language-pack translation here so CURSOR_API_KEY
+ * lives only on the server — not inside the shipped desktop app.
  */
 
 export const DEFAULT_I18N_REMOTE_BASE = "https://cmae.vercel.app";
 
-/** Base URL without trailing slash, or empty to use same-origin. */
-export function getI18nRemoteBase(): string {
-  const fromPublic = process.env.NEXT_PUBLIC_CMAE_I18N_URL?.trim();
-  const fromServer = process.env.CMAE_I18N_URL?.trim();
-  const raw = fromPublic || fromServer || DEFAULT_I18N_REMOTE_BASE;
+/**
+ * Remote base URL (no trailing slash).
+ * - Unset → default host (https://cmae.vercel.app)
+ * - "local" / "0" / "false" → translate on this machine instead
+ */
+export function getConfiguredI18nRemoteBase(): string | null {
+  const raw = (
+    process.env.CMAE_I18N_URL ||
+    process.env.NEXT_PUBLIC_CMAE_I18N_URL ||
+    ""
+  ).trim();
+  if (raw === "local" || raw === "0" || raw === "false") return null;
+  if (!raw) return DEFAULT_I18N_REMOTE_BASE;
   return raw.replace(/\/$/, "");
 }
 
-/** Absolute translate URL on the remote host. */
-export function getRemoteTranslateUrl(): string {
-  return `${getI18nRemoteBase()}/api/i18n/translate`;
+/** Absolute translate URL, or null when local-only mode is forced. */
+export function getRemoteTranslateUrl(): string | null {
+  const base = getConfiguredI18nRemoteBase();
+  if (!base) return null;
+  return `${base}/api/i18n/translate`;
 }
 
 export function isVercelRuntime(): boolean {
