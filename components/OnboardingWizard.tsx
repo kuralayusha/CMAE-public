@@ -62,6 +62,7 @@ const BOOT_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
   { id: "profile", label: "Profile and preferences saved" },
   { id: "gmail", label: "Trying Gmail IMAP connection" },
   { id: "cursor", label: "Trying Cursor API key" },
+  { id: "locale", label: "Language pack ready" },
   { id: "cv", label: "CV library ready" },
   { id: "unlock", label: "Unlocking Tracker / Search" },
 ];
@@ -256,9 +257,67 @@ export function OnboardingWizard() {
     setForm((f) => ({ ...f, gmailAppPassword: "", cursorApiKey: "" }));
   }
 
+  async function skipToWelcomeWithLang(code: string, pack: LocalePack) {
+    setPack(code, pack);
+    setForm((f) => ({ ...f, preferredLanguage: code }));
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredLanguage: code }),
+      });
+    } catch {
+      /* preference save is best-effort before welcome */
+    }
+    setStep(STEPS.indexOf("welcome"));
+  }
+
   async function goNext() {
     setError(null);
     if (stepId === "language") {
+      const lang = form.preferredLanguage.trim() || APP_LANGUAGE;
+      const code = lang.toLowerCase();
+
+      // English (or already-translated pack) → skip localePrep animation
+      if (code === APP_LANGUAGE || code.startsWith("en")) {
+        setBusy(true);
+        try {
+          const packRes = await fetch("/api/i18n/pack");
+          const packData = packRes.ok ? await packRes.json() : null;
+          await skipToWelcomeWithLang(
+            APP_LANGUAGE,
+            (packData?.en || packData?.pack || {}) as LocalePack,
+          );
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const packRes = await fetch("/api/i18n/pack");
+        if (packRes.ok) {
+          const packData = await packRes.json();
+          const existing = String(packData.code || "").toLowerCase();
+          const hasPack =
+            existing === code &&
+            packData.pack &&
+            typeof packData.pack === "object" &&
+            Object.keys(packData.pack as object).length > 0;
+          if (hasPack) {
+            await skipToWelcomeWithLang(existing, packData.pack as LocalePack);
+            return;
+          }
+        }
+      } catch {
+        /* fall through to localePrep */
+      } finally {
+        setBusy(false);
+      }
+
       setStep(STEPS.indexOf("localePrep"));
       void runLocalePrep();
       return;
@@ -482,6 +541,64 @@ export function OnboardingWizard() {
     }
   }
 
+  /**
+   * After Cursor is verified, only (re)build the locale pack if missing.
+   * Always paint a running tick first — a silent multi-minute translate
+   * after "cursor ok" looked like a freeze on the CV step.
+   */
+  async function ensureBootLocalePack(
+    softOk: (id: string) => Promise<void>,
+  ) {
+    const pref = (form.preferredLanguage.trim() || "en").toLowerCase();
+    if (pref === "en" || pref.startsWith("en")) {
+      await softOk("locale");
+      return;
+    }
+
+    try {
+      const packRes = await fetch("/api/i18n/pack");
+      if (packRes.ok) {
+        const packData = await packRes.json();
+        const code = String(packData.code || "").toLowerCase();
+        const hasPack =
+          code === pref &&
+          packData.pack &&
+          typeof packData.pack === "object" &&
+          Object.keys(packData.pack as object).length > 0;
+        if (hasPack) {
+          setPack(code, packData.pack as LocalePack);
+          await softOk("locale");
+          return;
+        }
+      }
+    } catch {
+      /* fall through to translate */
+    }
+
+    patchBoot("locale", {
+      status: "running",
+      detail: t("onboarding.bootLocalePreparing"),
+    });
+    // Let React paint the … tick before the long request blocks
+    await sleep(120);
+
+    try {
+      const tr = await fetch("/api/i18n/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetLanguage: pref }),
+      });
+      const trData = await tr.json();
+      if (tr.ok && trData.pack) {
+        setPack(String(trData.code || pref), trData.pack as LocalePack);
+      }
+    } catch {
+      /* keep English UI — boot can still continue */
+    }
+
+    patchBoot("locale", { status: "ok", detail: undefined });
+  }
+
   async function runBootSequence() {
     setBootItems(freshBootItems());
     setBootDone(false);
@@ -549,23 +666,9 @@ export function OnboardingWizard() {
 
       patchBoot("cursor", { status: "ok" });
 
-      // Finish deferred locale pack now that Cursor key works
-      const pref = form.preferredLanguage.trim() || "en";
-      if (pref.toLowerCase().slice(0, 2) !== "en") {
-        try {
-          const tr = await fetch("/api/i18n/translate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ targetLanguage: pref }),
-          });
-          const trData = await tr.json();
-          if (tr.ok && trData.pack) {
-            setPack(String(trData.code || pref), trData.pack as LocalePack);
-          }
-        } catch {
-          /* keep English UI */
-        }
-      }
+      // Language pack: skip if already built in localePrep; otherwise show
+      // a running step (silent await here looked like a freeze).
+      await ensureBootLocalePack(softOk);
 
       await softOk("cv");
 
@@ -838,14 +941,14 @@ export function OnboardingWizard() {
             <h1 className="cmae-onb-title">{t("onboarding.profileTitle")}</h1>
             <p className="cmae-onb-why">{t("onboarding.profileWhy")}</p>
             <div className="cmae-onb-fields">
-              <Field label={t("onboarding.fullName")}>
+              <Field label={t("fields.fullName")}>
                 <input
                   className="cmae-input"
                   value={form.fullName}
                   onChange={(e) =>
                     setForm({ ...form, fullName: e.target.value })
                   }
-                  placeholder={t("onboarding.fullNamePlaceholder")}
+                  placeholder={t("fields.fullNamePlaceholder")}
                   autoFocus
                 />
               </Field>

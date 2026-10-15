@@ -143,9 +143,11 @@
       "profile": "Profile and preferences saved",
       "gmail": "Trying Gmail IMAP connection",
       "cursor": "Trying Cursor API key",
+      "locale": "Language pack ready",
       "cv": "CV library ready",
       "unlock": "Unlocking Tracker / Search"
     },
+    "bootLocalePreparing": "Preparing language pack…",
     "bootGmailTrying": "Trying Gmail IMAP connection…",
     "bootGmailOk": "Gmail IMAP connection verified",
     "bootGmailFail": "Gmail IMAP failed",
