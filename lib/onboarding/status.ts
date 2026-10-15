@@ -58,10 +58,15 @@ export function isOnboardingFlagSet(): boolean {
   return filled(row?.onboardingCompletedAt);
 }
 
-/** Complete only when flag is set AND all required fields are present. */
+/**
+ * Wizard finished (flag set). Used for route gates.
+ *
+ * Gaps are validated once at `/api/onboarding/complete`. Re-checking them on
+ * every navigation caused a desktop loop: env-only Cursor key / transient
+ * paths made `complete` flip false → bounce back to onboarding + refresh.
+ */
 export function isOnboardingComplete(): boolean {
-  if (!isOnboardingFlagSet()) return false;
-  return getOnboardingGaps().length === 0;
+  return isOnboardingFlagSet();
 }
 
 export function assertOnboarded(): void {

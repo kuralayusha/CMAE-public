@@ -4,6 +4,7 @@ import {
   isOnboardingComplete,
   markOnboardingComplete,
 } from "@/lib/onboarding/status";
+import { persistEnvCursorKeyIfNeeded } from "@/lib/onboarding/verify";
 import { updateSettings } from "@/lib/settings/service";
 
 export const runtime = "nodejs";
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
             : undefined,
       });
     }
+
+    // Env-only Cursor key would leave a gap after restart / packaged app
+    persistEnvCursorKeyIfNeeded();
 
     const gaps = getOnboardingGaps();
     if (gaps.length) {

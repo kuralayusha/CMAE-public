@@ -160,8 +160,8 @@ export function OnboardingWizard() {
       try {
         const res = await fetch("/api/onboarding/status");
         const data = await res.json();
-        if (data.complete) {
-          router.replace("/tracker");
+        if (data.complete || data.flagSet) {
+          window.location.assign("/tracker");
           return;
         }
         const s = data.settings || {};
@@ -692,8 +692,8 @@ export function OnboardingWizard() {
       patchBoot("unlock", { status: "ok" });
       setBootDone(true);
       await sleep(1200);
-      router.replace("/tracker");
-      router.refresh();
+      // Hard navigation — soft replace + refresh bounced desktop back to onboarding
+      window.location.assign("/tracker");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setBootFailMsg(msg);

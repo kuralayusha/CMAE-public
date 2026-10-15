@@ -5,7 +5,10 @@ import { decryptOptional } from "@/lib/crypto/encryption";
 import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
 import { getAgentCwd } from "@/lib/paths";
-import { getGmailCredentials } from "@/lib/settings/service";
+import {
+  getGmailCredentials,
+  updateSettings,
+} from "@/lib/settings/service";
 
 export type VerifyCheck = {
   ok: boolean;
@@ -21,10 +24,27 @@ export type OnboardingVerifyResult = {
 };
 
 function resolveCursorApiKey(): string | null {
+  try {
+    const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
+    const fromDb = decryptOptional(row?.cursorApiKeyEnc)?.trim();
+    if (fromDb) return fromDb;
+  } catch {
+    /* corrupt/wrong master key — fall through to env */
+  }
+  return process.env.CURSOR_API_KEY?.trim() || null;
+}
+
+/** Persist env Cursor key into SQLite so packaged desktop stays onboarded. */
+export function persistEnvCursorKeyIfNeeded(): void {
+  try {
+    const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
+    if (decryptOptional(row?.cursorApiKeyEnc)?.trim()) return;
+  } catch {
+    /* treat as missing */
+  }
   const env = process.env.CURSOR_API_KEY?.trim();
-  if (env) return env;
-  const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
-  return decryptOptional(row?.cursorApiKeyEnc)?.trim() || null;
+  if (!env) return;
+  updateSettings({ cursorApiKey: env });
 }
 
 /** Live IMAP login against Gmail — does not fetch mail. */
@@ -91,6 +111,7 @@ export async function verifyCursorApiKey(): Promise<VerifyCheck> {
         error: `Cursor API did not respond (status=${result.status ?? "unknown"})`,
       };
     }
+    persistEnvCursorKeyIfNeeded();
     return { ok: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
