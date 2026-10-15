@@ -1,0 +1,115 @@
+.cmae-dl {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 64px 24px 80px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(40, 40, 40, 0.06), transparent),
+    var(--bg, #fff);
+  color: var(--ink, #1a1a1a);
+}
+
+.cmae-dl-inner {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.cmae-dl-brand {
+  margin: 0;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8a8a8a);
+}
+
+.cmae-dl-title {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 2.1rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.cmae-dl-lead {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-muted, #555);
+}
+
+.cmae-dl-meta {
+  margin: 4px 0 0;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  color: var(--ink-faint, #8a8a8a);
+}
+
+.cmae-dl-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.cmae-dl-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--line, #e3e3e3);
+  background: transparent;
+  color: var(--ink, #1a1a1a);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cmae-dl-btn:hover {
+  border-color: var(--ink, #1a1a1a);
+}
+
+.cmae-dl-btn.is-primary {
+  background: var(--ink, #1a1a1a);
+  border-color: var(--ink, #1a1a1a);
+  color: #fff;
+}
+
+.cmae-dl-btn.is-primary:hover {
+  opacity: 0.92;
+}
+
+.cmae-dl-btn-sub {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.65;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+}
+
+.cmae-dl-note {
+  margin: 18px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-muted, #555);
+}
+
+.cmae-dl-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cmae-dl-notes {
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  background: var(--bg-subtle, #fafafa);
+  border: 1px solid var(--line, #e3e3e3);
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+}
