@@ -43,10 +43,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Allow Mac codesign (strip identity: null)
+        run: node scripts/ci-enable-mac-signing.mjs
+
       - name: Build Mac desktop app
         run: npm run desktop:build:mac
         env:
-          # Artefact-only builds stay unsigned. Use Desktop Release + tag for signed publish.
+          # Without MAC_CSC_LINK → unsigned artefact. With secret → Developer ID sign.
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}

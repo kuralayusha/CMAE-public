@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require("electron");
 const { spawn } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -14,6 +14,68 @@ const {
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.CMAE_DEV_URL || "http://127.0.0.1:3000";
+
+/** Application menu without Toggle Developer Tools (macOS + Windows). */
+function installAppMenu() {
+  const viewSubmenu = [
+    { role: "reload" },
+    { role: "forceReload" },
+    { type: "separator" },
+    { role: "resetZoom" },
+    { role: "zoomIn" },
+    { role: "zoomOut" },
+    { type: "separator" },
+    { role: "togglefullscreen" },
+  ];
+
+  /** @type {Electron.MenuItemConstructorOptions[]} */
+  const template = [
+    ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    { label: "View", submenu: viewSubmenu },
+    { role: "windowMenu" },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/** Block common DevTools accelerators even if a role slips through. */
+function blockDevToolsShortcuts(webContents) {
+  webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown") return;
+
+    const key = String(input.key || "").toLowerCase();
+    const code = String(input.code || "").toLowerCase();
+    const isF12 = key === "f12" || code === "f12";
+    const isI = key === "i" || code === "keyi";
+    const isJ = key === "j" || code === "keyj";
+    const isC = key === "c" || code === "keyc";
+    const isU = key === "u" || code === "keyu";
+
+    // F12
+    if (isF12) {
+      event.preventDefault();
+      return;
+    }
+
+    // Ctrl+Shift+I / Cmd+Option+I (and J/C variants), Ctrl+U / Cmd+U
+    const mod =
+      process.platform === "darwin"
+        ? input.meta && input.alt
+        : input.control && input.shift;
+    if (mod && (isI || isJ || isC)) {
+      event.preventDefault();
+      return;
+    }
+
+    const viewSource =
+      process.platform === "darwin" ? input.meta && isU : input.control && isU;
+    if (viewSource && !input.alt && !input.shift) {
+      event.preventDefault();
+    }
+  });
+}
 
 /** @type {import('child_process').ChildProcess | null} */
 let serverProcess = null;
@@ -304,8 +366,12 @@ function createWindow(url) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // All builds (dev + packaged), macOS + Windows
+      devTools: false,
     },
   });
+
+  blockDevToolsShortcuts(mainWindow.webContents);
 
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
     shell.openExternal(target);
@@ -347,6 +413,7 @@ async function boot() {
 }
 
 app.whenReady().then(() => {
+  installAppMenu();
   initAutoUpdater(broadcastUpdateEvent);
   boot().catch((err) => {
     console.error(err);

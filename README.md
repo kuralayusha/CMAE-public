@@ -90,6 +90,8 @@ Without these, release builds still publish **unsigned** artefacts (Gatekeeper /
 
 Encode a cert: `base64 -i cert.p12 | pbcopy` (macOS) / `certutil -encode cert.pfx -` (Windows).
 
+Local Mac builds keep `mac.identity: null` in `electron-builder.yml` so keychain “Apple Development” certs are never auto-picked. CI runs `scripts/ci-enable-mac-signing.mjs` to strip that line before build, then signs only when `MAC_CSC_LINK` is set.
+
 ### CI (artefacts only)
 
 - Mac: [`.github/workflows/desktop-mac.yml`](.github/workflows/desktop-mac.yml) → artefact **CMAE-mac-dmg**

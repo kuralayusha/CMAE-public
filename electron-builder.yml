@@ -26,12 +26,15 @@ mac:
     - target: zip
       arch:
         - arm64
-  # Unsigned when CSC_LINK unset + CSC_IDENTITY_AUTO_DISCOVERY=false.
-  # CI sets MAC_CSC_LINK for Developer ID + notarize.
+  # Local builds: force unsigned (avoids ambiguous "Apple Development" keychain
+  # identities). CI runs scripts/ci-enable-mac-signing.mjs to strip this, then
+  # signs with MAC_CSC_LINK when present.
+  identity: null
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: desktop/build/entitlements.mac.plist
   entitlementsInherit: desktop/build/entitlements.mac.plist
+
 dmg:
   artifactName: CMAE-${version}-mac-${arch}.${ext}
 win:

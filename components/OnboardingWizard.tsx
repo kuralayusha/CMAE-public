@@ -60,13 +60,13 @@ type BootItem = {
 };
 
 const BOOT_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
-  { id: "db", label: "Database ready" },
-  { id: "profile", label: "Profile and preferences saved" },
-  { id: "gmail", label: "Trying Gmail IMAP connection" },
-  { id: "cursor", label: "Trying Cursor API key" },
-  { id: "locale", label: "Language pack ready" },
-  { id: "cv", label: "CV library ready" },
-  { id: "unlock", label: "Unlocking Tracker / Search" },
+  { id: "db", label: "db" },
+  { id: "profile", label: "profile" },
+  { id: "gmail", label: "gmail" },
+  { id: "cursor", label: "cursor" },
+  { id: "locale", label: "locale" },
+  { id: "cv", label: "cv" },
+  { id: "unlock", label: "unlock" },
 ];
 
 function freshBootItems(): BootItem[] {
@@ -557,10 +557,12 @@ export function OnboardingWizard() {
         );
       }
       if (!completeData.complete && !completeData.onboardingCompletedAt) {
-        throw new Error("Onboarding flag was not saved — try Start system again");
+        throw new Error(
+          "Setup could not be saved — try Finish setup again",
+        );
       }
 
-      // Reopen SQLite on the sticky app-root so RSC layout sees the same flag
+      // Reopen SQLite on the sticky app-root so status matches Tracker gate
       const reconcileRes = await fetch("/api/onboarding/reconcile", {
         method: "POST",
         cache: "no-store",
@@ -572,7 +574,7 @@ export function OnboardingWizard() {
       ) {
         throw new Error(
           reconcileData.error ||
-            "Onboarding finished but the unlock flag could not be confirmed — try Start system again",
+            "Setup finished but CMAE could not unlock Tracker — try Finish setup again",
         );
       }
 
