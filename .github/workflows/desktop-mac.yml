@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Allow Mac codesign (strip identity: null)
+      - name: "Allow Mac codesign (strip identity null)"
         run: node scripts/ci-enable-mac-signing.mjs
 
       - name: Build Mac desktop app
