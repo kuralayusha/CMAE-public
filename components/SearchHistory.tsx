@@ -1,5 +1,7 @@
 "use client";
 
+import { useT } from "@/components/I18nProvider";
+
 export type SearchHistoryJob = {
   id: string;
   url: string;
@@ -10,15 +12,15 @@ export type SearchHistoryJob = {
   displayName?: string;
 };
 
-const STATUS_META: Record<
+const STATUS_TONE: Record<
   string,
-  { label: string; tone: "run" | "done" | "cancel" | "err" | "idle" }
+  "run" | "done" | "cancel" | "err" | "idle"
 > = {
-  queued: { label: "queued", tone: "run" },
-  running: { label: "running", tone: "run" },
-  done: { label: "done", tone: "done" },
-  canceled: { label: "canceled", tone: "cancel" },
-  error: { label: "error", tone: "err" },
+  queued: "run",
+  running: "run",
+  done: "done",
+  canceled: "cancel",
+  error: "err",
 };
 
 type Props = {
@@ -36,20 +38,21 @@ export function SearchHistory({
   loading = false,
   onSelect,
 }: Props) {
+  const t = useT();
   return (
-    <aside className="cmae-hist" aria-label="Search history">
+    <aside className="cmae-hist" aria-label={t("search.historyAria")}>
       <div className="cmae-hist-scroll">
         {loading && items.length === 0 ? (
           <div className="cmae-hist-empty" role="status">
             <span className="cmae-hist-empty-mark" aria-hidden />
-            <p>Loading…</p>
+            <p>{t("common.loading")}</p>
           </div>
         ) : items.length === 0 ? (
           <div className="cmae-hist-empty">
             <span className="cmae-hist-empty-mark" aria-hidden />
-            <p>No searches yet</p>
+            <p>{t("search.historyEmpty")}</p>
             <span className="cmae-hist-empty-hint">
-              When you start with a new URL, it will appear here.
+              {t("search.historyEmptyHint")}
             </span>
           </div>
         ) : (
@@ -61,10 +64,11 @@ export function SearchHistory({
                   job.folderName ||
                   hostOf(job.url),
               );
-              const meta = STATUS_META[job.status] || {
-                label: job.status,
-                tone: "idle" as const,
-              };
+              const tone = STATUS_TONE[job.status] || "idle";
+              const statusKey = `terminal.status.${job.status}`;
+              const statusLabel = t(statusKey);
+              const label =
+                statusLabel === statusKey ? job.status : statusLabel;
               const inPanel = panelIds.includes(job.id);
               const selected = selectedId === job.id;
 
@@ -74,7 +78,7 @@ export function SearchHistory({
                     type="button"
                     className={[
                       "cmae-hist-row",
-                      `tone-${meta.tone}`,
+                      `tone-${tone}`,
                       inPanel ? "is-open" : "",
                       selected ? "is-selected" : "",
                     ]
@@ -86,17 +90,19 @@ export function SearchHistory({
                     aria-pressed={inPanel}
                   >
                     <span
-                      className={`cmae-hist-dot tone-${meta.tone}`}
+                      className={`cmae-hist-dot tone-${tone}`}
                       aria-hidden
                     />
                     <span className="cmae-hist-body">
                       <span className="cmae-hist-name">{name}</span>
                       <span className="cmae-hist-meta">
-                        <span className={`cmae-hist-badge tone-${meta.tone}`}>
-                          {meta.label}
+                        <span className={`cmae-hist-badge tone-${tone}`}>
+                          {label}
                         </span>
                         {inPanel ? (
-                          <span className="cmae-hist-open">open</span>
+                          <span className="cmae-hist-open">
+                            {t("common.open")}
+                          </span>
                         ) : null}
                       </span>
                     </span>

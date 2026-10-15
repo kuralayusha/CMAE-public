@@ -115,7 +115,7 @@ export function PageHelpModal({
             className="cmae-btn cmae-btn-primary"
             onClick={onClose}
           >
-            Got it
+            {t("help.gotIt")}
           </button>
         </div>
       </div>

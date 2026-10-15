@@ -93,8 +93,8 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
           </button>
         </div>
         <div className="term-title">
-          <span className="term-title-main">Gmail sync</span>
-          <span className="term-title-sub">tracker</span>
+          <span className="term-title-main">{t("tracker.sync")}</span>
+          <span className="term-title-sub">{t("sync.subtitle")}</span>
         </div>
         <div className={`term-status term-status-${status}`}>
           {status === "running" ? <span className="term-pulse" /> : null}
@@ -110,7 +110,7 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
         >
           {lines.length === 0 ? (
             <div className="term-line" style={{ color: "#64748b" }}>
-              Sync steps will appear here…
+              {t("sync.waiting")}
             </div>
           ) : null}
           {lines.map((line) => (

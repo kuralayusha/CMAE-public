@@ -45,7 +45,9 @@ export function Terminal({
   const t = useT();
   const [lines, setLines] = useState<TermLine[]>([]);
   const [status, setStatus] = useState<JobStatus>("queued");
-  const [folderName, setFolderName] = useState(initialFolder || "(pending)");
+  const [folderName, setFolderName] = useState(
+    initialFolder || "",
+  );
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [stuckBottom, setStuckBottom] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
@@ -191,12 +193,16 @@ export function Terminal({
       >
         <div className="term-titlebar">
           {!hideChromeButtons ? (
-            <div className="term-tls" role="group" aria-label="Terminal controls">
+            <div
+              className="term-tls"
+              role="group"
+              aria-label={t("terminal.ariaControls")}
+            >
               <button
                 type="button"
                 className="term-tl term-tl-close"
-                title="Cancel"
-                aria-label="Cancel"
+                title={t("terminal.cancel")}
+                aria-label={t("terminal.cancel")}
                 disabled={!canCancel}
                 onClick={() => setConfirmOpen(true)}
                 style={{
@@ -213,8 +219,10 @@ export function Terminal({
               <button
                 type="button"
                 className="term-tl term-tl-min"
-                title={collapsed ? "Expand" : "Collapse"}
-                aria-label={collapsed ? "Expand" : "Collapse"}
+                title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
+                aria-label={
+                  collapsed ? t("terminal.expand") : t("terminal.collapse")
+                }
                 onClick={() => setCollapsed((c) => !c)}
                 style={DOT_HIT}
               >
@@ -227,8 +235,8 @@ export function Terminal({
               <button
                 type="button"
                 className="term-tl term-tl-max"
-                title="Open fullscreen"
-                aria-label="Open fullscreen"
+                title={t("terminal.openFullscreen")}
+                aria-label={t("terminal.openFullscreen")}
                 onClick={openFullscreen}
                 style={DOT_HIT}
               >
@@ -242,10 +250,12 @@ export function Terminal({
           ) : null}
           <div className="term-title">
             <span className="term-title-main">{title}</span>
-            <span className="term-title-sub">{folderName}</span>
+            <span className="term-title-sub">
+              {folderName || t("terminal.pendingFolder")}
+            </span>
           </div>
 
-          <label className="term-mode-switch" title="Log mode">
+          <label className="term-mode-switch" title={t("terminal.logMode")}>
             <span className={logMode === "simple" ? "on" : ""}>
               {t("terminal.simple")}
             </span>
@@ -353,7 +363,9 @@ export function Terminal({
                 onClick={() => void confirmCancel()}
                 disabled={cancelBusy}
               >
-                {cancelBusy ? "Canceling…" : "Yes, cancel"}
+                {cancelBusy
+                  ? t("terminal.canceling")
+                  : t("terminal.confirmCancel")}
               </button>
             </div>
           </div>

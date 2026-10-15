@@ -177,7 +177,7 @@ export default function SettingsPage() {
         setPack(String(trData.code || nextLang), trData.pack as LocalePack);
         setStatus(t("settings.languageUpdated"));
       } else {
-        setStatus("Saved");
+        setStatus(t("settings.saved"));
       }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
@@ -197,7 +197,9 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not upload CV");
       setCvs(data.cvs || []);
-      setStatus(`CV added: ${data.entry?.label || file.name}`);
+      setStatus(
+        t("settings.cvAdded", { name: data.entry?.label || file.name }),
+      );
       await load();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
@@ -221,7 +223,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not update CV");
       setCvs(data.cvs || []);
-      setStatus("CV updated");
+      setStatus(t("settings.cvUpdated"));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -230,7 +232,7 @@ export default function SettingsPage() {
   }
 
   async function removeCv(id: string) {
-    if (!window.confirm("Delete this CV?")) return;
+    if (!window.confirm(t("settings.cvConfirmDelete"))) return;
     setBusy(true);
     setStatus(null);
     try {
@@ -240,7 +242,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not delete CV");
       setCvs(data.cvs || []);
-      setStatus("CV deleted");
+      setStatus(t("settings.cvDeleted"));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -273,7 +275,7 @@ export default function SettingsPage() {
 
   async function confirmUninstall() {
     if (!window.cmaeDesktop?.uninstallApp) {
-      setStatus("Uninstall is only available in the desktop app");
+      setStatus(t("settings.uninstallDesktopOnly"));
       setUninstallOpen(false);
       return;
     }
@@ -289,7 +291,7 @@ export default function SettingsPage() {
       }
       await window.cmaeDesktop.uninstallApp();
       // App exits; if it somehow stays open:
-      setStatus("Uninstalling… the app will close shortly.");
+      setStatus(t("settings.uninstalling"));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -304,16 +306,16 @@ export default function SettingsPage() {
         subtitle={t("help.settings.subtitle")}
       >
         <form className="cmae-form" onSubmit={save}>
-          <SettingsAcc title="Profile">
+          <SettingsAcc title={t("settings.accProfile")}>
             <Field
-              label="Full name"
-              hint="Used in the email body and attachment filename."
+              label={t("fields.fullName")}
+              hint={t("fields.fullNameHint")}
             >
               <input
                 className="cmae-input"
                 value={form.fullName}
                 onChange={(e) => setForm({ ...form, fullName: e.target.value })}
-                placeholder="Your Full Name"
+                placeholder={t("fields.fullNamePlaceholder")}
               />
             </Field>
             <Field
@@ -336,13 +338,13 @@ export default function SettingsPage() {
             </Field>
           </SettingsAcc>
 
-          <SettingsAcc title="Gmail">
+          <SettingsAcc title={t("settings.accGmail")}>
             <Field
-              label="Gmail address"
+              label={t("fields.gmailAddress")}
               hint={
                 meta?.hasGmailAppPassword
-                  ? "App Password saved ✓"
-                  : "No App Password yet"
+                  ? t("fields.gmailPwSaved")
+                  : t("fields.gmailPwMissing")
               }
             >
               <input
@@ -353,8 +355,8 @@ export default function SettingsPage() {
               />
             </Field>
             <Field
-              label="Gmail App Password"
-              hint="Leave blank to keep the current password."
+              label={t("fields.gmailAppPassword")}
+              hint={t("fields.gmailAppPasswordKeep")}
             >
               <input
                 className="cmae-input"
@@ -369,15 +371,15 @@ export default function SettingsPage() {
             </Field>
           </SettingsAcc>
 
-          <SettingsAcc title="Cursor API Key">
+          <SettingsAcc title={t("settings.accCursor")}>
             <Field
-              label="API Key"
+              label={t("fields.cursorApiKeyShort")}
               hint={
                 meta?.hasCursorApiKey
-                  ? "Saved in the database ✓ — leave blank to keep it"
+                  ? t("fields.cursorKeySavedKeep")
                   : meta?.cursorApiKeyFromEnv
-                    ? "CURSOR_API_KEY is set in .env — you can leave this blank"
-                    : "Get it from cursor.com/dashboard/api"
+                    ? t("fields.cursorKeyFromEnvKeep")
+                    : t("fields.cursorKeyHint")
               }
             >
               <input
@@ -391,10 +393,10 @@ export default function SettingsPage() {
             </Field>
           </SettingsAcc>
 
-          <SettingsAcc title="Email preferences">
+          <SettingsAcc title={t("settings.accEmail")}>
             <Field
-              label="Follow-up days"
-              hint="How many days to wait before sending a reminder if there's no reply. Recommended: 4–7 days."
+              label={t("fields.followUpDays")}
+              hint={t("fields.followUpHint")}
             >
               <input
                 className="cmae-input"
@@ -411,8 +413,8 @@ export default function SettingsPage() {
               />
             </Field>
             <Field
-              label="Email signature"
-              hint="Line breaks are preserved; AI cannot change this."
+              label={t("fields.emailSignature")}
+              hint={t("fields.emailSignatureHint")}
             >
               <textarea
                 className="cmae-input cmae-textarea"
@@ -429,36 +431,33 @@ export default function SettingsPage() {
             </Field>
           </SettingsAcc>
 
-          <SettingsAcc title="Job preferences">
-            <p className="cmae-form-hint">
-              Work type and notice period appear in application / follow-up
-              texts. Salary is only used in replies when the other party asks.
-            </p>
+          <SettingsAcc title={t("settings.accJob")}>
+            <p className="cmae-form-hint">{t("settings.jobWhy")}</p>
 
-            <Field label="Work type" hint="Multiple selections allowed">
+            <Field label={t("fields.workType")} hint={t("fields.workTypeHintMulti")}>
               <div className="cmae-check-row">
                 {(
                   [
-                    ["fulltime", "Full-time"],
-                    ["parttime", "Part-time"],
-                    ["contracted", "Contracted"],
+                    ["fulltime", "fields.workFulltime"],
+                    ["parttime", "fields.workParttime"],
+                    ["contracted", "fields.workContracted"],
                   ] as const
-                ).map(([id, label]) => (
+                ).map(([id, labelKey]) => (
                   <label key={id} className="cmae-check">
                     <input
                       type="checkbox"
                       checked={prefs.workTypes.includes(id)}
                       onChange={() => toggleWorkType(id)}
                     />
-                    {label}
+                    {t(labelKey)}
                   </label>
                 ))}
               </div>
             </Field>
 
             <Field
-              label="Notice period (weeks)"
-              hint="0 = available immediately / can start right away"
+              label={t("fields.noticeWeeks")}
+              hint={t("fields.noticeHintSettings")}
             >
               <input
                 className="cmae-input"
@@ -475,9 +474,9 @@ export default function SettingsPage() {
               />
             </Field>
 
-            <h3 className="cmae-form-subsection">Salary expectations</h3>
+            <h3 className="cmae-form-subsection">{t("fields.salarySection")}</h3>
             <div className="cmae-form-grid">
-              <Field label="Period">
+              <Field label={t("fields.period")}>
                 <select
                   className="cmae-input"
                   value={prefs.salaryPeriod}
@@ -488,11 +487,11 @@ export default function SettingsPage() {
                     })
                   }
                 >
-                  <option value="monthly">Monthly</option>
-                  <option value="yearly">Yearly</option>
+                  <option value="monthly">{t("fields.monthly")}</option>
+                  <option value="yearly">{t("fields.yearly")}</option>
                 </select>
               </Field>
-              <Field label="Gross / Net">
+              <Field label={t("fields.grossNet")}>
                 <select
                   className="cmae-input"
                   value={prefs.salaryKind}
@@ -503,11 +502,11 @@ export default function SettingsPage() {
                     })
                   }
                 >
-                  <option value="gross">Gross</option>
-                  <option value="net">Net</option>
+                  <option value="gross">{t("fields.gross")}</option>
+                  <option value="net">{t("fields.net")}</option>
                 </select>
               </Field>
-              <Field label="Currency">
+              <Field label={t("fields.currency")}>
                 <select
                   className="cmae-input"
                   value={prefs.salaryCurrency}
@@ -518,13 +517,13 @@ export default function SettingsPage() {
                     })
                   }
                 >
-                  <option value="eur">Euro (EUR)</option>
-                  <option value="usd">Dollar (USD)</option>
-                  <option value="other">Other</option>
+                  <option value="eur">{t("fields.euroEur")}</option>
+                  <option value="usd">{t("fields.dollarUsd")}</option>
+                  <option value="other">{t("fields.other")}</option>
                 </select>
               </Field>
               {prefs.salaryCurrency === "other" ? (
-                <Field label="Other currency" hint="e.g. TL, TRY, CHF">
+                <Field label={t("fields.otherCurrency")} hint={t("fields.otherCurrencyHint")}>
                   <input
                     className="cmae-input"
                     value={prefs.salaryCurrencyOther}
@@ -535,7 +534,7 @@ export default function SettingsPage() {
                   />
                 </Field>
               ) : null}
-              <Field label="Min salary" hint="Your expected floor">
+              <Field label={t("fields.minSalary")} hint={t("fields.minSalaryHint")}>
                 <input
                   className="cmae-input"
                   type="number"
@@ -560,14 +559,13 @@ export default function SettingsPage() {
                   setPrefs({ ...prefs, salaryNegotiable: e.target.checked })
                 }
               />
-              Open to negotiation
+              {t("fields.negotiable")}
             </label>
           </SettingsAcc>
 
-          <SettingsAcc title="CV">
+          <SettingsAcc title={t("settings.accCv")}>
             <p className="cmae-form-hint">
-              Up to {cvMax} PDFs. Attached automatically to application /
-              follow-up drafts based on language and tags.
+              {t("settings.cvHint", { max: cvMax })}
             </p>
 
             {cvs.length ? (
@@ -575,7 +573,7 @@ export default function SettingsPage() {
                 {cvs.map((cv) => (
                   <li key={cv.id} className="cmae-cv-item">
                     <div className="cmae-form-grid">
-                      <Field label="Label">
+                      <Field label={t("fields.cvLabel")}>
                         <input
                           className="cmae-input"
                           defaultValue={cv.label}
@@ -586,7 +584,7 @@ export default function SettingsPage() {
                           }}
                         />
                       </Field>
-                      <Field label="Language">
+                      <Field label={t("fields.cvLanguage")}>
                         <select
                           className="cmae-input"
                           value={cv.language}
@@ -602,7 +600,7 @@ export default function SettingsPage() {
                           ))}
                         </select>
                       </Field>
-                      <Field label="Tags (comma-separated)" hint="e.g. marketing, frontend">
+                      <Field label={t("fields.cvTags")} hint={t("fields.cvTagsHint")}>
                         <input
                           className="cmae-input"
                           defaultValue={cv.tags.join(", ")}
@@ -627,7 +625,7 @@ export default function SettingsPage() {
                           disabled={busy}
                           onChange={() => void patchCv(cv.id, { isDefault: true })}
                         />
-                        Default
+                        {t("common.default")}
                       </label>
                       <span className="cmae-form-status">{cv.fileName}</span>
                       <Button
@@ -636,18 +634,18 @@ export default function SettingsPage() {
                         disabled={busy}
                         onClick={() => void removeCv(cv.id)}
                       >
-                        Delete
+                        {t("common.delete")}
                       </Button>
                     </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="cmae-form-hint">No CVs yet.</p>
+              <p className="cmae-form-hint">{t("settings.cvEmpty")}</p>
             )}
 
             {cvs.length < cvMax ? (
-              <Field label="Upload PDF">
+              <Field label={t("fields.uploadPdf")}>
                 <input
                   type="file"
                   accept="application/pdf"
@@ -661,39 +659,33 @@ export default function SettingsPage() {
               </Field>
             ) : (
               <p className="cmae-form-hint">
-                Limit reached ({cvMax}). Delete one to add another.
+                {t("settings.cvLimit", { max: cvMax })}
               </p>
             )}
           </SettingsAcc>
 
           <div className="cmae-form-actions">
             <Button type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Save"}
+              {busy ? t("common.saving") : t("common.save")}
             </Button>
             {status ? <span className="cmae-form-status">{status}</span> : null}
           </div>
 
-          <SettingsAcc title="Danger zone" danger>
-            <p className="cmae-form-hint">
-              Deletes the database, workspace company folders, CVs, and search
-              history. The app returns to onboarding as if freshly installed.
-            </p>
+          <SettingsAcc title={t("settings.accDanger")} danger>
+            <p className="cmae-form-hint">{t("settings.dangerWipeHint")}</p>
             <Button
               type="button"
               variant="danger"
               disabled={busy}
               onClick={() => setWipeOpen(true)}
             >
-              Delete All Data
+              {t("settings.dangerWipeBtn")}
             </Button>
 
             {isDesktop ? (
               <>
                 <p className="cmae-form-hint" style={{ marginTop: "1.25rem" }}>
-                  Removes CMAE from this Mac: all local data under Application
-                  Support and the installed app. Your{" "}
-                  <code>.dmg</code> installer file is not deleted — you can
-                  reinstall from it later.
+                  {t("settings.dangerUninstallHint")}
                 </p>
                 <Button
                   type="button"
@@ -701,7 +693,7 @@ export default function SettingsPage() {
                   disabled={busy}
                   onClick={() => setUninstallOpen(true)}
                 >
-                  Uninstall CMAE
+                  {t("settings.dangerUninstallBtn")}
                 </Button>
               </>
             ) : null}
@@ -728,11 +720,8 @@ export default function SettingsPage() {
             aria-labelledby="wipe-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="wipe-title">Delete all data?</h3>
-            <p>
-              Settings, emails, tracker, CVs, workspace folders, and search
-              history will be permanently deleted. This cannot be undone.
-            </p>
+            <h3 id="wipe-title">{t("settings.wipeTitle")}</h3>
+            <p>{t("settings.wipeBody")}</p>
             <div className="term-modal-actions">
               <button
                 type="button"
@@ -740,7 +729,7 @@ export default function SettingsPage() {
                 onClick={() => setWipeOpen(false)}
                 disabled={busy}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -748,7 +737,7 @@ export default function SettingsPage() {
                 onClick={() => void confirmWipe()}
                 disabled={busy}
               >
-                {busy ? "Deleting…" : "Yes, delete everything"}
+                {busy ? t("common.deleting") : t("settings.wipeConfirm")}
               </button>
             </div>
           </div>
@@ -768,13 +757,8 @@ export default function SettingsPage() {
             aria-labelledby="uninstall-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="uninstall-title">Uninstall CMAE?</h3>
-            <p>
-              This removes the app and all of its data on this Mac (database,
-              workspace, settings, CVs). The{" "}
-              <code>.dmg</code> file itself is left alone so you can install
-              again later. The app will quit immediately.
-            </p>
+            <h3 id="uninstall-title">{t("settings.uninstallTitle")}</h3>
+            <p>{t("settings.uninstallBody")}</p>
             <div className="term-modal-actions">
               <button
                 type="button"
@@ -782,7 +766,7 @@ export default function SettingsPage() {
                 onClick={() => setUninstallOpen(false)}
                 disabled={busy}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 type="button"
@@ -790,7 +774,9 @@ export default function SettingsPage() {
                 onClick={() => void confirmUninstall()}
                 disabled={busy}
               >
-                {busy ? "Uninstalling…" : "Yes, uninstall"}
+                {busy
+                  ? t("settings.uninstallingBtn")
+                  : t("settings.uninstallConfirm")}
               </button>
             </div>
           </div>

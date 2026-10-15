@@ -143,7 +143,7 @@ export default function SearchPage() {
                 value={urls}
                 onChange={(e) => setUrls(e.target.value)}
                 rows={5}
-                placeholder={"https://stExampleSoft.com\nhttps://example-corp.com/careers"}
+                placeholder={t("search.placeholder")}
                 style={{
                   fontFamily: "var(--font-mono), ui-monospace, monospace",
                   fontSize: 13,
@@ -157,7 +157,7 @@ export default function SearchPage() {
               />
               <div className="cmae-start-actions">
                 <Button type="submit" disabled={busy || !urls.trim()}>
-                  {busy ? "Starting agents…" : "Start research"}
+                  {busy ? t("search.starting") : t("search.start")}
                 </Button>
               </div>
               {error ? <p className="cmae-error">{error}</p> : null}
@@ -169,18 +169,19 @@ export default function SearchPage() {
                   {t("search.loadingTerminals")}
                 </p>
               ) : panelJobs.length === 0 ? (
-                <p className="cmae-panel-empty">
-                  Panel is empty. Start a new research or click a past entry on the right.
-                </p>
+                <p className="cmae-panel-empty">{t("search.panelEmpty")}</p>
               ) : (
                 <div className="term-grid">
                   {panelJobs.map((j) => (
                     <div key={j.id} id={`term-${j.id}`} className="term-slot">
                       {!LIVE.has(j.status) ? (
                         <div className="term-slot-bar">
-                          <span>Past session</span>
-                          <button type="button" onClick={() => removeFromPanel(j.id)}>
-                            Remove from panel
+                          <span>{t("search.pastSession")}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeFromPanel(j.id)}
+                          >
+                            {t("search.removeFromPanel")}
                           </button>
                         </div>
                       ) : null}

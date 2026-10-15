@@ -67,14 +67,36 @@ const BOOT_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
 ];
 
 const LOCALE_PREP_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
-  { id: "selected", label: "Language selected" },
-  { id: "contacting", label: "Contacting translation service" },
-  { id: "preparing", label: "Preparing your language pack" },
-  { id: "writing", label: "Writing locale files" },
-  { id: "switching", label: "Switching UI to your language" },
+  { id: "selected", label: "Language locked in" },
+  { id: "connecting", label: "Opening translation channel" },
+  { id: "catalog", label: "Reading English UI catalog" },
+  { id: "nav", label: "Translating navigation & settings" },
+  { id: "mail", label: "Translating mail & workspace labels" },
+  { id: "polish", label: "Polishing phrasing & punctuation" },
+  { id: "assembling", label: "Assembling your language pack" },
+  { id: "writing", label: "Saving locale files" },
+  { id: "switching", label: "Applying language to the UI" },
 ];
 
-const LOCALE_PREP_MIN_MS = 3200;
+/** Steps advanced while the translate request is in flight (slow, realistic). */
+const LOCALE_PREP_WORK_IDS = [
+  "catalog",
+  "nav",
+  "mail",
+  "polish",
+  "assembling",
+] as const;
+
+/** Dwell per work step before advancing; last step holds until translate resolves. */
+const LOCALE_PREP_WORK_DWELL_MS = [4200, 7800, 10000, 12000] as const;
+
+const LOCALE_PREP_WAIT_HINT_KEYS = [
+  "onboarding.localePrepWait0",
+  "onboarding.localePrepWait1",
+  "onboarding.localePrepWait2",
+] as const;
+
+const LOCALE_PREP_MIN_MS = 5200;
 
 function freshBootItems(): BootItem[] {
   return BOOT_TEMPLATE.map((b) => ({ ...b, status: "pending" as const }));
@@ -312,15 +334,6 @@ export function OnboardingWizard() {
     const lang = form.preferredLanguage.trim() || "en";
     const started = Date.now();
 
-    const animate = async () => {
-      const order = LOCALE_PREP_TEMPLATE.map((x) => x.id);
-      for (const id of order) {
-        patchLocalePrep(id, { status: "running" });
-        await sleep(520);
-        patchLocalePrep(id, { status: "ok" });
-      }
-    };
-
     const translate = async () => {
       const res = await fetch("/api/i18n/translate", {
         method: "POST",
@@ -356,8 +369,95 @@ export function OnboardingWizard() {
       return { deferred: false as const };
     };
 
+    /** Advance work steps slowly while `work` runs; never finish early before it. */
+    async function paceWorkSteps(work: Promise<unknown>) {
+      let settled = false;
+      let failure: unknown = null;
+      const tracked = work.then(
+        (value) => {
+          settled = true;
+          return value;
+        },
+        (err) => {
+          settled = true;
+          failure = err;
+          throw err;
+        },
+      );
+
+      for (let i = 0; i < LOCALE_PREP_WORK_IDS.length; i++) {
+        const id = LOCALE_PREP_WORK_IDS[i]!;
+        const isLast = i === LOCALE_PREP_WORK_IDS.length - 1;
+        patchLocalePrep(id, { status: "running", detail: undefined });
+
+        if (isLast) {
+          let hintIdx = 0;
+          while (!settled) {
+            patchLocalePrep(id, {
+              status: "running",
+              detail:
+                LOCALE_PREP_WAIT_HINT_KEYS[
+                  hintIdx % LOCALE_PREP_WAIT_HINT_KEYS.length
+                ],
+            });
+            hintIdx += 1;
+            await Promise.race([
+              sleep(5200),
+              tracked.catch(() => undefined),
+            ]);
+          }
+          if (failure) throw failure;
+          await tracked;
+          patchLocalePrep(id, { status: "ok", detail: undefined });
+          return;
+        }
+
+        const dwell = LOCALE_PREP_WORK_DWELL_MS[i] ?? 8000;
+        await Promise.race([
+          sleep(dwell),
+          tracked.catch(() => undefined),
+        ]);
+
+        if (failure) throw failure;
+
+        if (settled) {
+          patchLocalePrep(id, { status: "ok", detail: undefined });
+          for (let j = i + 1; j < LOCALE_PREP_WORK_IDS.length; j++) {
+            const nextId = LOCALE_PREP_WORK_IDS[j]!;
+            patchLocalePrep(nextId, { status: "running" });
+            await sleep(340);
+            patchLocalePrep(nextId, { status: "ok" });
+          }
+          await tracked;
+          return;
+        }
+
+        patchLocalePrep(id, { status: "ok", detail: undefined });
+      }
+
+      await tracked;
+    }
+
     try {
-      await Promise.all([animate(), translate()]);
+      patchLocalePrep("selected", { status: "running" });
+      await sleep(520);
+      patchLocalePrep("selected", { status: "ok" });
+
+      patchLocalePrep("connecting", { status: "running" });
+      const translatePromise = translate();
+      await sleep(900);
+      patchLocalePrep("connecting", { status: "ok" });
+
+      await paceWorkSteps(translatePromise);
+
+      patchLocalePrep("writing", { status: "running" });
+      await sleep(480);
+      patchLocalePrep("writing", { status: "ok" });
+
+      patchLocalePrep("switching", { status: "running" });
+      await sleep(520);
+      patchLocalePrep("switching", { status: "ok" });
+
       const elapsed = Date.now() - started;
       if (elapsed < LOCALE_PREP_MIN_MS) {
         await sleep(LOCALE_PREP_MIN_MS - elapsed);
@@ -369,8 +469,14 @@ export function OnboardingWizard() {
       const msg = err instanceof Error ? err.message : String(err);
       setLocalePrepFailMsg(msg);
       setError(msg);
-      const last = LOCALE_PREP_TEMPLATE[LOCALE_PREP_TEMPLATE.length - 1]!;
-      patchLocalePrep(last.id, { status: "fail", detail: msg });
+      setLocalePrepItems((prev) =>
+        prev.map((b) => {
+          if (b.status === "running") {
+            return { ...b, status: "fail" as const, detail: msg };
+          }
+          return b;
+        }),
+      );
       await sleep(1600);
       setStep(STEPS.indexOf("language"));
     }
@@ -381,20 +487,17 @@ export function OnboardingWizard() {
     setBootDone(false);
     setBootFailMsg(null);
 
-    const softOk = async (id: string, okLabel: string) => {
+    const softOk = async (id: string) => {
       patchBoot(id, { status: "running" });
       await sleep(420);
-      patchBoot(id, { status: "ok", label: okLabel });
+      patchBoot(id, { status: "ok" });
     };
 
     try {
-      await softOk("db", "Database ready");
-      await softOk("profile", "Profile and preferences saved");
+      await softOk("db");
+      await softOk("profile");
 
-      patchBoot("gmail", {
-        status: "running",
-        label: "Trying Gmail IMAP connection…",
-      });
+      patchBoot("gmail", { status: "running" });
 
       const gmailRes = await fetch("/api/onboarding/verify", {
         method: "POST",
@@ -409,7 +512,6 @@ export function OnboardingWizard() {
           "Gmail connection failed";
         patchBoot("gmail", {
           status: "fail",
-          label: "Gmail connection failed",
           detail: msg,
         });
         setBootFailMsg(msg);
@@ -419,15 +521,9 @@ export function OnboardingWizard() {
         return;
       }
 
-      patchBoot("gmail", {
-        status: "ok",
-        label: "Gmail IMAP connection verified",
-      });
+      patchBoot("gmail", { status: "ok" });
 
-      patchBoot("cursor", {
-        status: "running",
-        label: "Trying Cursor API key…",
-      });
+      patchBoot("cursor", { status: "running" });
 
       const cursorRes = await fetch("/api/onboarding/verify", {
         method: "POST",
@@ -442,7 +538,6 @@ export function OnboardingWizard() {
           "Cursor API key could not be verified";
         patchBoot("cursor", {
           status: "fail",
-          label: "Cursor API key failed",
           detail: msg,
         });
         setBootFailMsg(msg);
@@ -452,10 +547,7 @@ export function OnboardingWizard() {
         return;
       }
 
-      patchBoot("cursor", {
-        status: "ok",
-        label: "Cursor API key verified",
-      });
+      patchBoot("cursor", { status: "ok" });
 
       // Finish deferred locale pack now that Cursor key works
       const pref = form.preferredLanguage.trim() || "en";
@@ -475,12 +567,9 @@ export function OnboardingWizard() {
         }
       }
 
-      await softOk("cv", "CV library ready");
+      await softOk("cv");
 
-      patchBoot("unlock", {
-        status: "running",
-        label: "Unlocking Tracker / Search…",
-      });
+      patchBoot("unlock", { status: "running" });
 
       const completeRes = await fetch("/api/onboarding/complete", {
         method: "POST",
@@ -497,10 +586,7 @@ export function OnboardingWizard() {
         );
       }
 
-      patchBoot("unlock", {
-        status: "ok",
-        label: "Tracker / Search unlocked",
-      });
+      patchBoot("unlock", { status: "ok" });
       setBootDone(true);
       await sleep(1200);
       router.replace("/tracker");
@@ -586,11 +672,10 @@ export function OnboardingWizard() {
       <div className="cmae-onb">
         <div className="cmae-onb-brand">CMAE</div>
         <div className="cmae-onb-boot">
-          <h1 className="cmae-onb-boot-title">Preparing your language…</h1>
-          <p className="cmae-onb-boot-lead">
-            We are building a full UI language pack for you. This only happens
-            once unless you change language later.
-          </p>
+          <h1 className="cmae-onb-boot-title">
+            {t("onboarding.localePrepTitle")}
+          </h1>
+          <p className="cmae-onb-boot-lead">{t("onboarding.localePrepLead")}</p>
           <ul className="cmae-onb-boot-list">
             {localePrepItems.map((item) => (
               <li
@@ -607,9 +692,13 @@ export function OnboardingWizard() {
                         : ""}
                 </span>
                 <span className="cmae-onb-boot-text">
-                  <span>{item.label}</span>
+                  <span>{t(`onboarding.localePrepSteps.${item.id}`)}</span>
                   {item.detail ? (
-                    <span className="cmae-onb-boot-detail">{item.detail}</span>
+                    <span className="cmae-onb-boot-detail">
+                      {item.detail.startsWith("onboarding.")
+                        ? t(item.detail)
+                        : item.detail}
+                    </span>
                   ) : null}
                 </span>
               </li>
@@ -617,13 +706,13 @@ export function OnboardingWizard() {
           </ul>
           {localePrepFailMsg ? (
             <p className="cmae-onb-boot-fail is-visible">
-              {localePrepFailMsg} — returning to language selection…
+              {localePrepFailMsg} {t("onboarding.localePrepFail")}
             </p>
           ) : (
             <p
               className={`cmae-onb-boot-done${localePrepDone ? " is-visible" : ""}`}
             >
-              Language pack ready — continuing…
+              {t("onboarding.localePrepDone")}
             </p>
           )}
         </div>
@@ -656,7 +745,7 @@ export function OnboardingWizard() {
                         : ""}
                 </span>
                 <span className="cmae-onb-boot-text">
-                  <span>{item.label}</span>
+                  <span>{t(`onboarding.bootSteps.${item.id}`)}</span>
                   {item.detail ? (
                     <span className="cmae-onb-boot-detail">{item.detail}</span>
                   ) : null}
@@ -714,14 +803,10 @@ export function OnboardingWizard() {
 
         {stepId === "language" ? (
           <>
-            <h1 className="cmae-onb-title">Choose your language</h1>
-            <p className="cmae-onb-lead">
-              This language is used for the app interface and for translated
-              mail copies. Application emails are still written in the
-              company&apos;s language.
-            </p>
+            <h1 className="cmae-onb-title">{t("onboarding.languageTitle")}</h1>
+            <p className="cmae-onb-lead">{t("onboarding.languageLead")}</p>
             <div className="cmae-onb-fields">
-              <Field label="Your language">
+              <Field label={t("onboarding.languageLabel")}>
                 <select
                   className="cmae-input"
                   value={form.preferredLanguage}
@@ -770,39 +855,29 @@ export function OnboardingWizard() {
 
         {stepId === "gmail" ? (
           <>
-            <h1 className="cmae-onb-title">Gmail connection</h1>
-            <p className="cmae-onb-why">
-              Tracker reads inbox/sent mail via IMAP and writes application and
-              follow-up drafts to the Gmail Drafts folder. Not your normal
-              password — an App Password is required.
-            </p>
+            <h1 className="cmae-onb-title">{t("onboarding.gmailTitle")}</h1>
+            <p className="cmae-onb-why">{t("onboarding.gmailWhy")}</p>
             <ol className="cmae-onb-guide">
+              <li>{t("onboarding.gmailGuide0")}</li>
               <li>
-                <strong>2-Step Verification</strong> must be enabled on your
-                Google account.
-              </li>
-              <li>
-                Open the{" "}
+                {t("onboarding.gmailGuide1Before")}{" "}
                 <a
                   href="https://myaccount.google.com/apppasswords"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  App passwords
+                  {t("onboarding.gmailGuide1Link")}
                 </a>{" "}
-                page.
+                {t("onboarding.gmailGuide1After")}
               </li>
               <li>
-                Enter an app name such as <strong>CMAE</strong> →{" "}
-                <strong>Create</strong>.
+                {t("onboarding.gmailGuide2Before")} <strong>CMAE</strong>{" "}
+                {t("onboarding.gmailGuide2After")}
               </li>
-              <li>
-                Copy the generated <strong>16-digit password</strong> and paste
-                it below.
-              </li>
+              <li>{t("onboarding.gmailGuide3")}</li>
             </ol>
             <div className="cmae-onb-fields">
-              <Field label="Gmail address">
+              <Field label={t("fields.gmailAddress")}>
                 <input
                   className="cmae-input"
                   type="email"
@@ -813,11 +888,11 @@ export function OnboardingWizard() {
                 />
               </Field>
               <Field
-                label="Gmail App Password"
+                label={t("fields.gmailAppPassword")}
                 hint={
                   hasGmailPw
-                    ? "A password is already saved — paste a new one to replace it"
-                    : "You can paste with spaces or without"
+                    ? t("fields.gmailAppPasswordReplace")
+                    : t("fields.gmailAppPasswordPaste")
                 }
               >
                 <input
@@ -837,40 +912,35 @@ export function OnboardingWizard() {
 
         {stepId === "cursor" ? (
           <>
-            <h1 className="cmae-onb-title">Cursor API Key</h1>
-            <p className="cmae-onb-why">
-              Search agents (discovery, research, email writing) and Tracker
-              follow-up / reply drafts run with this key.
-            </p>
+            <h1 className="cmae-onb-title">{t("onboarding.cursorTitle")}</h1>
+            <p className="cmae-onb-why">{t("onboarding.cursorWhy")}</p>
             <ol className="cmae-onb-guide">
               <li>
-                Open{" "}
+                {t("onboarding.cursorGuide0Before")}{" "}
                 <a
                   href="https://cursor.com/dashboard/api"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Cursor Dashboard → API Keys
+                  {t("onboarding.cursorGuide0Link")}
                 </a>
-                .
+                {t("onboarding.cursorGuide0After")}
               </li>
               <li>
-                Create a new API key (any name, e.g.{" "}
-                <strong>CMAE local</strong>).
+                {t("onboarding.cursorGuide1Before")}{" "}
+                <strong>CMAE local</strong>
+                {t("onboarding.cursorGuide1After")}
               </li>
-              <li>
-                Copy the key and paste it below <strong>once</strong> — it will
-                then be stored securely.
-              </li>
+              <li>{t("onboarding.cursorGuide2")}</li>
             </ol>
             <div className="cmae-onb-fields">
               <Field
-                label="Cursor API Key"
+                label={t("fields.cursorApiKey")}
                 hint={
                   hasCursorKey
-                    ? "Saved in the database — paste a new one to replace it"
+                    ? t("fields.cursorKeySaved")
                     : cursorFromEnv
-                      ? "CURSOR_API_KEY from .env will be used — you can leave this blank"
+                      ? t("fields.cursorKeyFromEnv")
                       : undefined
                 }
               >
@@ -891,15 +961,12 @@ export function OnboardingWizard() {
 
         {stepId === "prefs" ? (
           <>
-            <h1 className="cmae-onb-title">Your mail preferences</h1>
-            <p className="cmae-onb-why">
-              Follow-up timing and the signature appended exactly at the end of
-              every email.
-            </p>
+            <h1 className="cmae-onb-title">{t("onboarding.prefsTitle")}</h1>
+            <p className="cmae-onb-why">{t("onboarding.prefsWhy")}</p>
             <div className="cmae-onb-fields">
               <Field
-                label="Follow-up day"
-                hint="How many days after no reply before a reminder email. Recommended: 4–7 days."
+                label={t("fields.followUpDay")}
+                hint={t("fields.followUpHint")}
               >
                 <input
                   className="cmae-input"
@@ -916,8 +983,8 @@ export function OnboardingWizard() {
                 />
               </Field>
               <Field
-                label="Email signature"
-                hint="Line breaks are preserved; AI cannot change this"
+                label={t("fields.emailSignature")}
+                hint={t("fields.emailSignatureHint")}
               >
                 <textarea
                   className="cmae-input cmae-textarea"
@@ -938,36 +1005,35 @@ export function OnboardingWizard() {
 
         {stepId === "job" ? (
           <>
-            <h1 className="cmae-onb-title">Your job preferences</h1>
-            <p className="cmae-onb-why">
-              Work type and notice period appear in application / follow-up
-              text. Salary is only used in replies when the other side asks; it
-              is never written into emails on its own.
-            </p>
+            <h1 className="cmae-onb-title">{t("onboarding.jobTitle")}</h1>
+            <p className="cmae-onb-why">{t("onboarding.jobWhy")}</p>
             <div className="cmae-onb-fields">
-              <Field label="Work type" hint="Select at least one">
+              <Field
+                label={t("fields.workType")}
+                hint={t("fields.workTypeHintOne")}
+              >
                 <div className="cmae-onb-check-row">
                   {(
                     [
-                      ["fulltime", "Full-time"],
-                      ["parttime", "Part-time"],
-                      ["contracted", "Contracted"],
+                      ["fulltime", "fields.workFulltime"],
+                      ["parttime", "fields.workParttime"],
+                      ["contracted", "fields.workContracted"],
                     ] as const
-                  ).map(([id, label]) => (
+                  ).map(([id, labelKey]) => (
                     <label key={id} className="cmae-check">
                       <input
                         type="checkbox"
                         checked={prefs.workTypes.includes(id)}
                         onChange={() => toggleWorkType(id)}
                       />
-                      {label}
+                      {t(labelKey)}
                     </label>
                   ))}
                 </div>
               </Field>
               <Field
-                label="Notice period (weeks)"
-                hint="0 = immediately / ab sofort"
+                label={t("fields.noticeWeeks")}
+                hint={t("fields.noticeHintOnb")}
               >
                 <input
                   className="cmae-input"
@@ -984,7 +1050,7 @@ export function OnboardingWizard() {
                 />
               </Field>
               <div className="cmae-form-grid">
-                <Field label="Period">
+                <Field label={t("fields.period")}>
                   <select
                     className="cmae-input"
                     value={prefs.salaryPeriod}
@@ -995,11 +1061,11 @@ export function OnboardingWizard() {
                       })
                     }
                   >
-                    <option value="monthly">Monthly</option>
-                    <option value="yearly">Yearly</option>
+                    <option value="monthly">{t("fields.monthly")}</option>
+                    <option value="yearly">{t("fields.yearly")}</option>
                   </select>
                 </Field>
-                <Field label="Gross / Net">
+                <Field label={t("fields.grossNet")}>
                   <select
                     className="cmae-input"
                     value={prefs.salaryKind}
@@ -1010,11 +1076,11 @@ export function OnboardingWizard() {
                       })
                     }
                   >
-                    <option value="gross">Gross</option>
-                    <option value="net">Net</option>
+                    <option value="gross">{t("fields.gross")}</option>
+                    <option value="net">{t("fields.net")}</option>
                   </select>
                 </Field>
-                <Field label="Currency">
+                <Field label={t("fields.currency")}>
                   <select
                     className="cmae-input"
                     value={prefs.salaryCurrency}
@@ -1028,13 +1094,13 @@ export function OnboardingWizard() {
                       })
                     }
                   >
-                    <option value="eur">Euro</option>
-                    <option value="usd">Dollar</option>
-                    <option value="other">Other</option>
+                    <option value="eur">{t("fields.euro")}</option>
+                    <option value="usd">{t("fields.dollar")}</option>
+                    <option value="other">{t("fields.other")}</option>
                   </select>
                 </Field>
                 {prefs.salaryCurrency === "other" ? (
-                  <Field label="Other currency">
+                  <Field label={t("fields.otherCurrency")}>
                     <input
                       className="cmae-input"
                       value={prefs.salaryCurrencyOther}
@@ -1048,7 +1114,7 @@ export function OnboardingWizard() {
                     />
                   </Field>
                 ) : null}
-                <Field label="Min salary">
+                <Field label={t("fields.minSalary")}>
                   <input
                     className="cmae-input"
                     type="number"
@@ -1077,7 +1143,7 @@ export function OnboardingWizard() {
                     })
                   }
                 />
-                Open to negotiation
+                {t("fields.negotiable")}
               </label>
             </div>
           </>
@@ -1085,13 +1151,8 @@ export function OnboardingWizard() {
 
         {stepId === "cv" ? (
           <>
-            <h1 className="cmae-onb-title">Upload your CV</h1>
-            <p className="cmae-onb-why">
-              Text is parsed so AI can write personalized emails; the PDF is
-              attached automatically to application and follow-up Gmail drafts.
-              At least one CV is required — you can edit languages/labels later
-              in Settings.
-            </p>
+            <h1 className="cmae-onb-title">{t("onboarding.cvTitle")}</h1>
+            <p className="cmae-onb-why">{t("onboarding.cvWhy")}</p>
             {cvs.length ? (
               <ul className="cmae-onb-cv-list">
                 {cvs.map((cv) => (
@@ -1103,7 +1164,7 @@ export function OnboardingWizard() {
                       className="cmae-input cmae-onb-cv-lang"
                       value={cv.language}
                       disabled={busy}
-                      aria-label="CV language"
+                      aria-label={t("fields.cvLanguageAria")}
                       onChange={(e) =>
                         void patchCvLanguage(cv.id, e.target.value)
                       }
@@ -1120,16 +1181,16 @@ export function OnboardingWizard() {
                       disabled={busy}
                       onClick={() => void removeCv(cv.id)}
                     >
-                      Delete
+                      {t("common.delete")}
                     </Button>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="cmae-onb-hint">No CV yet.</p>
+              <p className="cmae-onb-hint">{t("onboarding.cvEmpty")}</p>
             )}
             {cvs.length < 4 ? (
-              <Field label="Upload PDF">
+              <Field label={t("fields.uploadPdf")}>
                 <input
                   className="cmae-onb-file"
                   type="file"
@@ -1170,12 +1231,10 @@ export function OnboardingWizard() {
               {busy
                 ? "…"
                 : stepId === "cv"
-                  ? "Start system"
+                  ? t("onboarding.startSystem")
                   : stepId === "welcome"
-                    ? "Get started"
-                    : stepId === "language"
-                      ? "Continue"
-                      : t("common.continue")}
+                    ? t("onboarding.getStarted")
+                    : t("common.continue")}
             </Button>
           </div>
         </div>

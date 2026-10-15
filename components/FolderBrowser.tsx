@@ -8,12 +8,11 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui";
 import {
   couldNotOpenFileManager,
   detectFileManagerKind,
-  openInFileManagerLabel,
-  showInFileManagerTitle,
   type FileManagerKind,
 } from "@/lib/platform/file-manager";
 
@@ -112,6 +111,7 @@ function FileGlyph() {
 }
 
 export function FolderBrowser() {
+  const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const path = searchParams.get("path") || "";
@@ -365,8 +365,8 @@ export function FolderBrowser() {
               className="cmae-fb-nav-btn"
               disabled={!path}
               onClick={() => go(parentPath(path))}
-              aria-label="Parent folder"
-              title="Parent folder"
+              aria-label={t("folders.parent")}
+              title={t("folders.parent")}
             >
               ←
             </button>
@@ -375,14 +375,14 @@ export function FolderBrowser() {
               className="cmae-fb-nav-btn"
               disabled={!path && !filePath}
               onClick={() => go("")}
-              aria-label="workspace root"
-              title="workspace root"
+              aria-label={t("folders.root")}
+              title={t("folders.root")}
             >
               ⌂
             </button>
           </div>
 
-          <nav className="cmae-fb-crumbs" aria-label="Location">
+          <nav className="cmae-fb-crumbs" aria-label={t("folders.locationAria")}>
             {crumbs.map((c, i) => {
               const last = i === crumbs.length - 1 && !filePath;
               return (
@@ -418,7 +418,7 @@ export function FolderBrowser() {
           </nav>
 
           <div className="cmae-fb-count">
-            {dirCount} folders · {fileCount} files
+            {t("folders.count", { folders: dirCount, files: fileCount })}
           </div>
         </div>
 
@@ -431,17 +431,17 @@ export function FolderBrowser() {
         <div className={`cmae-fb-body${preview ? " is-split" : ""}`}>
           <div className="cmae-fb-list-pane">
             <div className="cmae-fb-cols" aria-hidden>
-              <span>Name</span>
-              <span>Size</span>
-              <span>Modified</span>
+              <span>{t("folders.colName")}</span>
+              <span>{t("folders.colSize")}</span>
+              <span>{t("folders.colModified")}</span>
             </div>
 
             {loading && !listing ? (
-              <p className="cmae-fb-loading">Loading…</p>
+              <p className="cmae-fb-loading">{t("common.loading")}</p>
             ) : listing && listing.entries.length === 0 ? (
               <div className="cmae-fb-empty">
-                <p>This folder is empty</p>
-                <span>Company folders appear here after you run Search.</span>
+                <p>{t("folders.emptyTitle")}</p>
+                <span>{t("folders.emptyHint")}</span>
               </div>
             ) : (
               <ul className="cmae-fb-list">
@@ -473,7 +473,7 @@ export function FolderBrowser() {
                                 setRenamingPath(null);
                               }
                             }}
-                            aria-label="Edit folder name"
+                            aria-label={t("folders.renameAria")}
                           />
                         </div>
                       ) : (
@@ -493,10 +493,12 @@ export function FolderBrowser() {
                                 className={`cmae-fb-badge is-${entry.badge.tone}`}
                                 title={
                                   entry.badge.tone === "muted"
-                                    ? "No application link"
+                                    ? t("folders.badgeNoLink")
                                     : entry.badge.tone === "ai"
-                                      ? "AI search output — usually not needed by the user"
-                                      : `${entry.badge.text} application link`
+                                      ? t("folders.badgeAiOnly")
+                                      : t("folders.badgeLinked", {
+                                          status: entry.badge.text,
+                                        })
                                 }
                               >
                                 {entry.badge.text}
@@ -519,7 +521,7 @@ export function FolderBrowser() {
           </div>
 
           {preview ? (
-            <aside className="cmae-fb-preview" aria-label="File preview">
+            <aside className="cmae-fb-preview" aria-label={t("folders.previewAria")}>
               <div className="cmae-fb-preview-head">
                 <div className="cmae-fb-preview-title">
                   <strong>{preview.name}</strong>
@@ -533,23 +535,23 @@ export function FolderBrowser() {
                     className="cmae-fb-close"
                     disabled={revealing}
                     onClick={() => void revealInOs(preview.path)}
-                    title={showInFileManagerTitle(fmKind)}
+                    title={fmKind === "finder" ? t("folders.openInFinder") : fmKind === "explorer" ? t("folders.openInExplorer") : t("folders.openInFiles")}
                   >
-                    {revealing ? "Opening…" : openInFileManagerLabel(fmKind)}
+                    {revealing ? t("folders.opening") : (fmKind === "finder" ? t("folders.openInFinder") : fmKind === "explorer" ? t("folders.openInExplorer") : t("folders.openInFiles"))}
                   </button>
                   <button
                     type="button"
                     className="cmae-fb-close"
                     onClick={() => go(path)}
                   >
-                    Close
+                    {t("common.close")}
                   </button>
                 </div>
               </div>
               <div className="cmae-fb-preview-body">
                 {preview.binary ? (
                   <p className="cmae-fb-loading">
-                    This file cannot be previewed as text.
+                    {t("folders.previewBinary")}
                   </p>
                 ) : (
                   <pre>{preview.content}</pre>
@@ -574,7 +576,7 @@ export function FolderBrowser() {
             disabled={busy}
             onClick={() => startRename(menu.entry)}
           >
-            Rename
+            {t("folders.menuRename")}
           </button>
           <button
             type="button"
@@ -583,7 +585,7 @@ export function FolderBrowser() {
             disabled={busy}
             onClick={() => askDelete(menu.entry)}
           >
-            Delete
+            {t("folders.menuDelete")}
           </button>
         </div>
       ) : null}
@@ -603,10 +605,9 @@ export function FolderBrowser() {
             aria-labelledby="cmae-fb-delete-title"
             aria-describedby="cmae-fb-delete-desc"
           >
-            <h2 id="cmae-fb-delete-title">Delete folder</h2>
+            <h2 id="cmae-fb-delete-title">{t("folders.deleteTitle")}</h2>
             <p id="cmae-fb-delete-desc">
-              The folder <strong>{deleteTarget.name}</strong> and all files
-              inside it will be permanently deleted. This cannot be undone.
+              {t("folders.deleteBody", { name: deleteTarget.name })}
             </p>
             <div className="cmae-fb-modal-actions">
               <button
@@ -616,7 +617,7 @@ export function FolderBrowser() {
                 disabled={busy}
                 onClick={() => setDeleteTarget(null)}
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <Button
                 type="button"
@@ -624,7 +625,7 @@ export function FolderBrowser() {
                 disabled={busy}
                 onClick={() => void confirmDelete()}
               >
-                {busy ? "Deleting…" : "Delete"}
+                {busy ? t("common.deleting") : t("common.delete")}
               </Button>
             </div>
           </div>
