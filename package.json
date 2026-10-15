@@ -54,7 +54,7 @@
     "@types/sanitize-html": "^2.16.2",
     "drizzle-kit": "^0.31.11",
     "electron": "^39.2.7",
-    "electron-builder": "^26.0.12",
+    "electron-builder": "^26.17.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "javascript-obfuscator": "^4.2.2",

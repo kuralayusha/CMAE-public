@@ -13,6 +13,7 @@ on:
       - "scripts/prepare-desktop.mjs"
       - "scripts/obfuscate-desktop.mjs"
       - "scripts/notarize.cjs"
+      - "scripts/ci-enable-mac-signing.mjs"
       - "scripts/desktop-dev.mjs"
       - "scripts/after-pack.cjs"
       - "version-policy.json"
@@ -43,16 +44,29 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # electron-builder CSC_LINK path is buggy (set-key-partition-list uses p12
+      # password instead of temp keychain password). Import into a real keychain
+      # first, then let electron-builder discover the identity.
+      - name: Import Apple signing certificate
+        if: ${{ secrets.MAC_CSC_LINK != '' }}
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.MAC_CSC_LINK }}
+          p12-password: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+
       - name: "Allow Mac codesign (strip identity null)"
+        if: ${{ secrets.MAC_CSC_LINK != '' }}
         run: node scripts/ci-enable-mac-signing.mjs
+
+      - name: Verify signing identity
+        if: ${{ secrets.MAC_CSC_LINK != '' }}
+        run: security find-identity -v -p codesigning
 
       - name: Build Mac desktop app
         run: npm run desktop:build:mac
         env:
-          # Without MAC_CSC_LINK → unsigned artefact. With secret → Developer ID sign.
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          # Cert already in keychain — do NOT set CSC_LINK (triggers broken import).
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' && 'true' || 'false' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
