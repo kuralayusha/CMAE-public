@@ -1,18 +1,11 @@
+import { t } from "@/lib/i18n/t";
 import type { SpecialistId, TermKind } from "./types";
 
-const AGENT_EN: Record<string, string> = {
-  conductor: "Conductor",
-  scout: "Scout agent",
-  jobfit: "Job-fit agent",
-  contact: "Contact agent",
-  research: "Research agent",
-  writer: "Writer agent",
-  reviewer: "Reviewer agent",
-};
-
 export function agentLabel(agent?: SpecialistId | "conductor" | string | null) {
-  if (!agent) return "System";
-  return AGENT_EN[agent] || agent;
+  if (!agent) return t("terminal.agents.system");
+  const key = `terminal.agents.${agent}`;
+  const label = t(key);
+  return label === key ? String(agent) : label;
 }
 
 /** Lead with the action; put the agent in parentheses so it stays light */
@@ -22,7 +15,7 @@ export function withAgent(
 ): string {
   const body = action.replace(/\s+/g, " ").trim().replace(/\.$/, "");
   const who = agentLabel(agent);
-  return `${body}. (${who})`;
+  return t("terminal.plain.withAgent", { action: body, agent: who });
 }
 
 /** Derive a readable summary from a detail line (legacy logs / missing plain) */
@@ -37,70 +30,84 @@ export function derivePlain(input: {
   if (input.kind === "curl") {
     const url = raw.match(/https?:\/\/[^\s'"]+/)?.[0];
     return withAgent(
-      url ? `Downloading web page: ${shortUrl(url)}` : "Fetching data from the internet",
+      url
+        ? t("terminal.plain.downloadingPage", { url: shortUrl(url) })
+        : t("terminal.plain.fetchingData"),
       agent || "scout",
     );
   }
   if (input.kind === "python") {
-    return withAgent("Scanning text for emails / patterns", agent || "contact");
+    return withAgent(t("terminal.plain.scanningText"), agent || "contact");
   }
   if (input.kind === "err") {
-    return withAgent(`Issue: ${clip(raw, 110)}`, agent);
+    return withAgent(
+      t("terminal.plain.issue", { msg: clip(raw, 110) }),
+      agent,
+    );
   }
   if (input.kind === "ok") {
-    return withAgent(`Done: ${clip(stripDecor(raw), 120)}`, agent);
+    return withAgent(
+      t("terminal.plain.done", { msg: clip(stripDecor(raw), 120) }),
+      agent,
+    );
   }
 
   if (/dispatch →\s*(\w+)/i.test(raw)) {
     const m = raw.match(/dispatch →\s*(\w+)/i);
-    return withAgent(`Handed work to ${agentLabel(m?.[1])} agent`, "conductor");
+    return withAgent(
+      t("terminal.plain.handedWork", { agent: agentLabel(m?.[1]) }),
+      "conductor",
+    );
   }
   if (/REWIND →\s*(\w+)/i.test(raw)) {
     const m = raw.match(/REWIND →\s*(\w+)/i);
     return withAgent(
-      `Package rejected; retrying from ${agentLabel(m?.[1])} step`,
+      t("terminal.plain.packageRejected", { agent: agentLabel(m?.[1]) }),
       "reviewer",
     );
   }
   if (/workflow complete|done ·/i.test(raw)) {
-    return withAgent("Research complete", "conductor");
+    return withAgent(t("terminal.plain.researchComplete"), "conductor");
   }
   if (/CANCEL|aborted \(canceled\)/i.test(raw)) {
-    return withAgent("Job canceled by user", "conductor");
+    return withAgent(t("terminal.plain.jobCanceled"), "conductor");
   }
   if (/session|specialists:/i.test(raw)) {
-    return withAgent("Research started", "conductor");
+    return withAgent(t("terminal.plain.researchStarted"), "conductor");
   }
   if (/online/i.test(raw)) {
-    return withAgent("Started task", agent);
+    return withAgent(t("terminal.plain.startedTask"), agent);
   }
   if (/Ana sayfa|sayfa çek|home page|fetching home/i.test(raw)) {
-    return withAgent("Reviewing the site home page", agent || "scout");
+    return withAgent(t("terminal.plain.reviewingHome"), agent || "scout");
   }
   if (/Ziyaret|Path denemesi|rota|visit|route/i.test(raw)) {
-    return withAgent("Browsing related pages", agent || "scout");
+    return withAgent(t("terminal.plain.browsingPages"), agent || "scout");
   }
   if (/Şirket adı|Company name/i.test(raw)) {
-    return withAgent("Extracting company name", agent || "scout");
+    return withAgent(t("terminal.plain.extractingCompany"), agent || "scout");
   }
-  if (/İlan–CV|ilan|job.?fit/i.test(raw) && (input.agent === "jobfit" || /jobfit/i.test(input.text))) {
-    return withAgent("Looking for open roles that match the CV", "jobfit");
+  if (
+    /İlan–CV|ilan|job.?fit/i.test(raw) &&
+    (input.agent === "jobfit" || /jobfit/i.test(input.text))
+  ) {
+    return withAgent(t("terminal.plain.lookingJobs"), "jobfit");
   }
   if (/e-posta|email|iletisim|İletişim|contact/i.test(raw)) {
-    return withAgent("Looking for a suitable application email", agent || "contact");
+    return withAgent(t("terminal.plain.lookingEmail"), agent || "contact");
   }
   if (/Sorgu:|Harici|şirket profili|Research|query/i.test(raw)) {
-    return withAgent("Gathering company info from external sources", agent || "research");
+    return withAgent(t("terminal.plain.gatheringInfo"), agent || "research");
   }
-  if (/Mail taslağı|Mail \(/i.test(raw)) {
-    return withAgent("Writing application email draft", agent || "writer");
+  if (/Mail taslağı|Mail \(|draft/i.test(raw)) {
+    return withAgent(t("terminal.plain.writingDraft"), agent || "writer");
   }
   if (/skor|PASS|REWIND|Paket|score/i.test(raw)) {
-    return withAgent("Scoring the application package", agent || "reviewer");
+    return withAgent(t("terminal.plain.scoringPackage"), agent || "reviewer");
   }
   if (/Model düşünüyor|thinking|↳/i.test(raw)) {
     if (raw.startsWith("↳")) return null;
-    return withAgent("Evaluating status", agent);
+    return withAgent(t("terminal.plain.evaluating"), agent);
   }
   if (/bytes|preview:|stderr/i.test(raw)) {
     return null;
@@ -123,7 +130,10 @@ function stripDecor(s: string) {
 function shortUrl(u: string) {
   try {
     const x = new URL(u);
-    return x.hostname.replace(/^www\./, "") + (x.pathname === "/" ? "" : x.pathname.slice(0, 40));
+    return (
+      x.hostname.replace(/^www\./, "") +
+      (x.pathname === "/" ? "" : x.pathname.slice(0, 40))
+    );
   } catch {
     return clip(u, 60);
   }

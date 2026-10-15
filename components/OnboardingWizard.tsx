@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/components/I18nProvider";
 import { Button, Field } from "@/components/ui";
+import { APP_LANGUAGE, type LocalePack } from "@/lib/i18n/types";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
 import "./onboarding.css";
 
@@ -27,6 +29,8 @@ type CvItem = {
 };
 
 const STEPS = [
+  "language",
+  "localePrep",
   "welcome",
   "profile",
   "gmail",
@@ -38,6 +42,11 @@ const STEPS = [
 ] as const;
 
 type StepId = (typeof STEPS)[number];
+
+/** Progress dots exclude language / localePrep / boot. */
+const FLOW_STEPS = STEPS.filter(
+  (s) => s !== "language" && s !== "localePrep" && s !== "boot",
+);
 
 type BootStatus = "pending" | "running" | "ok" | "fail";
 
@@ -57,8 +66,25 @@ const BOOT_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
   { id: "unlock", label: "Unlocking Tracker / Search" },
 ];
 
+const LOCALE_PREP_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
+  { id: "selected", label: "Language selected" },
+  { id: "contacting", label: "Contacting translation service" },
+  { id: "preparing", label: "Preparing your language pack" },
+  { id: "writing", label: "Writing locale files" },
+  { id: "switching", label: "Switching UI to your language" },
+];
+
+const LOCALE_PREP_MIN_MS = 3200;
+
 function freshBootItems(): BootItem[] {
   return BOOT_TEMPLATE.map((b) => ({ ...b, status: "pending" as const }));
+}
+
+function freshLocalePrepItems(): BootItem[] {
+  return LOCALE_PREP_TEMPLATE.map((b) => ({
+    ...b,
+    status: "pending" as const,
+  }));
 }
 
 const DEFAULT_PREFS: JobPreferences = {
@@ -74,6 +100,7 @@ const DEFAULT_PREFS: JobPreferences = {
 
 export function OnboardingWizard() {
   const router = useRouter();
+  const { t, setPack } = useI18n();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +111,13 @@ export function OnboardingWizard() {
   const [bootItems, setBootItems] = useState<BootItem[]>(freshBootItems);
   const [bootDone, setBootDone] = useState(false);
   const [bootFailMsg, setBootFailMsg] = useState<string | null>(null);
+  const [localePrepItems, setLocalePrepItems] = useState<BootItem[]>(
+    freshLocalePrepItems,
+  );
+  const [localePrepDone, setLocalePrepDone] = useState(false);
+  const [localePrepFailMsg, setLocalePrepFailMsg] = useState<string | null>(
+    null,
+  );
 
   const [form, setForm] = useState({
     fullName: "",
@@ -91,12 +125,12 @@ export function OnboardingWizard() {
     gmailAppPassword: "",
     cursorApiKey: "",
     followUpDays: 5,
-    preferredLanguage: "tr",
+    preferredLanguage: "en",
     emailSignature: "",
   });
   const [prefs, setPrefs] = useState<JobPreferences>(DEFAULT_PREFS);
 
-  const stepId: StepId = STEPS[step] ?? "welcome";
+  const stepId: StepId = STEPS[step] ?? "language";
 
   useEffect(() => {
     void (async () => {
@@ -113,7 +147,7 @@ export function OnboardingWizard() {
           fullName: s.fullName || "",
           gmailAddress: s.gmailAddress || "",
           followUpDays: s.followUpDays || 5,
-          preferredLanguage: s.preferredLanguage || "tr",
+          preferredLanguage: s.preferredLanguage || "en",
           emailSignature: s.emailSignature || "",
         }));
         if (s.jobPreferences) {
@@ -131,12 +165,14 @@ export function OnboardingWizard() {
 
   const canNext = useMemo(() => {
     switch (stepId) {
+      case "language":
+        return Boolean(form.preferredLanguage.trim());
+      case "localePrep":
+        return false;
       case "welcome":
         return true;
       case "profile":
-        return Boolean(
-          form.fullName.trim() && form.preferredLanguage.trim(),
-        );
+        return Boolean(form.fullName.trim());
       case "gmail":
         return (
           form.gmailAddress.trim() &&
@@ -200,8 +236,14 @@ export function OnboardingWizard() {
 
   async function goNext() {
     setError(null);
+    if (stepId === "language") {
+      setStep(STEPS.indexOf("localePrep"));
+      void runLocalePrep();
+      return;
+    }
+    if (stepId === "localePrep") return;
     if (stepId === "welcome") {
-      setStep(1);
+      setStep(STEPS.indexOf("profile"));
       return;
     }
     if (stepId === "cv") {
@@ -239,6 +281,11 @@ export function OnboardingWizard() {
 
   function goBack() {
     setError(null);
+    if (stepId === "localePrep" || stepId === "boot") return;
+    if (stepId === "welcome") {
+      setStep(STEPS.indexOf("language"));
+      return;
+    }
     setStep((s) => Math.max(0, s - 1));
   }
 
@@ -248,8 +295,85 @@ export function OnboardingWizard() {
     );
   }
 
+  function patchLocalePrep(id: string, patch: Partial<BootItem>) {
+    setLocalePrepItems((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+    );
+  }
+
   function sleep(ms: number) {
     return new Promise<void>((r) => window.setTimeout(r, ms));
+  }
+
+  async function runLocalePrep() {
+    setLocalePrepItems(freshLocalePrepItems());
+    setLocalePrepDone(false);
+    setLocalePrepFailMsg(null);
+    const lang = form.preferredLanguage.trim() || "en";
+    const started = Date.now();
+
+    const animate = async () => {
+      const order = LOCALE_PREP_TEMPLATE.map((x) => x.id);
+      for (const id of order) {
+        patchLocalePrep(id, { status: "running" });
+        await sleep(520);
+        patchLocalePrep(id, { status: "ok" });
+      }
+    };
+
+    const translate = async () => {
+      const res = await fetch("/api/i18n/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetLanguage: lang }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const errMsg = String(data.error || "Language pack translation failed");
+        // No Cursor key yet — save preference and continue in English UI;
+        // boot will retry translation after the key is verified.
+        if (/api key/i.test(errMsg) && lang.toLowerCase().slice(0, 2) !== "en") {
+          await fetch("/api/settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ preferredLanguage: lang }),
+          });
+          const packRes = await fetch("/api/i18n/pack");
+          if (packRes.ok) {
+            const packData = await packRes.json();
+            setPack(APP_LANGUAGE, (packData.en || packData.pack) as LocalePack);
+          }
+          setForm((f) => ({ ...f, preferredLanguage: lang }));
+          return { deferred: true as const };
+        }
+        throw new Error(errMsg);
+      }
+      setPack(String(data.code || lang), data.pack as LocalePack);
+      setForm((f) => ({
+        ...f,
+        preferredLanguage: String(data.code || lang),
+      }));
+      return { deferred: false as const };
+    };
+
+    try {
+      await Promise.all([animate(), translate()]);
+      const elapsed = Date.now() - started;
+      if (elapsed < LOCALE_PREP_MIN_MS) {
+        await sleep(LOCALE_PREP_MIN_MS - elapsed);
+      }
+      setLocalePrepDone(true);
+      await sleep(700);
+      setStep(STEPS.indexOf("welcome"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setLocalePrepFailMsg(msg);
+      setError(msg);
+      const last = LOCALE_PREP_TEMPLATE[LOCALE_PREP_TEMPLATE.length - 1]!;
+      patchLocalePrep(last.id, { status: "fail", detail: msg });
+      await sleep(1600);
+      setStep(STEPS.indexOf("language"));
+    }
   }
 
   async function runBootSequence() {
@@ -332,6 +456,24 @@ export function OnboardingWizard() {
         status: "ok",
         label: "Cursor API key verified",
       });
+
+      // Finish deferred locale pack now that Cursor key works
+      const pref = form.preferredLanguage.trim() || "en";
+      if (pref.toLowerCase().slice(0, 2) !== "en") {
+        try {
+          const tr = await fetch("/api/i18n/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ targetLanguage: pref }),
+          });
+          const trData = await tr.json();
+          if (tr.ok && trData.pack) {
+            setPack(String(trData.code || pref), trData.pack as LocalePack);
+          }
+        } catch {
+          /* keep English UI */
+        }
+      }
 
       await softOk("cv", "CV library ready");
 
@@ -439,16 +581,65 @@ export function OnboardingWizard() {
     });
   }
 
+  if (stepId === "localePrep") {
+    return (
+      <div className="cmae-onb">
+        <div className="cmae-onb-brand">CMAE</div>
+        <div className="cmae-onb-boot">
+          <h1 className="cmae-onb-boot-title">Preparing your language…</h1>
+          <p className="cmae-onb-boot-lead">
+            We are building a full UI language pack for you. This only happens
+            once unless you change language later.
+          </p>
+          <ul className="cmae-onb-boot-list">
+            {localePrepItems.map((item) => (
+              <li
+                key={item.id}
+                className={`cmae-onb-boot-item is-visible is-${item.status}`}
+              >
+                <span className="cmae-onb-tick" aria-hidden>
+                  {item.status === "ok"
+                    ? "✓"
+                    : item.status === "fail"
+                      ? "!"
+                      : item.status === "running"
+                        ? "…"
+                        : ""}
+                </span>
+                <span className="cmae-onb-boot-text">
+                  <span>{item.label}</span>
+                  {item.detail ? (
+                    <span className="cmae-onb-boot-detail">{item.detail}</span>
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {localePrepFailMsg ? (
+            <p className="cmae-onb-boot-fail is-visible">
+              {localePrepFailMsg} — returning to language selection…
+            </p>
+          ) : (
+            <p
+              className={`cmae-onb-boot-done${localePrepDone ? " is-visible" : ""}`}
+            >
+              Language pack ready — continuing…
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (stepId === "boot") {
     return (
       <div className="cmae-onb">
         <div className="cmae-onb-brand">CMAE</div>
         <div className="cmae-onb-boot">
-          <h1 className="cmae-onb-boot-title">Verifying connections…</h1>
-          <p className="cmae-onb-boot-lead">
-            Gmail IMAP and Cursor API are being tested for real. If either fails,
-            you will return to that step.
-          </p>
+          <h1 className="cmae-onb-boot-title">
+            {t("onboarding.bootTitle")}
+          </h1>
+          <p className="cmae-onb-boot-lead">{t("onboarding.bootLead")}</p>
           <ul className="cmae-onb-boot-list">
             {bootItems.map((item) => (
               <li
@@ -475,13 +666,13 @@ export function OnboardingWizard() {
           </ul>
           {bootFailMsg ? (
             <p className="cmae-onb-boot-fail is-visible">
-              {bootFailMsg} — returning to the related step…
+              {bootFailMsg} {t("onboarding.bootFail")}
             </p>
           ) : (
             <p
               className={`cmae-onb-boot-done${bootDone ? " is-visible" : ""}`}
             >
-              You&apos;re ready — opening Tracker…
+              {t("onboarding.bootDone")}
             </p>
           )}
         </div>
@@ -489,64 +680,55 @@ export function OnboardingWizard() {
     );
   }
 
+  const flowIndex = FLOW_STEPS.indexOf(stepId as (typeof FLOW_STEPS)[number]);
+  const showProgress = flowIndex >= 0;
+
   return (
     <div className="cmae-onb">
       <div className="cmae-onb-brand">CMAE</div>
       <div className="cmae-onb-card">
-        <div className="cmae-onb-progress" aria-hidden>
-          {STEPS.slice(0, -1).map((_, i) => (
-            <span
-              key={STEPS[i]}
-              className={
-                i < step ? "is-done" : i === step ? "is-active" : undefined
-              }
-            />
-          ))}
-        </div>
-        <p className="cmae-onb-step-label">
-          Step {step + 1} / {STEPS.length - 1}
-        </p>
-
-        {stepId === "welcome" ? (
+        {showProgress ? (
           <>
-            <h1 className="cmae-onb-title">Welcome to CMAE</h1>
-            <p className="cmae-onb-lead">
-              CMAE manages company research, personalized application emails,
-              Gmail drafts, and follow-up tracking in one place.
+            <div className="cmae-onb-progress" aria-hidden>
+              {FLOW_STEPS.map((id, i) => (
+                <span
+                  key={id}
+                  className={
+                    i < flowIndex
+                      ? "is-done"
+                      : i === flowIndex
+                        ? "is-active"
+                        : undefined
+                  }
+                />
+              ))}
+            </div>
+            <p className="cmae-onb-step-label">
+              {t("onboarding.stepLabel", {
+                current: flowIndex + 1,
+                total: FLOW_STEPS.length,
+              })}
             </p>
           </>
         ) : null}
 
-        {stepId === "profile" ? (
+        {stepId === "language" ? (
           <>
-            <h1 className="cmae-onb-title">Your profile</h1>
-            <p className="cmae-onb-why">
-              Your name is used in the email body and attachment filename (e.g.
-              First_Last_CV.pdf). Language drives drafts, AI research, and
-              follow-ups. You will connect Gmail in the next step.
+            <h1 className="cmae-onb-title">Choose your language</h1>
+            <p className="cmae-onb-lead">
+              This language is used for the app interface and for translated
+              mail copies. Application emails are still written in the
+              company&apos;s language.
             </p>
             <div className="cmae-onb-fields">
-              <Field label="Full name">
-                <input
-                  className="cmae-input"
-                  value={form.fullName}
-                  onChange={(e) =>
-                    setForm({ ...form, fullName: e.target.value })
-                  }
-                  placeholder="Your Full Name"
-                  autoFocus
-                />
-              </Field>
-              <Field
-                label="Preferred language"
-                hint="Default for drafts, AI research, and follow-ups. Thread language still wins when clear."
-              >
+              <Field label="Your language">
                 <select
                   className="cmae-input"
                   value={form.preferredLanguage}
                   onChange={(e) =>
                     setForm({ ...form, preferredLanguage: e.target.value })
                   }
+                  autoFocus
                 >
                   {PREFERRED_LANGUAGES.map((l) => (
                     <option key={l.code} value={l.code}>
@@ -554,6 +736,33 @@ export function OnboardingWizard() {
                     </option>
                   ))}
                 </select>
+              </Field>
+            </div>
+          </>
+        ) : null}
+
+        {stepId === "welcome" ? (
+          <>
+            <h1 className="cmae-onb-title">{t("onboarding.welcomeTitle")}</h1>
+            <p className="cmae-onb-lead">{t("onboarding.welcomeLead")}</p>
+          </>
+        ) : null}
+
+        {stepId === "profile" ? (
+          <>
+            <h1 className="cmae-onb-title">{t("onboarding.profileTitle")}</h1>
+            <p className="cmae-onb-why">{t("onboarding.profileWhy")}</p>
+            <div className="cmae-onb-fields">
+              <Field label={t("onboarding.fullName")}>
+                <input
+                  className="cmae-input"
+                  value={form.fullName}
+                  onChange={(e) =>
+                    setForm({ ...form, fullName: e.target.value })
+                  }
+                  placeholder={t("onboarding.fullNamePlaceholder")}
+                  autoFocus
+                />
               </Field>
             </div>
           </>
@@ -940,14 +1149,14 @@ export function OnboardingWizard() {
         {error ? <p className="cmae-onb-error">{error}</p> : null}
 
         <div className="cmae-onb-actions">
-          {step > 0 ? (
+          {stepId !== "language" ? (
             <Button
               type="button"
               variant="ghost"
               disabled={busy}
               onClick={goBack}
             >
-              Back
+              {t("common.back")}
             </Button>
           ) : (
             <span />
@@ -964,7 +1173,9 @@ export function OnboardingWizard() {
                   ? "Start system"
                   : stepId === "welcome"
                     ? "Get started"
-                    : "Next"}
+                    : stepId === "language"
+                      ? "Continue"
+                      : t("common.continue")}
             </Button>
           </div>
         </div>

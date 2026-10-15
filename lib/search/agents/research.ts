@@ -65,6 +65,6 @@ ${ctx.redoFeedback.research ? `Reviewer feedback to address: ${ctx.redoFeedback.
   );
 
   ctx.researchMd = research;
-  await writeFile(ctx.folderPath, "sirket_bilgileri.md", research);
-  speak(jobId, "research", "ok", "sirket_bilgileri.md written");
+  await writeFile(ctx.folderPath, "company_info.md", research);
+  speak(jobId, "research", "ok", "company_info.md written");
 }

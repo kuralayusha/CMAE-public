@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import { PAGE_HELP, type AppPageId } from "@/lib/help/pages";
+import { useT } from "@/components/I18nProvider";
+import type { AppPageId } from "@/lib/help/pages";
 
 const LINKS: { href: string; id: AppPageId }[] = [
   { href: "/tracker", id: "tracker" },
@@ -15,8 +18,9 @@ export function TopNav({
   active: AppPageId;
   onHelp?: () => void;
 }) {
+  const t = useT();
   return (
-    <nav className="cmae-nav" aria-label="Ana navigasyon">
+    <nav className="cmae-nav" aria-label={t("nav.aria")}>
       <div className="cmae-nav-inner">
         <Link href="/tracker" className="cmae-nav-brand">
           CMAE
@@ -28,7 +32,7 @@ export function TopNav({
               href={link.href}
               className={`cmae-nav-link${active === link.id ? " is-active" : ""}`}
             >
-              {PAGE_HELP[link.id].navLabel}
+              {t(`nav.${link.id}`)}
             </Link>
           ))}
         </div>
@@ -37,8 +41,8 @@ export function TopNav({
             type="button"
             className="cmae-nav-help"
             onClick={onHelp}
-            aria-label="About this page"
-            title="About this page"
+            aria-label={t("nav.helpAria")}
+            title={t("nav.helpTitle")}
           >
             ?
           </button>

@@ -5,19 +5,18 @@ import {
   SearchHistory,
   type SearchHistoryJob,
 } from "@/components/SearchHistory";
+import { useT } from "@/components/I18nProvider";
 import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
 import { Terminal } from "@/components/Terminal";
 import { TopNav } from "@/components/TopNav";
 import { Button } from "@/components/ui";
-import { PAGE_HELP } from "@/lib/help/pages";
-
-const meta = PAGE_HELP.search;
 
 type JobCard = SearchHistoryJob;
 
 const LIVE = new Set(["queued", "running", "error"]);
 
 export default function SearchPage() {
+  const t = useT();
   const help = usePageHelp("search");
   const [urls, setUrls] = useState("");
   const [history, setHistory] = useState<JobCard[]>([]);
@@ -134,8 +133,8 @@ export default function SearchPage() {
         <main className="cmae-main">
           <div className="cmae-main-inner">
             <header className="cmae-page-head">
-              <h1>{meta.title}</h1>
-              <p>{meta.subtitle}</p>
+              <h1>{t("help.search.title")}</h1>
+              <p>{t("help.search.subtitle")}</p>
             </header>
 
             <form className="cmae-start" onSubmit={start}>
@@ -166,7 +165,9 @@ export default function SearchPage() {
 
             <section className="cmae-panel">
               {loading && panelJobs.length === 0 ? (
-                <p className="cmae-panel-empty">Loading terminals…</p>
+                <p className="cmae-panel-empty">
+                  {t("search.loadingTerminals")}
+                </p>
               ) : panelJobs.length === 0 ? (
                 <p className="cmae-panel-empty">
                   Panel is empty. Start a new research or click a past entry on the right.

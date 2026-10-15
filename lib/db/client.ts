@@ -63,7 +63,7 @@ export function wipeDatabaseContents() {
     PRAGMA foreign_keys = ON;
     INSERT INTO sync_state (id, window_days) VALUES (1, 30);
     INSERT INTO settings (id, follow_up_days, preferred_language)
-      VALUES (1, 5, 'tr');
+      VALUES (1, 5, 'en');
   `);
   // Touch drizzle so callers keep using the same wrapper
   void db;
@@ -102,7 +102,7 @@ function ensureSchema(db: Database.Database) {
       cv_text TEXT,
       cv_file_name TEXT,
       follow_up_days INTEGER NOT NULL DEFAULT 5,
-      preferred_language TEXT NOT NULL DEFAULT 'tr',
+      preferred_language TEXT NOT NULL DEFAULT 'en',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -176,7 +176,7 @@ function ensureSchema(db: Database.Database) {
   // soft migrate
   const cols = db.prepare(`PRAGMA table_info(settings)`).all() as { name: string }[];
   if (!cols.some((c) => c.name === "preferred_language")) {
-    db.exec(`ALTER TABLE settings ADD COLUMN preferred_language TEXT NOT NULL DEFAULT 'tr'`);
+    db.exec(`ALTER TABLE settings ADD COLUMN preferred_language TEXT NOT NULL DEFAULT 'en'`);
   }
   if (!cols.some((c) => c.name === "email_signature")) {
     db.exec(`ALTER TABLE settings ADD COLUMN email_signature TEXT`);

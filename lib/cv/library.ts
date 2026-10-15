@@ -368,7 +368,12 @@ export function detectSiteLanguageFromFolder(
   folderPath: string | null,
 ): string | null {
   if (!folderPath || !fs.existsSync(folderPath)) return null;
-  const tryFiles = ["ozet.md", "email_site_language.md"];
+  const tryFiles = [
+    "summary.md",
+    "ozet.md",
+    "email_original.md",
+    "email_site_language.md",
+  ];
   for (const name of tryFiles) {
     const full = path.join(/*turbopackIgnore: true*/ folderPath, name);
     if (!fs.existsSync(/*turbopackIgnore: true*/ full)) continue;

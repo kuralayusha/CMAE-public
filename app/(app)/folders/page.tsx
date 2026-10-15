@@ -2,21 +2,27 @@
 
 import { Suspense } from "react";
 import { FolderBrowser } from "@/components/FolderBrowser";
+import { useT } from "@/components/I18nProvider";
 import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
 import { TopNav } from "@/components/TopNav";
 import { PageShell } from "@/components/ui";
-import { PAGE_HELP } from "@/lib/help/pages";
-
-const meta = PAGE_HELP.folders;
 
 export default function FoldersPage() {
+  const t = useT();
   const help = usePageHelp("folders");
 
   return (
     <>
       <TopNav active="folders" onHelp={help.reopen} />
-      <PageShell title={meta.title} subtitle={meta.subtitle}>
-        <Suspense fallback={<p className="cmae-fb-loading">Loading folders…</p>}>
+      <PageShell
+        title={t("help.folders.title")}
+        subtitle={t("help.folders.subtitle")}
+      >
+        <Suspense
+          fallback={
+            <p className="cmae-fb-loading">{t("common.loading")}</p>
+          }
+        >
           <FolderBrowser />
         </Suspense>
       </PageShell>

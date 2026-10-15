@@ -10,7 +10,7 @@ export const settings = sqliteTable("settings", {
   cvText: text("cv_text"),
   cvFileName: text("cv_file_name"),
   followUpDays: integer("follow_up_days").notNull().default(5),
-  preferredLanguage: text("preferred_language").notNull().default("tr"),
+  preferredLanguage: text("preferred_language").notNull().default("en"),
   /** Plain-text email signature; newlines preserved. Appended verbatim after mail closing. */
   emailSignature: text("email_signature"),
   /** JSON: work types, notice weeks, salary expectations — see lib/settings/preferences.ts */

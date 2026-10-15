@@ -9,6 +9,7 @@ import {
   isOnboardingComplete,
   isOnboardingFlagSet,
 } from "@/lib/onboarding/status";
+import { clearUserPack } from "@/lib/i18n/pack";
 import { clearAllSearchJobs } from "@/lib/search/persist";
 import { getWorkspaceRoot } from "@/lib/search/workspace";
 
@@ -20,6 +21,11 @@ import { getWorkspaceRoot } from "@/lib/search/workspace";
 export function resetAppForOnboarding(): void {
   clearAllSearchJobs();
   wipeWorkspaceContents();
+  try {
+    clearUserPack();
+  } catch {
+    /* ignore */
+  }
 
   // 1) Always clear while connected (reliable)
   wipeDatabaseContents();

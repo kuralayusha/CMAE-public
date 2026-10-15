@@ -39,7 +39,7 @@ export function getPublicSettings(): SettingsPublic {
     cvFileName: row?.cvFileName ?? null,
     hasCv: Boolean(row?.cvText),
     followUpDays: row?.followUpDays ?? 5,
-    preferredLanguage: row?.preferredLanguage ?? "tr",
+    preferredLanguage: row?.preferredLanguage ?? "en",
     emailSignature: row?.emailSignature ?? null,
     jobPreferences: parseJobPreferences(row?.jobPreferencesJson),
     onboardingCompletedAt: row?.onboardingCompletedAt ?? null,
@@ -92,7 +92,7 @@ export function updateSettings(input: {
           : current?.cursorApiKeyEnc,
       followUpDays: input.followUpDays ?? current?.followUpDays ?? 5,
       preferredLanguage:
-        input.preferredLanguage ?? current?.preferredLanguage ?? "tr",
+        input.preferredLanguage ?? current?.preferredLanguage ?? "en",
       emailSignature:
         input.emailSignature !== undefined
           ? input.emailSignature.replace(/\r\n/g, "\n").replace(/\r/g, "\n")

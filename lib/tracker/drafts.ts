@@ -51,28 +51,28 @@ export function resolveDraftContent(
 
   let draft: ParsedMailDraft | null = null;
   if (kind === "application") {
-    // Pending send: prefer site-language draft (email_site_language.md)
+    // Pending send: prefer original / site-language draft (email_original.md)
     draft = findEmailDraftInFolder(folder, preferredLang, {
       preferSiteLanguage: true,
     });
   } else if (kind === "follow_up") {
     const n = Math.max(1, item.followUpCount + 1);
+    // Prefer original send-language file (never *_translated.md)
     draft =
       findNamedDraft(folder, [
         new RegExp(`^follow_up_${n}\\.md$`, "i"),
         /^follow_up_\d+\.md$/i,
-        /^followup.*\.md$/i,
       ]) || null;
   } else if (kind === "thanks") {
-    draft = findNamedDraft(folder, [/^thanks.*\.md$/i, /^tesekkur.*\.md$/i]);
+    draft = findNamedDraft(folder, [/^thanks\.md$/i, /^tesekkur.*\.md$/i]);
   } else if (kind === "reply") {
-    draft = findNamedDraft(folder, [/^reply.*\.md$/i, /^yanit.*\.md$/i]);
+    draft = findNamedDraft(folder, [/^reply\.md$/i, /^yanit.*\.md$/i]);
   }
 
   if (!draft) {
     throw new Error(
       kind === "application"
-        ? "email_*.md draft not found"
+        ? "email_original.md draft not found"
         : `${kind} draft is not ready yet — use the prepare button first`,
     );
   }
@@ -139,7 +139,7 @@ export async function createGmailDraftForItem(
       followUpCount: item.followUpCount,
     },
     kind,
-    settings?.preferredLanguage || "tr",
+    settings?.preferredLanguage || "en",
   );
 
   let attachedCv: string | null = null;
@@ -151,7 +151,7 @@ export async function createGmailDraftForItem(
           const siteLang = detectSiteLanguageFromFolder(folder);
           const pick = await pickBestCv({
             language: siteLang,
-            preferredLanguage: settings?.preferredLanguage || "tr",
+            preferredLanguage: settings?.preferredLanguage || "en",
             position: item.position,
             fullName: settings?.fullName,
           });

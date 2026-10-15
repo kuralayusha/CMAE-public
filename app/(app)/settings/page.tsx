@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useI18n, useT } from "@/components/I18nProvider";
 import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
 import { TopNav } from "@/components/TopNav";
 import { Button, Field, PageShell } from "@/components/ui";
-import { PAGE_HELP } from "@/lib/help/pages";
+import type { LocalePack } from "@/lib/i18n/types";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
-
-const pageMeta = PAGE_HELP.settings;
 
 type WorkType = "fulltime" | "parttime" | "contracted";
 
@@ -80,6 +79,8 @@ function SettingsAcc({
 }
 
 export default function SettingsPage() {
+  const t = useT();
+  const { setPack } = useI18n();
   const help = usePageHelp("settings");
   const [form, setForm] = useState({
     fullName: "",
@@ -87,7 +88,7 @@ export default function SettingsPage() {
     gmailAppPassword: "",
     cursorApiKey: "",
     followUpDays: 5,
-    preferredLanguage: "tr",
+    preferredLanguage: "en",
     emailSignature: "",
   });
   const [prefs, setPrefs] = useState<JobPreferences>(DEFAULT_PREFS);
@@ -121,7 +122,7 @@ export default function SettingsPage() {
       fullName: data.fullName || "",
       gmailAddress: data.gmailAddress || "",
       followUpDays: data.followUpDays || 5,
-      preferredLanguage: data.preferredLanguage || "tr",
+      preferredLanguage: data.preferredLanguage || "en",
       emailSignature: data.emailSignature || "",
     }));
     setPrefs({ ...DEFAULT_PREFS, ...(data.jobPreferences || {}) });
@@ -132,14 +133,14 @@ export default function SettingsPage() {
     void load();
   }, []);
 
-  function toggleWorkType(t: WorkType) {
+  function toggleWorkType(wt: WorkType) {
     setPrefs((p) => {
-      const has = p.workTypes.includes(t);
+      const has = p.workTypes.includes(wt);
       return {
         ...p,
         workTypes: has
-          ? p.workTypes.filter((x) => x !== t)
-          : [...p.workTypes, t],
+          ? p.workTypes.filter((x) => x !== wt)
+          : [...p.workTypes, wt],
       };
     });
   }
@@ -148,6 +149,8 @@ export default function SettingsPage() {
     e.preventDefault();
     setBusy(true);
     setStatus(null);
+    const prevLang = (meta?.preferredLanguage || "en").toLowerCase();
+    const nextLang = form.preferredLanguage.trim().toLowerCase();
     try {
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -159,7 +162,23 @@ export default function SettingsPage() {
       setMeta(data);
       if (data.jobPreferences) setPrefs({ ...DEFAULT_PREFS, ...data.jobPreferences });
       setForm((f) => ({ ...f, gmailAppPassword: "", cursorApiKey: "" }));
-      setStatus("Saved");
+
+      if (nextLang && nextLang !== prevLang) {
+        setStatus(t("settings.languageUpdating"));
+        const tr = await fetch("/api/i18n/translate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetLanguage: nextLang }),
+        });
+        const trData = await tr.json();
+        if (!tr.ok) {
+          throw new Error(trData.error || t("settings.languageFailed"));
+        }
+        setPack(String(trData.code || nextLang), trData.pack as LocalePack);
+        setStatus(t("settings.languageUpdated"));
+      } else {
+        setStatus("Saved");
+      }
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     } finally {
@@ -280,7 +299,10 @@ export default function SettingsPage() {
   return (
     <>
       <TopNav active="settings" onHelp={help.reopen} />
-      <PageShell title={pageMeta.title} subtitle={pageMeta.subtitle}>
+      <PageShell
+        title={t("help.settings.title")}
+        subtitle={t("help.settings.subtitle")}
+      >
         <form className="cmae-form" onSubmit={save}>
           <SettingsAcc title="Profile">
             <Field
@@ -295,8 +317,8 @@ export default function SettingsPage() {
               />
             </Field>
             <Field
-              label="Preferred language"
-              hint="Default for drafts, AI research, and follow-ups. Thread language still wins when clear."
+              label={t("settings.preferredLanguage")}
+              hint={t("settings.preferredLanguageHint")}
             >
               <select
                 className="cmae-input"

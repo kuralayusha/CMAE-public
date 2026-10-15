@@ -9,6 +9,10 @@ import {
 } from "@/lib/settings/preferences";
 import { getJobPreferences, getSettingsRow } from "@/lib/settings/service";
 import {
+  extractSendLanguage,
+  sameLanguage,
+} from "@/lib/mail/lang";
+import {
   applySignatureToMailDraft,
   EMAIL_SIGNATURE_PROMPT_RULES,
 } from "@/lib/mail/signature";
@@ -118,11 +122,11 @@ async function ensureWorkspaceFolder(item: {
     .filter(Boolean)
     .join("\n");
 
-  await writeFile(created.folderPath, "ozet.md", `${notes}\n`);
+  await writeFile(created.folderPath, "summary.md", `${notes}\n`);
   if (item.primaryTo) {
     await writeFile(
       created.folderPath,
-      "iletisim.md",
+      "contact.md",
       `Primary: ${item.primaryTo}\nCompany: ${item.company}\n`,
     );
   }
@@ -189,33 +193,40 @@ export async function prepareDraftForItem(
 
   const folder = await ensureWorkspaceFolder(item);
   const settings = getSettingsRow();
-  const lang = settings?.preferredLanguage || "tr";
+  const userLang = settings?.preferredLanguage || "en";
   const userName = settings?.fullName || "";
-  // Prefer site-language application draft as context (same as ready_to_send)
-  const original = findEmailDraftInFolder(folder, lang, {
+  // Prefer original application draft as context (same as ready_to_send)
+  const originalApp = findEmailDraftInFolder(folder, userLang, {
     preferSiteLanguage: true,
   });
   const recent = await recentMailsForItem(itemId);
   const thread = resolveThreadReplyTarget(itemId);
   const replyTo =
     thread?.to || item.primaryTo || "unknown";
-  const iletisim = readOptional(folder, "iletisim.md");
-  const ozet = readOptional(folder, "ozet.md");
+  const contactNotes =
+    readOptional(folder, "contact.md") ||
+    readOptional(folder, "iletisim.md");
+  const summaryNotes =
+    readOptional(folder, "summary.md") || readOptional(folder, "ozet.md");
 
   let intent: string;
   let fileName: string;
+  let translatedFileName: string;
   let craftExtra = "";
   if (kind === "follow_up") {
     const n = Math.max(1, (item.followUpCount || 0) + 1);
     fileName = `follow_up_${n}.md`;
+    translatedFileName = `follow_up_${n}_translated.md`;
     intent = `Write follow-up email #${n} after no reply. Follow FOLLOW-UP CRAFT strictly. In-thread REPLY — keep context with Re: subject. Shorter than the first mail; polite, low-pressure, easy to answer.`;
     craftExtra = `\n${FOLLOW_UP_CRAFT_GUIDE}\n`;
   } else if (kind === "thanks") {
     fileName = "thanks.md";
+    translatedFileName = "thanks_translated.md";
     intent =
       "Write a short thank-you email after a rejection. Gracious, leave door open, no bitterness. In-thread reply to the rejection mail.";
   } else {
     fileName = "reply.md";
+    translatedFileName = "reply_translated.md";
     intent =
       "Write a reply to their latest inbound message. Be professional and specific to their ask (interview scheduling, questions, offer discussion, salary/notice/work-type questions, etc.). If they ask about salary, notice, start date, or employment type, answer from Candidate preferences below — never invent figures.";
   }
@@ -223,12 +234,13 @@ export async function prepareDraftForItem(
   const prefs = getJobPreferences();
   const prefsBlock =
     kind === "reply"
-      ? formatPreferencesForReply(prefs, lang)
-      : formatPreferencesForApplication(prefs, lang);
+      ? formatPreferencesForReply(prefs, "en")
+      : formatPreferencesForApplication(prefs, "en");
 
   const prompt = `${MAIL_FIELD_RULES}
 ${craftExtra}
-Language preference: ${lang} (but if the thread is clearly in another language, match the thread)
+Write the email in the thread language when clear; otherwise use language code "${userLang}".
+This draft is the ORIGINAL that will be sent — match the recipient's language.
 Candidate name: ${userName || "(from CV/signature if known)"}
 Company: ${item.company}
 Position: ${item.position || "unknown"}
@@ -243,19 +255,23 @@ Task: ${intent}
 SUBJECT must continue the thread (Re: …) using the anchor subject when possible — never start a new cold thread.
 
 Original application draft (if any) — use only as context; do NOT copy it for a follow-up:
-${original ? `SUBJECT: ${original.subject}\nBODY:\n${original.body}` : "(none)"}
+${originalApp ? `SUBJECT: ${originalApp.subject}\nBODY:\n${originalApp.body}` : "(none)"}
 
 Contact notes:
-${iletisim || "(none)"}
+${contactNotes || "(none)"}
 
 Summary:
-${ozet || "(none)"}
+${summaryNotes || "(none)"}
 
 Recent related emails (JSON):
 ${JSON.stringify(recent, null, 2)}
+
+After SUBJECT/BODY, add exactly one extra line (not inside BODY):
+SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, tr, de>
 `;
 
-  const text = await askTrackerLlm(prompt);
+  const rawText = await askTrackerLlm(prompt);
+  const { text, language: sendLanguage } = extractSendLanguage(rawText);
   const parsed = parseSubjectBody(text);
   if (!parsed) {
     throw new Error("Agent could not produce SUBJECT/BODY");
@@ -280,6 +296,38 @@ ${JSON.stringify(recent, null, 2)}
     toWrite,
     "utf8",
   );
+
+  // Skip translate LLM + *_translated.md only when we know send lang == user lang
+  const skipTranslate =
+    Boolean(sendLanguage) && sameLanguage(sendLanguage, userLang);
+  if (!skipTranslate) {
+    try {
+      const translatePrompt = `${MAIL_FIELD_RULES}
+
+Rewrite the following email into language code "${userLang}" (natural tone for that language).
+Keep the same facts, structure, threading subject (Re:), and length discipline.
+Do not invent claims. Output SUBJECT:/BODY: only.
+
+Source:
+${toWrite}
+`;
+      const translatedRaw = await askTrackerLlm(translatePrompt);
+      const translatedParsed = parseSubjectBody(translatedRaw);
+      if (translatedParsed) {
+        const translatedSigned = applySignatureToMailDraft(
+          formatSubjectBody(translatedParsed.subject, translatedParsed.body),
+          settings?.emailSignature,
+        );
+        fs.writeFileSync(
+          path.join(/*turbopackIgnore: true*/ folder, translatedFileName),
+          `# Translated for user (${userLang})\n\n${translatedSigned}`,
+          "utf8",
+        );
+      }
+    } catch {
+      /* translated copy is best-effort */
+    }
+  }
 
   const patch: Partial<typeof trackerItems.$inferInsert> = {
     updatedAt: new Date().toISOString(),

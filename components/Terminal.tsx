@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useT } from "@/components/I18nProvider";
 import { derivePlain } from "@/lib/search/plain";
 import type { JobStatus, TermKind, TermLine } from "@/lib/search/types";
 
@@ -34,14 +35,6 @@ const AGENT_COLOR: Record<string, string> = {
   conductor: "#94a3b8",
 };
 
-const STATUS_LABEL: Record<JobStatus, string> = {
-  queued: "queued",
-  running: "running",
-  done: "done",
-  error: "error",
-  canceled: "canceled",
-};
-
 export function Terminal({
   jobId,
   url,
@@ -49,6 +42,7 @@ export function Terminal({
   hideChromeButtons = false,
   fullscreen = false,
 }: Props) {
+  const t = useT();
   const [lines, setLines] = useState<TermLine[]>([]);
   const [status, setStatus] = useState<JobStatus>("queued");
   const [folderName, setFolderName] = useState(initialFolder || "(pending)");
@@ -59,6 +53,8 @@ export function Terminal({
   const [cancelBusy, setCancelBusy] = useState(false);
   const [logMode, setLogMode] = useState<LogMode>("simple");
   const scroller = useRef<HTMLDivElement>(null);
+
+  const statusLabel = t(`terminal.status.${status}`);
 
   useEffect(() => {
     const es = new EventSource(`/api/search/${jobId}/stream`);
@@ -250,7 +246,9 @@ export function Terminal({
           </div>
 
           <label className="term-mode-switch" title="Log mode">
-            <span className={logMode === "simple" ? "on" : ""}>Simple</span>
+            <span className={logMode === "simple" ? "on" : ""}>
+              {t("terminal.simple")}
+            </span>
             <button
               type="button"
               role="switch"
@@ -260,12 +258,14 @@ export function Terminal({
             >
               <span className="term-switch-knob" />
             </button>
-            <span className={logMode === "detail" ? "on" : ""}>Detail</span>
+            <span className={logMode === "detail" ? "on" : ""}>
+              {t("terminal.detail")}
+            </span>
           </label>
 
           <div className={`term-status term-status-${status}`}>
             {status === "running" ? <span className="term-pulse" /> : null}
-            {STATUS_LABEL[status]}
+            {statusLabel}
           </div>
         </div>
 
@@ -282,8 +282,8 @@ export function Terminal({
               {displayLines.length === 0 ? (
                 <div className="term-line" style={{ color: "#64748b" }}>
                   {logMode === "simple"
-                    ? "When research starts, plain steps will appear here…"
-                    : "waiting for agent…"}
+                    ? t("terminal.researchStarts")
+                    : t("terminal.waiting")}
                 </div>
               ) : null}
               {displayLines.map((line) => (
@@ -336,12 +336,8 @@ export function Terminal({
             aria-labelledby={`cancel-title-${jobId}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={`cancel-title-${jobId}`}>Cancel this operation?</h3>
-            <p>
-              Are you sure you want to cancel this operation? All agents for this
-              terminal will be killed and the company folder will be marked as
-              (canceled).
-            </p>
+            <h3 id={`cancel-title-${jobId}`}>{t("terminal.cancelTitle")}</h3>
+            <p>{t("terminal.cancelBody")}</p>
             <div className="term-modal-actions">
               <button
                 type="button"
@@ -349,7 +345,7 @@ export function Terminal({
                 onClick={() => setConfirmOpen(false)}
                 disabled={cancelBusy}
               >
-                No
+                {t("common.no")}
               </button>
               <button
                 type="button"

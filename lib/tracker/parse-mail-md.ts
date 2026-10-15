@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { WS, WS_LEGACY } from "@/lib/workspace/filenames";
 
 export type ParsedMailDraft = {
   subject: string;
@@ -10,7 +11,7 @@ export type ParsedMailDraft = {
 /**
  * Parse SUBJECT:/BODY: mail fields.
  * LLMs sometimes wrap labels as **SUBJECT:** / **BODY:** — accept that so
- * email_site_language.md is not skipped in favor of email_tr.md.
+ * email_original.md is not skipped in favor of a translated copy.
  */
 export function parseSubjectBody(
   content: string,
@@ -42,15 +43,24 @@ export function findEmailDraftInFolder(
   const files = fs.readdirSync(folderPath).filter((f) => /^email_.*\.md$/i.test(f));
   if (!files.length) return null;
 
+  const original =
+    files.find((f) => f.toLowerCase() === WS.emailOriginal) ||
+    files.find((f) => f.toLowerCase() === "email_site_language.md");
+  const translated = files.find(
+    (f) => f.toLowerCase() === WS.emailTranslated,
+  );
   const preferred = preferredLang
-    ? files.find((f) => f.toLowerCase() === `email_${preferredLang.toLowerCase()}.md`)
+    ? files.find(
+        (f) =>
+          f.toLowerCase() === `email_${preferredLang.toLowerCase()}.md`,
+      )
     : null;
-  const site = files.find((f) => f.toLowerCase() === "email_site_language.md");
-  // ready_to_send → site language first; other callers may prefer user language
+
+  // ready_to_send / Gmail → original first; other callers may prefer user language
   const ordered = (
     opts?.preferSiteLanguage
-      ? [site, preferred, ...files]
-      : [preferred, site, ...files]
+      ? [original, translated, preferred, ...files]
+      : [translated, preferred, original, ...files]
   ).filter((f): f is string => Boolean(f));
 
   const seen = new Set<string>();
@@ -91,7 +101,13 @@ export function findNamedDraft(
 
 export function extractPrimaryEmailFromWorkspace(folderPath: string): string | null {
   if (!folderPath || !fs.existsSync(folderPath)) return null;
-  for (const name of ["iletisim.md", "ozet.md"]) {
+  const names = [
+    WS.contact,
+    ...WS_LEGACY.contact,
+    WS.summary,
+    ...WS_LEGACY.summary,
+  ];
+  for (const name of names) {
     const full = path.join(/*turbopackIgnore: true*/ folderPath, name);
     if (!fs.existsSync(/*turbopackIgnore: true*/ full)) continue;
     try {

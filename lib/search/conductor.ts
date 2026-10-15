@@ -52,7 +52,7 @@ export async function runConductor(jobId: string) {
     const cfg = getDb().select().from(settings).where(eq(settings.id, 1)).get();
     const { getBestCvText } = await import("@/lib/cv/library");
     const libraryText = await getBestCvText({
-      preferredLanguage: cfg?.preferredLanguage || "tr",
+      preferredLanguage: cfg?.preferredLanguage || "en",
     });
     const cvText = libraryText?.trim() || cfg?.cvText?.trim() || "";
     if (!cvText) {
@@ -65,7 +65,7 @@ export async function runConductor(jobId: string) {
       fullName: cfg?.fullName || "Candidate",
       email: cfg?.gmailAddress || "",
       cvText,
-      preferredLang: cfg?.preferredLanguage || "tr",
+      preferredLang: cfg?.preferredLanguage || "en",
     });
 
     let stepIndex = 0;
@@ -159,7 +159,7 @@ export async function runConductor(jobId: string) {
 
     await writeFile(
       ctx.folderPath,
-      "ozet.md",
+      "summary.md",
       `# ${ctx.companyName} — scan summary\n\n- URL: ${ctx.url}\n- Folder: ${ctx.folderName}\n- Architecture: conductor + specialists\n- Matching job: ${ctx.jobFit?.hasMatchingJob ? "yes" : "no"}\n- Email: ${ctx.primaryEmail || "—"}\n- Site language: ${ctx.siteLanguage}\n- Review: ${ctx.lastReview?.overallScore ?? "—"} / ${ctx.lastReview?.threshold ?? "—"}\n- Rewinds: ${rewinds}\n`,
     );
 

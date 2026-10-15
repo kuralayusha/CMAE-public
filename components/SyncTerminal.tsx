@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useT } from "@/components/I18nProvider";
 import type { SyncLogKind, SyncLogLine } from "@/lib/tracker/types";
 
 type SyncTermStatus = "running" | "done" | "error" | "canceled";
@@ -20,14 +21,8 @@ const KIND_COLOR: Record<SyncLogKind, string> = {
   curl: "#38bdf8",
 };
 
-const STATUS_LABEL: Record<SyncTermStatus, string> = {
-  running: "running",
-  done: "done",
-  error: "error",
-  canceled: "canceled",
-};
-
 export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
+  const t = useT();
   const [stuckBottom, setStuckBottom] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -57,18 +52,18 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
       className={`term-window term-window-sync${collapsed ? " term-window-collapsed" : ""}`}
     >
       <div className="term-titlebar">
-        <div className="term-tls" role="group" aria-label="Sync terminal">
+        <div className="term-tls" role="group" aria-label={t("terminal.ariaSync")}>
           <button
             type="button"
             className="term-tl term-tl-close"
             title={
               canCancel
-                ? "Cancel sync"
+                ? t("terminal.cancelSync")
                 : canDismiss
-                  ? "Close"
+                  ? t("terminal.close")
                   : undefined
             }
-            aria-label={canCancel ? "Cancel" : "Close"}
+            aria-label={canCancel ? t("terminal.cancel") : t("terminal.close")}
             disabled={!canCancel && !canDismiss}
             onClick={onRedClick}
             style={{
@@ -85,8 +80,8 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
           <button
             type="button"
             className="term-tl term-tl-min"
-            title={collapsed ? "Expand" : "Collapse"}
-            aria-label={collapsed ? "Expand" : "Collapse"}
+            title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
+            aria-label={collapsed ? t("terminal.expand") : t("terminal.collapse")}
             onClick={() => setCollapsed((c) => !c)}
             style={DOT_HIT}
           >
@@ -103,7 +98,7 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
         </div>
         <div className={`term-status term-status-${status}`}>
           {status === "running" ? <span className="term-pulse" /> : null}
-          {STATUS_LABEL[status]}
+          {t(`terminal.status.${status}`)}
         </div>
       </div>
 

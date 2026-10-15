@@ -58,7 +58,7 @@ Return ONLY JSON:
     speak(jobId, "jobfit", "ok", `${ctx.jobFit.jobs.length} matching jobs`);
     await writeFile(
       ctx.folderPath,
-      "basvuru_linkleri.md",
+      "job_links.md",
       `# Application / job links (jobfit)\n\n${ctx.jobFit.jobs
         .map(
           (j, i) =>
@@ -70,7 +70,7 @@ Return ONLY JSON:
     speak(jobId, "jobfit", "think", "No matching jobs → cold application path");
     await writeFile(
       ctx.folderPath,
-      "basvuru_linkleri.md",
+      "job_links.md",
       `# Application / job links (jobfit)\n\nNo matching open roles.\nCold / speculative application.\n\nNotes: ${ctx.jobFit.notes || "—"}\n`,
     );
   }

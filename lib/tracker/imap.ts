@@ -199,7 +199,7 @@ async function fetchByRange(
     if (!mail) continue;
     out.push(mail);
     if (out.length % 25 === 0) {
-      onProgress?.("think", `${folder}: ${out.length} mesaj…`);
+      onProgress?.("think", `${folder}: ${out.length} messages…`);
     }
   }
   return out;
@@ -220,7 +220,7 @@ async function fetchFolder(
   signal?: AbortSignal,
 ): Promise<{ mails: FetchedMail[]; strategy: "incremental" | "window" }> {
   throwIfSyncCanceled(signal);
-  onProgress?.("curl", `${folder} okunuyor (${mailbox})…`);
+  onProgress?.("curl", `${folder} reading (${mailbox})…`);
   const lock = await client.getMailboxLock(mailbox);
   try {
     const uidValidity = uidValidityOf(client);
@@ -309,7 +309,7 @@ async function fetchFolder(
 
     onProgress?.(
       "ok",
-      `${folder}: ${mails.length} mesaj (${strategy}) · cursor UID ${cursor.lastUid}`,
+      `${folder}: ${mails.length} messages (${strategy}) · cursor UID ${cursor.lastUid}`,
     );
     return { mails, strategy };
   } finally {

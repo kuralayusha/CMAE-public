@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingIncludes: {
     "/**": [
+      "./locales/**/*",
       "./node_modules/better-sqlite3/**/*",
       "./node_modules/pdfjs-dist/**/*",
       "./node_modules/pdf-parse/**/*",

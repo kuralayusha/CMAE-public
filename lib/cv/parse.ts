@@ -1,6 +1,7 @@
 import fs from "fs";
 import { createRequire } from "module";
 import path from "path";
+import { pathToFileURL } from "url";
 
 /** Resolve modules from the running server cwd (standalone or project root). */
 const requireFromCwd = createRequire(path.join(process.cwd(), "package.json"));
@@ -19,6 +20,14 @@ async function loadPdfParse(): Promise<PdfParseModule> {
     /* optional at runtime; prepare-desktop should ship it for packaged apps */
   }
   return import("pdf-parse");
+}
+
+/**
+ * pdfjs worker path for Node ESM.
+ * Windows absolute paths like C:\... are parsed as protocol "c:" — must be file:// URLs.
+ */
+function workerUrl(absPath: string): string {
+  return pathToFileURL(path.resolve(absPath)).href;
 }
 
 /** Point pdf.js at a real worker file (standalone NFT often drops pdf.worker.mjs). */
@@ -52,7 +61,7 @@ function ensurePdfWorker(PDFParse: PdfParseModule["PDFParse"]) {
 
   for (const worker of candidates) {
     if (fs.existsSync(/*turbopackIgnore: true*/ worker)) {
-      PDFParse.setWorker(worker);
+      PDFParse.setWorker(workerUrl(worker));
       return;
     }
   }

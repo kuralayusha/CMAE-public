@@ -32,7 +32,7 @@ export async function runContact(ctx: RunContext) {
 
   await writeFile(
     ctx.folderPath,
-    "iletisim.md",
+    "contact.md",
     `# Contact (contact agent)\n\n## Recommended\n${
       ctx.primaryEmail || "_not found_"
     }\n\n## Candidates\n${

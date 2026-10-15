@@ -2,11 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import {
-  type AppPageId,
-  PAGE_HELP,
-  helpSeenKey,
-} from "@/lib/help/pages";
+import { useT } from "@/components/I18nProvider";
+import { type AppPageId, helpSeenKey } from "@/lib/help/pages";
 
 export function usePageHelp(pageId: AppPageId) {
   const [open, setOpen] = useState(false);
@@ -46,7 +43,7 @@ export function PageHelpModal({
   open: boolean;
   onClose: () => void;
 }) {
-  const help = PAGE_HELP[pageId];
+  const t = useT();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -69,6 +66,13 @@ export function PageHelpModal({
 
   if (!open || !mounted) return null;
 
+  const bodies = [0, 1]
+    .map((i) => t(`help.${pageId}.helpBody${i}`))
+    .filter((s) => s && !s.startsWith("help."));
+  const steps = [0, 1, 2, 3]
+    .map((i) => t(`help.${pageId}.helpStep${i}`))
+    .filter((s) => s && !s.startsWith("help."));
+
   return createPortal(
     <div
       className="cmae-help-backdrop"
@@ -83,22 +87,24 @@ export function PageHelpModal({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="cmae-help-head">
-          <h2 id={`cmae-help-title-${pageId}`}>{help.helpTitle}</h2>
+          <h2 id={`cmae-help-title-${pageId}`}>
+            {t(`help.${pageId}.helpTitle`)}
+          </h2>
           <button
             type="button"
             className="cmae-help-close"
             onClick={onClose}
-            aria-label="Kapat"
+            aria-label={t("common.close")}
           >
             ×
           </button>
         </header>
         <div className="cmae-help-body">
-          {help.helpBody.map((p) => (
+          {bodies.map((p) => (
             <p key={p}>{p}</p>
           ))}
           <ol className="cmae-help-steps">
-            {help.helpSteps.map((step) => (
+            {steps.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ol>

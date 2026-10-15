@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 import { getWorkspaceRootPath } from "@/lib/paths";
+import { isTranslatedMailFile } from "@/lib/workspace/filenames";
 
 function workspaceRoot() {
   return getWorkspaceRootPath();
@@ -234,9 +235,12 @@ export type WorkspaceEntryBadge = {
 
 /** Agent scratch files — not primary user deliverables. */
 const FOR_AI_FILES = new Set([
+  "summary.md",
   "ozet.md",
   "review.md",
+  "routes.md",
   "rotalar.md",
+  "contact.md",
   "iletisim.md",
 ]);
 
@@ -299,7 +303,11 @@ async function badgeForEntry(
 ): Promise<WorkspaceEntryBadge | null> {
   if (kind !== "file") return null;
 
-  if (/^basvuru_linkleri\.md$/i.test(name)) {
+  if (isTranslatedMailFile(name)) {
+    return { text: "(for user)", tone: "ok" };
+  }
+
+  if (/^(job_links|basvuru_linkleri)\.md$/i.test(name)) {
     try {
       const raw = await fs.readFile(fullPath, "utf8");
       const { count, empty } = analyzeBasvuruLinkleri(raw);
@@ -314,7 +322,7 @@ async function badgeForEntry(
 
   // User cares about: company info, application links, mail drafts
   if (
-    /^sirket_bilgileri\.md$/i.test(name) ||
+    /^(company_info|sirket_bilgileri)\.md$/i.test(name) ||
     isUserFacingMailDraft(name)
   ) {
     return null;

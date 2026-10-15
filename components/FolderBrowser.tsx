@@ -9,6 +9,13 @@ import {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui";
+import {
+  couldNotOpenFileManager,
+  detectFileManagerKind,
+  openInFileManagerLabel,
+  showInFileManagerTitle,
+  type FileManagerKind,
+} from "@/lib/platform/file-manager";
 
 type Entry = {
   name: string;
@@ -115,6 +122,11 @@ export function FolderBrowser() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revealing, setRevealing] = useState(false);
+  const [fmKind, setFmKind] = useState<FileManagerKind>("files");
+
+  useEffect(() => {
+    setFmKind(detectFileManagerKind());
+  }, []);
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Entry | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
@@ -322,7 +334,9 @@ export function FolderBrowser() {
         body: JSON.stringify({ action: "reveal", path: targetPath }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not open Finder");
+      if (!res.ok) {
+        throw new Error(data.error || couldNotOpenFileManager(fmKind));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -519,9 +533,9 @@ export function FolderBrowser() {
                     className="cmae-fb-close"
                     disabled={revealing}
                     onClick={() => void revealInOs(preview.path)}
-                    title="Show in Finder / File Explorer"
+                    title={showInFileManagerTitle(fmKind)}
                   >
-                    {revealing ? "Opening…" : "Open in Finder"}
+                    {revealing ? "Opening…" : openInFileManagerLabel(fmKind)}
                   </button>
                   <button
                     type="button"

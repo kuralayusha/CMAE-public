@@ -63,7 +63,7 @@ export async function runScout(ctx: RunContext) {
 
   await writeFile(
     ctx.folderPath,
-    "rotalar.md",
+    "routes.md",
     `# Discovered routes (scout)\n\nSource: ${url}\nLanguage: ${plan.siteLanguage}\n\n${plan.notes ? `Note: ${plan.notes}\n\n` : ""}${plan.routes
       .map(
         (r) =>
