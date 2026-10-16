@@ -21,14 +21,15 @@ function loadUpdater() {
   }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  // Private GitHub repos need GH_TOKEN / GITHUB_TOKEN in the environment
-  // at build time for publish; at runtime set via CMAE_GH_TOKEN if needed.
-  const token = process.env.CMAE_GH_TOKEN || process.env.GH_TOKEN;
-  if (token) {
-    autoUpdater.requestHeaders = {
-      ...(autoUpdater.requestHeaders || {}),
-      Authorization: `token ${token}`,
-    };
+  // Feed URL is baked by electron-builder (generic → Blob CDN). Optional
+  // override for QA: CMAE_UPDATE_FEED_URL=https://…/releases
+  const feed = (process.env.CMAE_UPDATE_FEED_URL || "").trim().replace(/\/$/, "");
+  if (feed) {
+    try {
+      autoUpdater.setFeedURL({ provider: "generic", url: feed });
+    } catch (err) {
+      console.warn("[updater] setFeedURL failed:", err);
+    }
   }
   return autoUpdater;
 }

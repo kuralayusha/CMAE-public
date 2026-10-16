@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isVercelRuntime } from "@/lib/i18n/remote";
+import { loadBestPolicy } from "@/lib/version/cdn-policy";
 import {
   computeVersionStatus,
   loadBundledPolicy,
@@ -35,15 +36,16 @@ export async function GET(req: Request) {
     const { platform, arch } = clientHints(req);
 
     if (isVercelRuntime()) {
-      const policy = loadBundledPolicy();
+      const { policy, source } = await loadBestPolicy();
       return NextResponse.json({
-        host: "vercel",
+        host: source === "cdn" ? "vercel-cdn" : "vercel",
         policy,
         // Convenience fields for simple clients
         latest: policy.latest,
         minSupported: policy.minSupported,
         force: policy.force,
         releaseUrl: policy.releaseUrl,
+        updateFeedUrl: policy.updateFeedUrl,
         downloads: policy.downloads,
         notes: policy.notes,
       });

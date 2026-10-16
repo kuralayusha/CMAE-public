@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { DownloadLanding } from "@/components/DownloadLanding";
 import { isVercelRuntime } from "@/lib/i18n/remote";
+import { loadBestPolicy } from "@/lib/version/cdn-policy";
 import {
+  applyCdnDownloads,
   loadBundledPolicy,
   type VersionPolicy,
 } from "@/lib/version/policy";
@@ -16,25 +18,30 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function policyOrFallback(): VersionPolicy {
+async function policyForLanding(): Promise<VersionPolicy> {
   try {
-    return loadBundledPolicy();
+    const { policy } = await loadBestPolicy();
+    return policy;
   } catch {
-    return {
-      latest: "0.1.0",
-      minSupported: "0.1.0",
-      force: false,
-      releaseUrl: "https://github.com/kuralayusha/CMAE/releases/latest",
-      downloads: {},
-      notes: "",
-    };
+    try {
+      return applyCdnDownloads(loadBundledPolicy());
+    } catch {
+      return applyCdnDownloads({
+        latest: "0.1.0",
+        minSupported: "0.1.0",
+        force: false,
+        releaseUrl: "",
+        downloads: {},
+        notes: "",
+      });
+    }
   }
 }
 
 /** Alias: on Vercel, `/` is the landing — keep `/download` working too. */
-export default function DownloadPage() {
+export default async function DownloadPage() {
   if (isVercelRuntime()) {
     redirect("/");
   }
-  return <DownloadLanding initialPolicy={policyOrFallback()} />;
+  return <DownloadLanding initialPolicy={await policyForLanding()} />;
 }

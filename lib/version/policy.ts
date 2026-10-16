@@ -13,10 +13,47 @@ export type VersionPolicy = {
   minSupported: string;
   /** When true, lock even if current meets minSupported but is behind latest. */
   force: boolean;
+  /** Public Vercel Blob origin (no trailing slash). */
+  cdnBase?: string;
   releaseUrl: string;
+  /** electron-updater generic feed directory (latest-mac.yml / latest.yml). */
+  updateFeedUrl?: string;
   downloads: VersionDownloads;
   notes?: string;
 };
+
+const DEFAULT_CDN_BASE =
+  "https://j99zof4rag1z9ajs.public.blob.vercel-storage.com";
+
+export function resolveCdnBase(policy?: Partial<VersionPolicy> | null): string {
+  const fromEnv = (process.env.CMAE_CDN_BASE || "").trim().replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  const fromPolicy = String(policy?.cdnBase || "")
+    .trim()
+    .replace(/\/$/, "");
+  return fromPolicy || DEFAULT_CDN_BASE;
+}
+
+/** Fill download / release URLs from cdnBase + latest when missing. */
+export function applyCdnDownloads(policy: VersionPolicy): VersionPolicy {
+  const cdn = resolveCdnBase(policy);
+  const version = policy.latest.replace(/^v/i, "");
+  const downloads: VersionDownloads = { ...policy.downloads };
+  if (!downloads["darwin-arm64"]) {
+    downloads["darwin-arm64"] =
+      `${cdn}/releases/CMAE-${version}-mac-arm64.dmg`;
+  }
+  if (!downloads["win32-x64"]) {
+    downloads["win32-x64"] = `${cdn}/releases/CMAE-${version}-win-x64.exe`;
+  }
+  return {
+    ...policy,
+    cdnBase: cdn,
+    releaseUrl: policy.releaseUrl || `${cdn}/releases`,
+    updateFeedUrl: policy.updateFeedUrl || `${cdn}/releases`,
+    downloads,
+  };
+}
 
 export type VersionPlatformKey = keyof VersionDownloads;
 
@@ -56,16 +93,18 @@ export function normalizePolicy(raw: Partial<VersionPolicy> | null | undefined):
   const downloads = (raw?.downloads && typeof raw.downloads === "object"
     ? raw.downloads
     : {}) as VersionDownloads;
-  return {
-    latest: String(raw?.latest || "0.0.0").replace(/^v/i, ""),
+  const cdn = resolveCdnBase(raw);
+  const latest = String(raw?.latest || "0.0.0").replace(/^v/i, "");
+  return applyCdnDownloads({
+    latest,
     minSupported: String(raw?.minSupported || "0.0.0").replace(/^v/i, ""),
     force: Boolean(raw?.force),
-    releaseUrl: String(
-      raw?.releaseUrl || "https://github.com/kuralayusha/CMAE/releases/latest",
-    ),
+    cdnBase: cdn,
+    releaseUrl: String(raw?.releaseUrl || `${cdn}/releases`),
+    updateFeedUrl: String(raw?.updateFeedUrl || `${cdn}/releases`),
     downloads,
     notes: String(raw?.notes || ""),
-  };
+  });
 }
 
 export function platformDownloadKey(

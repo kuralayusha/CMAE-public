@@ -155,8 +155,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
       <section className="cmae-land-section cmae-land-footer-cta">
         <h2 className="cmae-land-h2">Get the desktop app</h2>
         <p className="cmae-land-section-lead">
-          Local-first. Installers from{" "}
-          <a href={initialPolicy.releaseUrl}>GitHub Releases</a>.
+          Local-first. Signed installers via CDN (v{initialPolicy.latest}).
         </p>
         <div className="cmae-land-ctas">
           <a className="cmae-land-cta is-primary" href={macUrl}>
