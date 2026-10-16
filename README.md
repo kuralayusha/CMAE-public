@@ -2,6 +2,33 @@
 
 Local-first cold mail agent.
 
+## Release & deploy (ne ne zaman olur?)
+
+### 1) Normal `git push` (main’e kod)
+
+- **Vercel** siteyi yeniler (landing / API).
+- **Desktop Release** CI çalışmaz — paket üretilmez, Blob’a bir şey yüklenmez.
+- Landing linkleri değişmez (CDN’deki `policy.json` / `version-policy.json` neyse o kalır).
+- Not: `Desktop Mac` / `Desktop Win` job’ları bazen push’ta açılabilir; bunlar sadece Actions artefact üretir, CDN’e basmaz.
+
+### 2) Yeni sürüm (paket + link + auto-update)
+
+Sıra:
+
+1. `package.json` version’ı yükselt (örn. `0.1.0` → `0.2.0`)
+2. `node scripts/bump-version-policy.mjs` — CDN linklerini yeni versiyona yazar
+3. Commit + push
+4. Tag at: `git tag v0.2.0 && git push origin v0.2.0`  
+   **veya** Actions → **Desktop Release** → Run workflow → `v0.2.0`
+
+Sonra CI Mac/Win paketini yapar → **Vercel Blob**’a yükler → `policy.json` güncellenir → landing linkleri yeni dosyaya bakar. Auto-update aynı feed’i okur.
+
+**Sadece push yetmez;** tag veya manuel Desktop Release şart.
+
+### 3) Tek seferlik Blob secret
+
+GitHub Actions secret: `BLOB_READ_WRITE_TOKEN` (Vercel → Storage → `cmae-releases`, veya `node scripts/sync-blob-token-to-github.mjs`).
+
 ## Active surfaces
 
 - **Tracker** (`/` → `/tracker`) — Gmail sync (last 30 days) + search outputs; application status list; Gmail Drafts (you send)
@@ -64,15 +91,12 @@ Desktop compares `package.json` version against the remote policy at
 `https://cmae.vercel.app/api/version` (from [`version-policy.json`](version-policy.json)).
 
 - Below `minSupported` (or `force: true`) → full-screen lock + download / install CTA
-- Behind `latest` only → dismissible banner; `electron-updater` also checks GitHub Releases
+- Behind `latest` only → dismissible banner; `electron-updater` checks the public Blob feed (`updateFeedUrl`)
 - Reinstalling a newer DMG/NSIS **keeps** userData (do not use Settings → Uninstall)
 
-### Release (GitHub Releases)
+### Release (Vercel Blob CDN)
 
-1. Bump `version` in `package.json` and mirror fields in `version-policy.json` (`latest`, download URLs, notes).
-2. Commit, tag `vX.Y.Z`, push the tag.
-3. [`.github/workflows/desktop-release.yml`](.github/workflows/desktop-release.yml) builds Mac + Win with `CMAE_OBFUSCATE=1` and publishes to the GitHub Release.
-4. Deploy the same commit to Vercel so `/api/version` serves the new policy.
+See **Release & deploy** at the top. Short version: bump version → `bump-version-policy` → commit → tag / Desktop Release → artefacts land on Blob; landing reads CDN `policy.json`.
 
 ### Code signing secrets (GitHub Actions)
 
@@ -85,8 +109,9 @@ Desktop compares `package.json` version against the remote policy at
 | `APPLE_TEAM_ID` | Mac | Team ID |
 | `WIN_CSC_LINK` | Win | Base64 Authenticode `.pfx` |
 | `WIN_CSC_KEY_PASSWORD` | Win | pfx password |
+| `BLOB_READ_WRITE_TOKEN` | Both | Vercel Blob upload (required for CDN publish) |
 
-Without these, release builds still publish **unsigned** artefacts (Gatekeeper / SmartScreen warnings remain).
+Without signing secrets, release builds still upload **unsigned** artefacts (Gatekeeper / SmartScreen warnings remain). Without `BLOB_READ_WRITE_TOKEN`, Desktop Release fails before upload.
 
 Encode a cert: `base64 -i cert.p12 | pbcopy` (macOS) / `certutil -encode cert.pfx -` (Windows).
 
@@ -96,7 +121,7 @@ Local Mac builds keep `mac.identity: null` in `electron-builder.yml` so keychain
 
 - Mac: [`.github/workflows/desktop-mac.yml`](.github/workflows/desktop-mac.yml) → artefact **CMAE-mac-dmg**
 - Windows: [`.github/workflows/desktop-win.yml`](.github/workflows/desktop-win.yml) → artefact **CMAE-win-nsis**
-- Release: [`.github/workflows/desktop-release.yml`](.github/workflows/desktop-release.yml) on `v*` tags → GitHub Releases
+- Release: [`.github/workflows/desktop-release.yml`](.github/workflows/desktop-release.yml) on `v*` tags / workflow_dispatch → Vercel Blob CDN
 
 ### First open (unsigned)
 

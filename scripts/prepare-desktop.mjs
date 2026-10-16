@@ -137,8 +137,12 @@ async function fetchOfficialNodeBinary() {
       stdio: "inherit",
     });
   } else {
-    // Windows 10+ / GitHub runners ship tar that can extract zip
-    execFileSync("tar", ["-xf", archivePath, "-C", tmpDir], {
+    // Windows tar treats "D:\..." as host:path ("Cannot connect to D:").
+    // Extract with cwd + relative paths instead.
+    const archiveRel = path.basename(archivePath);
+    const tmpRel = path.relative(resourcesDir, tmpDir) || ".";
+    execFileSync("tar", ["-xf", archiveRel, "-C", tmpRel], {
+      cwd: resourcesDir,
       stdio: "inherit",
     });
   }
