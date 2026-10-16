@@ -137,14 +137,21 @@ async function fetchOfficialNodeBinary() {
       stdio: "inherit",
     });
   } else {
-    // Windows tar treats "D:\..." as host:path ("Cannot connect to D:").
-    // Extract with cwd + relative paths instead.
-    const archiveRel = path.basename(archivePath);
-    const tmpRel = path.relative(resourcesDir, tmpDir) || ".";
-    execFileSync("tar", ["-xf", archiveRel, "-C", tmpRel], {
-      cwd: resourcesDir,
-      stdio: "inherit",
-    });
+    // Do not use `tar` on Windows: GitHub `shell: bash` puts Git's GNU tar
+    // first on PATH, and it cannot extract .zip ("does not look like a tar
+    // archive"). PowerShell Expand-Archive is reliable from any shell.
+    const psArchive = archivePath.replace(/'/g, "''");
+    const psDest = tmpDir.replace(/'/g, "''");
+    execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `Expand-Archive -LiteralPath '${psArchive}' -DestinationPath '${psDest}' -Force`,
+      ],
+      { stdio: "inherit" },
+    );
   }
 
   if (!existsSync(extractedNode)) {

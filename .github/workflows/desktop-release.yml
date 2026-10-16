@@ -131,7 +131,7 @@ jobs:
         run: npm ci
 
       - name: Build + upload Windows → Blob
-        shell: bash
+        # Prefer PowerShell (default) so PATH uses System32 tar/tools, not Git bash.
         run: npm run desktop:publish:win
         env:
           CMAE_OBFUSCATE: "1"
