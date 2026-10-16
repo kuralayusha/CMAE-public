@@ -1,7 +1,7 @@
 /* Landing — app-faithful: Inter + IBM Plex Mono, #1a1a1a, hairlines */
 
 .cmae-land {
-  --land-max: 1080px;
+  --land-max: 1180px;
   min-height: 100vh;
   color: var(--ink, #1a1a1a);
   background:
@@ -19,7 +19,7 @@
 
 /* —— Hero (one composition: brand, title, lead, CTAs) —— */
 .cmae-land-hero {
-  padding: 56px 24px 28px;
+  padding: 56px 24px 56px;
   max-width: var(--land-max);
   margin: 0 auto;
 }
@@ -104,50 +104,101 @@
   cursor: default;
 }
 
-/* Dominant visual plane — research demo */
-.cmae-land-hero-stage {
+/* —— Tour chapter: separates marketing hero from demos —— */
+.cmae-land-tour {
+  border-top: 1px solid var(--line, #e3e3e3);
+  padding-top: 8px;
+}
+
+.cmae-land-tour-label {
+  max-width: var(--land-max);
+  margin: 0 auto;
+  padding: 28px 20px 4px;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint, #8a8a8a);
+}
+
+/* —— Scenario stages: white step copy (right) + light-gray demo band —— */
+.cmae-land-stage {
+  width: 100%;
+  background: transparent;
+}
+
+.cmae-land-stage-head {
+  max-width: var(--land-max);
+  margin: 0 auto;
+  padding: 36px 20px 20px;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+  text-align: right;
+}
+
+.cmae-land-stage-step {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px 14px;
+}
+
+.cmae-land-stage-n {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-faint, #8a8a8a);
+}
+
+.cmae-land-stage-t {
+  font-size: clamp(1.25rem, 2.4vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--ink, #1a1a1a);
+}
+
+.cmae-land-stage-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-muted, #555);
+  max-width: 42ch;
+}
+
+.cmae-land-stage-panel {
   width: 100%;
   border-top: 1px solid var(--line, #e3e3e3);
   border-bottom: 1px solid var(--line, #e3e3e3);
-  background: #0c0d10;
-  color: #e8e8e6;
+  background: #f7f7f5;
+  color: var(--ink, #1a1a1a);
+}
+
+.cmae-land-stage-body {
+  max-width: var(--land-max);
+  margin: 0 auto;
 }
 
 .cmae-land-demo {
   max-width: var(--land-max);
   margin: 0 auto;
-  padding: 28px 20px 36px;
+  padding: 28px 20px 44px;
   display: grid;
-  gap: 20px;
+  gap: 14px;
 }
 
-.cmae-land-demo-chrome {
+/* Dark app surface inside the light-gray demo band */
+.cmae-land-inset {
+  border: 1px solid #2a2e36;
+  background: #0c0d10;
+  color: #e8e8e6;
   display: grid;
-  gap: 16px;
-}
-
-.cmae-land-demo-nav {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 14px 18px;
-  font-size: 13px;
-  color: #8a8a8a;
-  border-bottom: 1px solid #22252b;
-  padding-bottom: 12px;
-}
-
-.cmae-land-demo-brand {
-  font-family: var(--font-mono, "IBM Plex Mono", monospace);
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #c8c8c4;
-  margin-right: 8px;
-}
-
-.cmae-land-demo-nav .is-active {
-  color: #f2f2ef;
+  gap: 18px;
+  padding: 18px 16px 20px;
+  box-shadow: 0 1px 0 rgba(26, 26, 26, 0.04);
 }
 
 .cmae-land-demo-label {
@@ -162,7 +213,7 @@
 .cmae-land-demo-textarea {
   width: 100%;
   box-sizing: border-box;
-  resize: vertical;
+  resize: none;
   min-height: 72px;
   padding: 12px 14px;
   border: 1px solid #2a2e36;
@@ -172,6 +223,7 @@
   font-size: 12px;
   line-height: 1.45;
   border-radius: 0;
+  cursor: default;
 }
 
 .cmae-land-demo-textarea:focus {
@@ -190,11 +242,38 @@
 .cmae-land-demo-hint {
   margin: 0;
   font-size: 13px;
-  color: #8a8a8a;
+  line-height: 1.45;
+  color: var(--ink-muted, #555);
 }
 
-.cmae-land-hero-stage .cmae-land-demo-hint {
-  color: #9a9a96;
+/* Buttons on light-gray band (e.g. Tracker sync) */
+.cmae-land-stage-panel > .cmae-land-stage-body .cmae-land-demo > .cmae-land-tracker-bar .cmae-land-cta,
+.cmae-land-stage-panel .cmae-land-demo > .cmae-land-tracker-bar .cmae-land-cta {
+  border-color: var(--ink, #1a1a1a);
+  color: var(--ink, #1a1a1a);
+}
+
+.cmae-land-stage-panel .cmae-land-demo > .cmae-land-tracker-bar .cmae-land-cta.is-primary {
+  background: var(--ink, #1a1a1a);
+  color: #fff;
+  border-color: var(--ink, #1a1a1a);
+}
+
+/* Buttons inside dark inset */
+.cmae-land-inset .cmae-land-cta {
+  border-color: #c8c8c4;
+  color: #f2f2ef;
+}
+
+.cmae-land-inset .cmae-land-cta.is-primary {
+  background: #f2f2ef;
+  color: #0c0d10;
+  border-color: #f2f2ef;
+}
+
+.cmae-land-inset .cmae-land-cta:not(.is-primary):hover:not(:disabled) {
+  background: #f2f2ef;
+  color: #0c0d10;
 }
 
 .cmae-land-demo-terms {
@@ -221,7 +300,7 @@
    gets crushed and its text ghosts over the log body. */
 .cmae-land-sim-term.term-window {
   min-height: 0;
-  max-height: 300px;
+  max-height: 340px;
   height: auto;
   overflow: hidden;
   isolation: isolate;
@@ -246,13 +325,317 @@
 .cmae-land-sim-term .term-body {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 168px;
+  max-height: 210px;
   position: relative;
   z-index: 1;
   background: #0a0a0a;
 }
 
-/* —— Sections —— */
+/* —— Folders demo (FolderBrowser mirror) —— */
+.cmae-land-fb.cmae-land-inset {
+  padding: 0;
+  gap: 0;
+  background: #12141a;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+}
+
+
+.cmae-land-fb-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #2a2e36;
+}
+
+.cmae-land-fb-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+
+.cmae-land-fb-icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #2a2e36;
+  background: #0c0d10;
+  color: #c8c8c4;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cmae-land-fb-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cmae-land-fb-icon:not(:disabled):hover {
+  border-color: #5a5a5a;
+  color: #f2f2ef;
+}
+
+.cmae-land-fb-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+}
+
+.cmae-land-fb-sep {
+  color: #5a5a5a;
+  margin: 0 4px;
+}
+
+.cmae-land-fb-crumb-btn {
+  border: none;
+  background: none;
+  color: #9a9a96;
+  padding: 2px 4px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cmae-land-fb-crumb-btn:hover {
+  color: #f2f2ef;
+}
+
+.cmae-land-fb-count {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 11px;
+  color: #7a7a76;
+  letter-spacing: 0.04em;
+}
+
+.cmae-land-fb-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 260px;
+  flex: 1;
+}
+
+.cmae-land-fb-body.is-split {
+  grid-template-columns: minmax(200px, 0.9fr) minmax(0, 1.2fr);
+}
+
+@media (max-width: 720px) {
+  .cmae-land-fb-body.is-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cmae-land-fb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-right: 1px solid #2a2e36;
+  overflow: auto;
+  max-height: 360px;
+}
+
+.cmae-land-fb-row {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 8px;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid #1e2128;
+  background: transparent;
+  color: #e8e8e6;
+  text-align: left;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.cmae-land-fb-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cmae-land-fb-row.is-selected {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cmae-land-fb-dir {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  color: #c8c8c4;
+}
+
+.cmae-land-fb-name {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+}
+
+.cmae-land-fb-badge {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: #7a7a76;
+}
+
+.cmae-land-fb-badge.is-ok {
+  color: #86efac;
+}
+
+.cmae-land-fb-badge.is-ai {
+  color: #93c5fd;
+}
+
+.cmae-land-fb-badge.is-muted {
+  color: #6b7280;
+}
+
+.cmae-land-fb-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 260px;
+  max-height: 360px;
+  background: #0c0d10;
+}
+
+.cmae-land-fb-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #2a2e36;
+}
+
+.cmae-land-fb-preview-title {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  color: #f2f2ef;
+}
+
+.cmae-land-fb-preview-meta {
+  font-size: 12px;
+  color: #7a7a76;
+}
+
+.cmae-land-fb-preview-body {
+  margin: 0;
+  padding: 14px 16px 20px;
+  overflow: auto;
+  flex: 1;
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  color: #c8c8c4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* —— Tracker demo —— */
+.cmae-land-tracker-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+}
+
+.cmae-land-tracker-bar .cmae-land-demo-hint {
+  flex: 1 1 220px;
+  max-width: 48ch;
+}
+
+.cmae-land-tracker.cmae-land-inset {
+  padding: 8px 14px 4px;
+  gap: 0;
+  background: #12141a;
+}
+
+.cmae-land-tracker-table {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid #2a2e36;
+}
+
+.cmae-land-tracker-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr 1.15fr 0.7fr;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid #1e2128;
+  font-size: 14px;
+  align-items: center;
+  transition: background 0.25s ease;
+  color: #e8e8e6;
+}
+
+.cmae-land-tracker-row.is-head {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7a7a76;
+  padding-top: 10px;
+  padding-bottom: 8px;
+}
+
+.cmae-land-tracker-co {
+  font-weight: 600;
+}
+
+.cmae-land-tracker-act {
+  font-family: var(--font-mono, "IBM Plex Mono", monospace);
+  font-size: 12px;
+  color: #7a7a76;
+}
+
+.cmae-land-tracker-status-cell {
+  display: flex;
+  align-items: center;
+}
+
+.cmae-land-tracker-row.is-flash {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.cmae-land-tracker-row.is-new {
+  animation: cmae-land-row-in 0.45s ease both;
+}
+
+@keyframes cmae-land-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .cmae-land-tracker-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 12px;
+  }
+
+  .cmae-land-tracker-row.is-head {
+    display: none;
+  }
+
+  .cmae-land-tracker-act {
+    grid-column: 2;
+  }
+}
+
+/* —— Sections (FAQ / footer) —— */
 .cmae-land-section {
   max-width: var(--land-max);
   margin: 0 auto;
@@ -280,141 +663,6 @@
 .cmae-land-section-lead a {
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-.cmae-land-steps {
-  list-style: none;
-  margin: 20px 0 0;
-  padding: 0;
-  border-top: 1px solid var(--line, #e3e3e3);
-}
-
-.cmae-land-steps li {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  grid-template-rows: auto auto;
-  column-gap: 14px;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--line, #e3e3e3);
-}
-
-.cmae-land-step-n {
-  grid-row: 1 / span 2;
-  font-family: var(--font-mono, "IBM Plex Mono", monospace);
-  font-size: 13px;
-  color: var(--ink-faint, #8a8a8a);
-  padding-top: 2px;
-}
-
-.cmae-land-step-t {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.cmae-land-step-d {
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--ink-muted, #555);
-}
-
-/* Tracker demo */
-.cmae-land-tracker {
-  margin-top: 16px;
-  border: 1px solid var(--line, #e3e3e3);
-  padding: 20px;
-  display: grid;
-  gap: 16px;
-  background: var(--bg, #fff);
-}
-
-.cmae-land-tracker-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.cmae-land-tracker-title {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.cmae-land-tracker-sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--ink-muted, #555);
-}
-
-.cmae-land-tracker-table {
-  display: grid;
-  gap: 0;
-  border-top: 1px solid var(--line, #e3e3e3);
-}
-
-.cmae-land-tracker-row {
-  display: grid;
-  grid-template-columns: 1.2fr 1.2fr 1fr;
-  gap: 12px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line, #e3e3e3);
-  font-size: 14px;
-  align-items: baseline;
-  transition: background 0.25s ease;
-}
-
-.cmae-land-tracker-row.is-head {
-  font-family: var(--font-mono, "IBM Plex Mono", monospace);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--ink-faint, #8a8a8a);
-  padding-top: 10px;
-  padding-bottom: 8px;
-}
-
-.cmae-land-tracker-co {
-  font-weight: 600;
-}
-
-.cmae-land-tracker-st {
-  font-size: 13px;
-  color: var(--ink-muted, #555);
-}
-
-.cmae-land-tracker-st.is-ready {
-  color: var(--ink, #1a1a1a);
-  font-weight: 550;
-}
-
-.cmae-land-tracker-st.is-reply {
-  color: #8a4b00;
-}
-
-.cmae-land-tracker-st.is-follow {
-  color: #5c5c5c;
-}
-
-.cmae-land-tracker-row.is-flash {
-  background: rgba(26, 26, 26, 0.04);
-}
-
-.cmae-land-tracker-row.is-new {
-  animation: cmae-land-row-in 0.45s ease both;
-}
-
-@keyframes cmae-land-row-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
 }
 
 /* FAQ */
