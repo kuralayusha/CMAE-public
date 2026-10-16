@@ -19,7 +19,8 @@ Sıra:
 2. `node scripts/bump-version-policy.mjs` — CDN linklerini yeni versiyona yazar
 3. Commit + push
 4. Tag at: `git tag v0.2.0 && git push origin v0.2.0`  
-   **veya** Actions → **Desktop Release** → Run workflow → `v0.2.0`
+   **veya** Actions → **Desktop Release** → Use workflow from **`main`** → Run workflow → `v0.2.0`  
+   (Manuel çalıştırmada kod **seçilen branch’ten** gelir; tag alanı sadece version kontrolü içindir — eski tag commit’i checkout edilmez.)
 
 Sonra CI Mac/Win paketini yapar → **Vercel Blob**’a yükler → `policy.json` güncellenir → landing linkleri yeni dosyaya bakar. Auto-update aynı feed’i okur.
 

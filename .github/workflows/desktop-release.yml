@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to rebuild/publish (e.g. v0.1.0)"
+        description: "Expected version tag (e.g. v0.1.0). On manual runs, code comes from the branch above — not the old tag commit."
         required: false
         type: string
 
@@ -35,10 +35,24 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
     steps:
+      # Checkout defaults to the branch/tag that triggered the run:
+      # - workflow_dispatch → branch selected in UI (main) — not the old tag commit
+      # - push tags/v* → that tag
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Verify package version vs requested tag
+        if: ${{ inputs.tag != '' }}
+        shell: bash
+        run: |
+          EXPECTED="${{ inputs.tag }}"
+          EXPECTED="${EXPECTED#v}"
+          ACTUAL=$(node -p "require('./package.json').version")
+          echo "package.json=${ACTUAL} requested_tag=${EXPECTED}"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::package.json version ($ACTUAL) does not match requested tag ($EXPECTED). Bump version or pass the matching tag."
+            exit 1
+          fi
 
       - name: Require Blob token
         run: |
@@ -85,8 +99,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Verify package version vs requested tag
+        if: ${{ inputs.tag != '' }}
+        shell: bash
+        run: |
+          EXPECTED="${{ inputs.tag }}"
+          EXPECTED="${EXPECTED#v}"
+          ACTUAL=$(node -p "require('./package.json').version")
+          echo "package.json=${ACTUAL} requested_tag=${EXPECTED}"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::package.json version ($ACTUAL) does not match requested tag ($EXPECTED). Bump version or pass the matching tag."
+            exit 1
+          fi
 
       - name: Require Blob token
         shell: bash
