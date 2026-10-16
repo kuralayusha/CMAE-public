@@ -2,22 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  SearchHistory,
-  type SearchHistoryJob,
-} from "@/components/SearchHistory";
+  ResearchHistory,
+  type ResearchHistoryJob,
+} from "@/components/ResearchHistory";
 import { useT } from "@/components/I18nProvider";
 import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
 import { Terminal } from "@/components/Terminal";
 import { TopNav } from "@/components/TopNav";
 import { Button } from "@/components/ui";
 
-type JobCard = SearchHistoryJob;
+type JobCard = ResearchHistoryJob;
 
 const LIVE = new Set(["queued", "running", "error"]);
 
-export default function SearchPage() {
+export default function ResearchPage() {
   const t = useT();
-  const help = usePageHelp("search");
+  const help = usePageHelp("research");
   const [urls, setUrls] = useState("");
   const [history, setHistory] = useState<JobCard[]>([]);
   const [catalog, setCatalog] = useState<Record<string, JobCard>>({});
@@ -37,7 +37,7 @@ export default function SearchPage() {
 
   const refreshJobs = useCallback(async () => {
     try {
-      const res = await fetch("/api/search");
+      const res = await fetch("/api/research");
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not load jobs");
 
@@ -101,7 +101,7 @@ export default function SearchPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/search", {
+      const res = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ urls }),
@@ -121,11 +121,11 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="cmae-search">
-      <TopNav active="search" onHelp={help.reopen} />
+    <div className="cmae-research">
+      <TopNav active="research" onHelp={help.reopen} />
 
-      <div className="cmae-search-body">
-        <SearchHistory
+      <div className="cmae-research-body">
+        <ResearchHistory
           items={history}
           panelIds={panelIds}
           selectedId={selectedId}
@@ -136,8 +136,8 @@ export default function SearchPage() {
         <main className="cmae-main">
           <div className="cmae-main-inner">
             <header className="cmae-page-head">
-              <h1>{t("help.search.title")}</h1>
-              <p>{t("help.search.subtitle")}</p>
+              <h1>{t("help.research.title")}</h1>
+              <p>{t("help.research.subtitle")}</p>
             </header>
 
             <form className="cmae-start" onSubmit={start}>
@@ -146,7 +146,7 @@ export default function SearchPage() {
                 value={urls}
                 onChange={(e) => setUrls(e.target.value)}
                 rows={5}
-                placeholder={t("search.placeholder")}
+                placeholder={t("research.placeholder")}
                 style={{
                   fontFamily: "var(--font-mono), ui-monospace, monospace",
                   fontSize: 13,
@@ -160,7 +160,7 @@ export default function SearchPage() {
               />
               <div className="cmae-start-actions">
                 <Button type="submit" disabled={busy || !urls.trim()}>
-                  {busy ? t("search.starting") : t("search.start")}
+                  {busy ? t("research.starting") : t("research.start")}
                 </Button>
               </div>
               {error ? <p className="cmae-error">{error}</p> : null}
@@ -169,22 +169,22 @@ export default function SearchPage() {
             <section className="cmae-panel">
               {loading && panelJobs.length === 0 ? (
                 <p className="cmae-panel-empty">
-                  {t("search.loadingTerminals")}
+                  {t("research.loadingTerminals")}
                 </p>
               ) : panelJobs.length === 0 ? (
-                <p className="cmae-panel-empty">{t("search.panelEmpty")}</p>
+                <p className="cmae-panel-empty">{t("research.panelEmpty")}</p>
               ) : (
                 <div className="term-grid">
                   {panelJobs.map((j) => (
                     <div key={j.id} id={`term-${j.id}`} className="term-slot">
                       {!LIVE.has(j.status) ? (
                         <div className="term-slot-bar">
-                          <span>{t("search.pastSession")}</span>
+                          <span>{t("research.pastSession")}</span>
                           <button
                             type="button"
                             onClick={() => removeFromPanel(j.id)}
                           >
-                            {t("search.removeFromPanel")}
+                            {t("research.removeFromPanel")}
                           </button>
                         </div>
                       ) : null}
@@ -204,7 +204,7 @@ export default function SearchPage() {
       </div>
 
       <PageHelpModal
-        pageId="search"
+        pageId="research"
         open={help.open}
         onClose={help.close}
       />

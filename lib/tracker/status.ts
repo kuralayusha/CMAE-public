@@ -33,7 +33,7 @@ export type StatusInput = {
   hasOutbound: boolean;
   hasInbound: boolean;
   isThanksSent: boolean;
-  fromSearchOnly: boolean;
+  fromResearchOnly: boolean;
   lastInboundSubject?: string | null;
   lastInboundBody?: string | null;
   lastInboundFrom?: string | null;
@@ -98,7 +98,7 @@ export function resolveStatus(input: StatusInput): {
       ? input.waitingOn
       : null;
 
-  if (input.fromSearchOnly && !input.hasOutbound) {
+  if (input.fromResearchOnly && !input.hasOutbound) {
     return {
       status: "ready_to_send",
       sentiment: null,

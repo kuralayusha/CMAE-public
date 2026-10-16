@@ -15,7 +15,7 @@ export default function LiveTerminalPage() {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`/api/search/${jobId}`);
+        const res = await fetch(`/api/research/${jobId}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Job not found");
         if (!alive) return;

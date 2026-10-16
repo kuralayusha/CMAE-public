@@ -27,7 +27,7 @@ function mergeTwo(a: AiGroup, b: AiGroup): AiGroup {
     isClickAction: a.isClickAction || b.isClickAction,
     followUpCountHint: Math.max(a.followUpCountHint, b.followUpCountHint),
     mailIds,
-    searchJobId: a.searchJobId || b.searchJobId,
+    researchJobId: a.researchJobId || b.researchJobId,
     notes: [a.notes, b.notes].filter(Boolean).join(" | ").slice(0, 500),
   };
 }

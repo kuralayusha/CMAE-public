@@ -52,7 +52,7 @@ function mapRow(
     nextFollowUpAt: row.nextFollowUpAt,
     ignored: Boolean(row.ignored),
     workspaceFolder: row.workspaceFolder,
-    searchJobId: row.searchJobId,
+    researchJobId: row.researchJobId,
     primaryTo: row.primaryTo,
     notesJson: row.notesJson,
     hasFollowUpDraft: Boolean(row.hasFollowUpDraft),

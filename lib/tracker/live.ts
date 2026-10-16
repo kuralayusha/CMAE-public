@@ -1,8 +1,8 @@
 import { EventEmitter } from "events";
 
 export type TrackerLiveEvent = {
-  type: "search_merged" | "refresh";
-  searchJobId?: string;
+  type: "research_merged" | "refresh";
+  researchJobId?: string;
   action?: "inserted" | "updated" | "linked" | "skipped";
   itemId?: number;
   at?: number;

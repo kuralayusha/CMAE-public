@@ -152,7 +152,7 @@ export function LandingTrackerDemo() {
                 : "Stripe, Vercel, and Linear appeared as Ready to send. Figma moved to Reply needed."
               : researchDone
                 ? "Click Gmail sync — your three researched companies join as Ready to send."
-                : "Existing conversations stay. Click Gmail sync to pull in the Search companies."}
+                : "Existing conversations stay. Click Gmail sync to pull in the Research companies."}
         </p>
         <button
           type="button"

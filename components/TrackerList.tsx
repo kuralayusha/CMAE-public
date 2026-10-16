@@ -525,13 +525,13 @@ export function TrackerList() {
       }
     })();
 
-    // Search light-merge → refresh list immediately (not a Gmail sync)
+    // Research light-merge → refresh list immediately (not a Gmail sync)
     const live = new EventSource("/api/tracker/live");
     liveEsRef.current = live;
     live.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data) as { type?: string };
-        if (data.type === "search_merged" || data.type === "refresh") {
+        if (data.type === "research_merged" || data.type === "refresh") {
           void load().catch(() => {
             /* keep prior list */
           });

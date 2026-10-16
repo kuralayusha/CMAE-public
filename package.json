@@ -19,10 +19,12 @@
     "desktop:obfuscate": "node scripts/obfuscate-desktop.mjs",
     "version:sync-policy": "node scripts/bump-version-policy.mjs",
     "desktop:prepare": "node scripts/obfuscate-desktop.mjs && node scripts/prepare-desktop.mjs",
-    "desktop:build:mac": "npm run build && npm run desktop:prepare && electron-builder --mac --config electron-builder.yml --publish never",
+    "desktop:build:mac": "node scripts/desktop-build-mac.mjs",
+    "desktop:build:mac:signed": "node scripts/desktop-build-mac.mjs --sign",
     "desktop:build:win": "npm run build && npm run desktop:prepare && electron-builder --win --config electron-builder.yml --publish never",
     "desktop:upload:github": "node scripts/upload-desktop-github.mjs",
-    "desktop:publish:mac": "npm run desktop:build:mac && node scripts/upload-desktop-github.mjs --platform mac",
+    "desktop:publish:mac": "node scripts/desktop-build-mac.mjs && node scripts/upload-desktop-github.mjs --platform mac",
+    "desktop:publish:mac:signed": "node scripts/desktop-build-mac.mjs --sign && node scripts/upload-desktop-github.mjs --platform mac",
     "desktop:publish:win": "npm run desktop:build:win && node scripts/upload-desktop-github.mjs --platform win"
   },
   "dependencies": {

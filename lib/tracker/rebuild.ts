@@ -7,7 +7,7 @@ import {
   trackerItems,
 } from "@/lib/db/schema";
 import { getSettingsRow } from "@/lib/settings/service";
-import { getWorkspaceRoot } from "@/lib/search/workspace";
+import { getWorkspaceRoot } from "@/lib/research/workspace";
 import {
   classifyMailSignals,
   flagsFromIntent,
@@ -115,10 +115,10 @@ export async function rebuildTrackerItems(opts?: {
     t("sync.writingGroups", { count: groups.length }),
   );
 
-  // Preserve draft flags + inactive keyed by searchJobId / company
+  // Preserve draft flags + inactive keyed by researchJobId / company
   const prev = db.select().from(trackerItems).all();
   const prevByJob = new Map(
-    prev.filter((p) => p.searchJobId).map((p) => [p.searchJobId!, p]),
+    prev.filter((p) => p.researchJobId).map((p) => [p.researchJobId!, p]),
   );
   const prevByCompany = new Map(prev.map((p) => [p.company.toLowerCase(), p]));
   const inactivePrev = prev.filter((p) => p.status === "inactive");
@@ -136,7 +136,7 @@ export async function rebuildTrackerItems(opts?: {
       .map((id) => mailById.get(id))
       .filter((m): m is NonNullable<typeof m> => Boolean(m));
 
-    const search = searches.find((s) => s.searchJobId === g.searchJobId);
+    const search = searches.find((s) => s.researchJobId === g.researchJobId);
     let workspaceFolder = search?.workspaceFolder ?? null;
     let folderPath = search?.folderPath ?? null;
     if (!folderPath && workspaceFolder) {
@@ -149,7 +149,7 @@ export async function rebuildTrackerItems(opts?: {
         (s) => s.company.toLowerCase() === g.company.toLowerCase(),
       );
       if (byName) {
-        g.searchJobId = byName.searchJobId;
+        g.researchJobId = byName.researchJobId;
         workspaceFolder = byName.workspaceFolder;
         folderPath = byName.folderPath;
       }
@@ -217,7 +217,7 @@ export async function rebuildTrackerItems(opts?: {
       : "unknown";
 
     const old =
-      (g.searchJobId && prevByJob.get(g.searchJobId)) ||
+      (g.researchJobId && prevByJob.get(g.researchJobId)) ||
       prevByCompany.get(g.company.toLowerCase());
 
     const followUpCount = Math.max(
@@ -226,7 +226,7 @@ export async function rebuildTrackerItems(opts?: {
       old?.followUpCount ?? 0,
     );
     const isThanksSent = g.isThanksSent || detectThanks(linkedMails);
-    const fromSearchOnly = linkedMails.length === 0 && Boolean(g.searchJobId);
+    const fromResearchOnly = linkedMails.length === 0 && Boolean(g.researchJobId);
 
     const oooUntil =
       lastFlags.isOoo
@@ -246,7 +246,7 @@ export async function rebuildTrackerItems(opts?: {
       hasOutbound: outbounds.length > 0,
       hasInbound: inbounds.length > 0,
       isThanksSent,
-      fromSearchOnly,
+      fromResearchOnly,
       lastInboundSubject: lastInboundMail?.subject ?? null,
       lastInboundBody,
       lastInboundFrom: lastInboundMail?.fromAddr ?? null,
@@ -326,7 +326,7 @@ export async function rebuildTrackerItems(opts?: {
         nextFollowUpAt,
         ignored,
         workspaceFolder,
-        searchJobId: g.searchJobId,
+        researchJobId: g.researchJobId,
         primaryTo,
         notesJson: JSON.stringify(notesObj),
         hasFollowUpDraft: old?.hasFollowUpDraft ?? 0,
@@ -373,7 +373,7 @@ export async function rebuildTrackerItems(opts?: {
         nextFollowUpAt: null,
         ignored: 0,
         workspaceFolder: old.workspaceFolder,
-        searchJobId: old.searchJobId,
+        researchJobId: old.researchJobId,
         primaryTo: old.primaryTo,
         notesJson: old.notesJson,
         hasFollowUpDraft: old.hasFollowUpDraft,
@@ -393,7 +393,7 @@ export async function rebuildTrackerItems(opts?: {
     if (
       row.status === "ready_to_send" &&
       !row.workspaceFolder &&
-      !row.searchJobId
+      !row.researchJobId
     ) {
       db.delete(trackerItemMails).where(eq(trackerItemMails.itemId, row.id)).run();
       db.delete(trackerItems).where(eq(trackerItems.id, row.id)).run();

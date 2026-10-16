@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
-import { cancelJob } from "@/lib/search/cancel";
+import { cancelJob } from "@/lib/research/cancel";
 
 export const runtime = "nodejs";
 

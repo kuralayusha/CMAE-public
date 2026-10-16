@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
-import { derivePlain } from "@/lib/search/plain";
-import type { JobStatus, TermKind, TermLine } from "@/lib/search/types";
+import { derivePlain } from "@/lib/research/plain";
+import type { JobStatus, TermKind, TermLine } from "@/lib/research/types";
 
 type Props = {
   jobId: string;
@@ -63,7 +63,7 @@ export function Terminal({
   const statusLabel = upper(t(`terminal.status.${status}`));
 
   useEffect(() => {
-    const es = new EventSource(`/api/search/${jobId}/stream`);
+    const es = new EventSource(`/api/research/${jobId}/stream`);
     es.onmessage = (ev) => {
       try {
         const data = JSON.parse(ev.data) as {
@@ -166,13 +166,13 @@ export function Terminal({
   }
 
   function openFullscreen() {
-    window.open(`/search/live/${jobId}`, "_blank", "noopener,noreferrer");
+    window.open(`/research/live/${jobId}`, "_blank", "noopener,noreferrer");
   }
 
   async function confirmCancel() {
     setCancelBusy(true);
     try {
-      const res = await fetch(`/api/search/${jobId}/cancel`, { method: "POST" });
+      const res = await fetch(`/api/research/${jobId}/cancel`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Cancel failed");
       if (data.folderName) setFolderName(data.folderName);

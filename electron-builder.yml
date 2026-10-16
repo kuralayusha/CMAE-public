@@ -28,9 +28,9 @@ mac:
     - target: zip
       arch:
         - arm64
-  # Local builds: force unsigned (avoids ambiguous "Apple Development" keychain
-  # identities). CI runs scripts/ci-enable-mac-signing.mjs to strip this, then
-  # signs with MAC_CSC_LINK when present.
+  # Default unsigned (avoids ambiguous "Apple Development" keychain identities).
+  # Local signed: `npm run desktop:build:mac:signed` (temp config without this line).
+  # CI: scripts/ci-enable-mac-signing.mjs strips this when MAC_CSC_LINK is set.
   identity: null
   hardenedRuntime: true
   gatekeeperAssess: false

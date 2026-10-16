@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { runCurl, runPython } from "./shell";
+import { runCurl } from "./shell";
 import { emitLine } from "./events";
 import { askLlm, extractJson } from "./llm";
 
@@ -263,40 +263,25 @@ Return ONLY JSON: { "queries": ["...", "..."] }`,
 }
 
 export async function extractEmails(jobId: string, htmlOrText: string, sourceUrl: string) {
-  emitLine(jobId, "think", `Email pattern scan: ${sourceUrl}`);
+  emitLine(
+    jobId,
+    "think",
+    `Email pattern scan: ${sourceUrl}`,
+    "contact",
+    `Scanning text for emails and patterns. (Contact)`,
+  );
 
-  const jsEmails = extractEmailsJs(htmlOrText);
-
-  const sample = htmlOrText.slice(0, 8000);
-  const b64 = Buffer.from(sample, "utf8").toString("base64");
-  const script = `
-import re, json, base64
-text = base64.b64decode("${b64}").decode("utf-8", errors="ignore")
-# Sites hide emails: name[at]co.com / name(at)co.com / name[dot]co[dot]com
-text = re.sub(r"&#64;|&at;", "@", text, flags=re.I)
-text = re.sub(r"&#46;", ".", text)
-text = re.sub(r"\\s*[\\[\\(\\{<]\\s*(?:at|ät|AT)\\s*[\\]\\)\\}>]\\s*", "@", text)
-text = re.sub(r"\\s*[\\[\\(\\{<]\\s*(?:dot|punkt|\\.)\\s*[\\]\\)\\}>]\\s*", ".", text, flags=re.I)
-emails = set(re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", text))
-for m in re.finditer(
-    r"([A-Za-z0-9._%+-]+)\\s+(?:at|ät)\\s+([A-Za-z0-9.-]+\\.[A-Za-z]{2,})",
-    text,
-    re.I,
-):
-    emails.add(f"{m.group(1)}@{m.group(2)}")
-emails = sorted(e for e in emails if not re.search(r"\\.(png|jpg|gif|svg|webp)$", e, re.I))
-print(json.dumps(emails[:40], ensure_ascii=False))
-`.trim();
-
-  const { stdout } = await runPython(jobId, script);
-  let pyEmails: string[] = [];
-  try {
-    pyEmails = JSON.parse(stdout || "[]") as string[];
-  } catch {
-    pyEmails = [];
-  }
-
-  return [...new Set([...jsEmails, ...pyEmails].map((e) => e.toLowerCase()))];
+  const emails = extractEmailsJs(htmlOrText).slice(0, 40);
+  emitLine(
+    jobId,
+    "system",
+    `  ↳ ${emails.length} candidate(s)${emails.length ? `: ${emails.slice(0, 5).join(", ")}${emails.length > 5 ? "…" : ""}` : ""}`,
+    "contact",
+    emails.length
+      ? `Scan finished. ${emails.length} results. (Contact)`
+      : `Scan finished. No emails on this page. (Contact)`,
+  );
+  return emails;
 }
 
 /** Plain + obfuscated emails: name[at]co.com, name(at)co.com, name at co.com, [dot] */
@@ -313,15 +298,21 @@ function extractEmailsJs(text: string): string[] {
   const spacedAt =
     /([A-Za-z0-9._%+-]+)\s+(?:at|ät)\s+([A-Za-z0-9.-]+\.[A-Za-z]{2,})/gi;
   let m: RegExpExecArray | null;
-  while ((m = spacedAt.exec(text)) !== null) {
-    const email = `${m[1]}@${m[2]}`;
-    if (isPlausibleEmail(email)) out.add(email.toLowerCase());
+  for (const source of [text, normalized]) {
+    spacedAt.lastIndex = 0;
+    while ((m = spacedAt.exec(source)) !== null) {
+      const email = `${m[1]}@${m[2]}`;
+      if (isPlausibleEmail(email)) out.add(email.toLowerCase());
+    }
   }
 
-  // mailto:
+  // mailto: (raw + deobfuscated)
   const mailto = /mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/gi;
-  while ((m = mailto.exec(text)) !== null) {
-    if (isPlausibleEmail(m[1]!)) out.add(m[1]!.toLowerCase());
+  for (const source of [text, normalized]) {
+    mailto.lastIndex = 0;
+    while ((m = mailto.exec(source)) !== null) {
+      if (isPlausibleEmail(m[1]!)) out.add(m[1]!.toLowerCase());
+    }
   }
 
   return [...out];

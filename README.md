@@ -2,9 +2,211 @@
 
 Local-first cold mail agent.
 
-## Release & deploy (ne ne zaman olur?)
+## Manuel release (Actions dakikası yokken)
 
-Installer’lar **public** [`kuralayusha/cmae-releases`](https://github.com/kuralayusha/cmae-releases) reposunda yaşar. Kaynak kod private kalabilir.
+Installer’lar **public** [`kuralayusha/cmae-releases`](https://github.com/kuralayusha/cmae-releases) üzerinde yaşar. Kaynak repo (`CMAE`) private kalır. CI publish çalışmıyorsa (Actions dakikası bitti, secret yok, vs.) aşağıdaki yollardan biriyle asset yükle.
+
+**Önkoşul:** [GitHub CLI](https://cli.github.com/) kurulu ve giriş yapılmış olmalı.
+
+```bash
+gh auth status
+# Gerekirse:
+gh auth login
+# Token’ın cmae-releases üzerinde contents:write yetkisi olmalı
+# (personal account + o repo’ya write, veya dedicated PAT)
+```
+
+Hedef tag = `package.json` version’ı: `0.1.0` → release `v0.1.0`.
+
+Landing / auto-update bu URL’leri kullanır:
+
+- Mac DMG: `…/download/vX.Y.Z/CMAE-X.Y.Z-mac-arm64.dmg`
+- Win EXE: `…/download/vX.Y.Z/CMAE-X.Y.Z-win-x64.exe`
+- Policy: `…/download/vX.Y.Z/policy.json` (+ site `version-policy.json`)
+
+---
+
+### Yol A — Lokal build + upload script (tercih)
+
+Mac paketi **macOS**’te, Windows paketi **Windows**’ta üretilir (native modüller).
+
+```bash
+# 1) Sürüm (yeni release ise)
+# package.json → "version": "0.2.0"
+node scripts/bump-version-policy.mjs
+git add package.json version-policy.json && git commit -m "chore: bump to 0.2.0" && git push
+
+# 2) Build + public release’e yükle (Mac — sadece macOS)
+npm run desktop:publish:mac           # imzasız (varsayılan)
+npm run desktop:publish:mac:signed    # Developer ID + notarize (APPLE_* lazım)
+# veya adım adım:
+npm run desktop:build:mac             # imzasız
+npm run desktop:build:mac:signed      # imzalı
+# eşdeğer: npm run desktop:build:mac -- --sign
+npm run desktop:upload:github -- --platform mac
+
+# Windows makinede (imza yok — SmartScreen uyarısı normal):
+npm run desktop:publish:win
+# veya:
+npm run desktop:build:win
+npm run desktop:upload:github -- --platform win
+```
+
+**Mac imza (lokal):** Varsayılan unsigned. `--sign` / `desktop:build:mac:signed` keychain’de **Developer ID Application** arar; `electron-builder.yml`’daki `identity: null`’ı geçici config ile kaldırır (dosyayı kirletmez). Notarize için `.env` / `.env.local` içinde `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` olmalı — yoksa imzalar, notarize atlar.
+
+Script (`scripts/upload-desktop-github.mjs`) şunları yapar:
+
+1. `cmae-releases` üzerinde `vX.Y.Z` release yoksa oluşturur
+2. `dist-desktop/` içinden ilgili asset’leri `--clobber` ile yükler
+3. `version-policy.json` günceller + release’e `policy.json` olarak da ekler
+
+**Mac’te `dist-desktop/`’ta beklenenler:**
+
+| Dosya | Zorunlu |
+|-------|---------|
+| `CMAE-{ver}-mac-arm64.dmg` | evet |
+| `CMAE-{ver}-arm64-mac.zip` | evet |
+| `latest-mac.yml` | evet |
+| `*.blockmap` | isteğe bağlı (differential update) |
+
+**Win’de `dist-desktop/`’ta beklenenler:**
+
+| Dosya | Zorunlu |
+|-------|---------|
+| `CMAE-{ver}-win-x64.exe` | evet |
+| `latest.yml` | evet |
+| `*.exe.blockmap` | isteğe bağlı |
+
+---
+
+### Yol B — Actions artefact’ten indirip elle yükle
+
+Mac/Win job’ları (veya daha önce koşmuş bir run) artefact üretmişse, dakikasız publish için artefact’i indirip `gh release upload` yeter.
+
+#### 1) Artefact ID bul
+
+```bash
+# Private kaynak repo
+gh run list --repo kuralayusha/CMAE --workflow "Desktop Win" --limit 5
+gh run list --repo kuralayusha/CMAE --workflow "Desktop Mac" --limit 5
+
+# Belirli run’ın artefact’leri
+gh api repos/kuralayusha/CMAE/actions/runs/<RUN_ID>/artifacts --jq '.artifacts[] | {id, name, size_in_bytes, expired}'
+```
+
+İsimler: **CMAE-mac-dmg**, **CMAE-win-nsis**. `expired: true` ise indirmez — yeniden build gerekir.
+
+#### 2) İndir + aç
+
+```bash
+# Win örneği (artefact id = ACTIONS’tan)
+mkdir -p /tmp/cmae-win-art/extracted
+gh api repos/kuralayusha/CMAE/actions/artifacts/<ARTIFACT_ID>/zip > /tmp/cmae-win-art/win-art.zip
+unzip -o /tmp/cmae-win-art/win-art.zip -d /tmp/cmae-win-art/extracted
+ls -lah /tmp/cmae-win-art/extracted
+```
+
+Mac için aynı mantık; artefact adı `CMAE-mac-dmg`, çıktı genelde `CMAE-{ver}-mac-arm64.dmg`.
+
+> **Not:** `Desktop Win` / `Desktop Mac` workflow’ları çoğu zaman **sadece** `.exe` / `.dmg` yükler — `latest.yml`, zip, blockmap gelmeyebilir. Manuel indirme için exe/dmg yeter; auto-update için `latest.yml` / `latest-mac.yml` ayrıca gerekir (aşağıda).
+
+#### 3) Release yoksa oluştur
+
+```bash
+gh release view v0.1.0 --repo kuralayusha/cmae-releases \
+  || gh release create v0.1.0 --repo kuralayusha/cmae-releases \
+       --title "CMAE 0.1.0" --notes "Desktop release v0.1.0"
+```
+
+#### 4) Asset yükle
+
+```bash
+# Windows — en az exe
+gh release upload v0.1.0 --repo kuralayusha/cmae-releases --clobber \
+  /tmp/cmae-win-art/extracted/CMAE-0.1.0-win-x64.exe
+
+# Mac — en az dmg (zip + yml varsa onları da ekle)
+gh release upload v0.1.0 --repo kuralayusha/cmae-releases --clobber \
+  /tmp/cmae-mac-art/extracted/CMAE-0.1.0-mac-arm64.dmg
+```
+
+#### 5) Artefact’te `latest.yml` yoksa (Win updater)
+
+```bash
+EXE=/tmp/cmae-win-art/extracted/CMAE-0.1.0-win-x64.exe
+SIZE=$(stat -f%z "$EXE")   # Linux: stat -c%s
+SHA=$(shasum -a 512 "$EXE" | awk '{print $1}' | xxd -r -p | base64)
+DATE=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+
+cat > /tmp/cmae-win-art/extracted/latest.yml <<EOF
+version: 0.1.0
+files:
+  - url: CMAE-0.1.0-win-x64.exe
+    sha512: ${SHA}
+    size: ${SIZE}
+path: CMAE-0.1.0-win-x64.exe
+sha512: ${SHA}
+releaseDate: '${DATE}'
+EOF
+
+gh release upload v0.1.0 --repo kuralayusha/cmae-releases --clobber \
+  /tmp/cmae-win-art/extracted/latest.yml
+```
+
+Mac için electron-builder’ın ürettiği `latest-mac.yml` tercih edilir; yoksa aynı şablonla `url`/`path`’i `.dmg` / `.zip` yap.
+
+#### 6) `policy.json` güncelle ve release’e koy
+
+Repodaki [`version-policy.json`](version-policy.json) içinde `latest`, `downloads.darwin-arm64`, `downloads.win32-x64` doğru tag/URL’leri göstermeli. Örnek:
+
+```json
+{
+  "latest": "0.1.0",
+  "minSupported": "0.1.0",
+  "force": false,
+  "cdnBase": "https://github.com/kuralayusha/cmae-releases/releases/download",
+  "releaseUrl": "https://github.com/kuralayusha/cmae-releases/releases/latest",
+  "updateFeedUrl": "https://github.com/kuralayusha/cmae-releases/releases/latest",
+  "releasesRepo": "kuralayusha/cmae-releases",
+  "downloads": {
+    "darwin-arm64": "https://github.com/kuralayusha/cmae-releases/releases/download/v0.1.0/CMAE-0.1.0-mac-arm64.dmg",
+    "win32-x64": "https://github.com/kuralayusha/cmae-releases/releases/download/v0.1.0/CMAE-0.1.0-win-x64.exe"
+  },
+  "notes": ""
+}
+```
+
+```bash
+# Kaynak repoda version-policy.json’ı düzenle / commit et (Vercel deploy için)
+# Release asset olarak da kopyala (landing deploy beklemeden okusun):
+cp version-policy.json /tmp/policy.json
+gh release upload v0.1.0 --repo kuralayusha/cmae-releases --clobber /tmp/policy.json
+```
+
+#### 7) Doğrula
+
+```bash
+gh api repos/kuralayusha/cmae-releases/releases/tags/v0.1.0 \
+  --jq '[.assets[].name]'
+
+curl -sI "https://github.com/kuralayusha/cmae-releases/releases/download/v0.1.0/CMAE-0.1.0-win-x64.exe" | head -5
+curl -sL "https://github.com/kuralayusha/cmae-releases/releases/download/v0.1.0/latest.yml"
+```
+
+Release sayfası: https://github.com/kuralayusha/cmae-releases/releases/tag/v0.1.0
+
+---
+
+### Hızlı kontrol listesi
+
+- [ ] `gh auth` çalışıyor, `cmae-releases`’a yazabiliyorsun
+- [ ] Tag `v{package.json version}` ile uyumlu
+- [ ] Mac: en az `.dmg` (updater için `latest-mac.yml` + zip)
+- [ ] Win: en az `.exe` (updater için `latest.yml`)
+- [ ] `policy.json` / `version-policy.json` download URL’leri yeni asset’leri gösteriyor
+- [ ] Landing’de Mac + Win butonları 302 → dosya indiriyor
+
+## Release & deploy (ne ne zaman olur?)
 
 ### 1) Normal `git push` (main’e kod)
 
@@ -14,33 +216,15 @@ Installer’lar **public** [`kuralayusha/cmae-releases`](https://github.com/kura
 
 ### 2) Yeni sürüm (paket + link + auto-update)
 
-Sıra:
-
-1. `package.json` version’ı yükselt (örn. `0.1.0` → `0.2.0`)
-2. `node scripts/bump-version-policy.mjs`
-3. Commit + push
-4. Lokal (Actions dakikası yokken):  
-   `npm run desktop:publish:mac` / `desktop:publish:win`  
-   (**veya** build + `npm run desktop:upload:github -- --platform mac`)  
-5. Actions açıksa: **Desktop Release** → `main` → tag `v0.2.0`  
-   Secret: `RELEASES_GITHUB_TOKEN` (PAT → `cmae-releases` üzerinde `contents:write`)
-
-Upload, `cmae-releases` üzerinde `vX.Y.Z` Release + asset’leri yazar; landing URL’leri otomatik o tag’e bakar.
-
-### 3) Lokal upload (Actions yokken)
-
-```bash
-npm run desktop:build:mac          # imzalı/notarized mümkünse
-npm run desktop:upload:github -- --platform mac
-# Win için Windows makinede: --platform win
-```
-
-`gh auth login` yeterli (repo write).
+1. `package.json` version yükselt → `node scripts/bump-version-policy.mjs` → commit + push
+2. **Actions açıksa:** Actions → **Desktop Release** → branch `main` → tag `vX.Y.Z`  
+   Secret: `RELEASES_GITHUB_TOKEN` (`cmae-releases` için `contents:write` PAT)
+3. **Actions yoksa:** yukarıdaki **Manuel release** (Yol A veya B)
 
 ## Active surfaces
 
-- **Tracker** (`/` → `/tracker`) — Gmail sync (last 30 days) + search outputs; application status list; Gmail Drafts (you send)
-- **Search** (`/search`) — URL list → parallel agents + live terminals → `workspace/`
+- **Tracker** (`/` → `/tracker`) — Gmail sync (last 30 days) + research outputs; application status list; Gmail Drafts (you send)
+- **Research** (`/research`) — URL list → parallel agents + live terminals → `workspace/`
 - **Folders** (`/folders`) — workspace file browser
 - **Settings** (`/settings`) — profile, CVs, Gmail App Password, Cursor API key, follow-up days, preferred language
 
@@ -54,9 +238,9 @@ npm run desktop:upload:github -- --platform mac
 6. Closed (`closed`)
 7. Ignored (`ignored`, after 2 follow-ups)
 
-Sync: **Gmail sync** = incremental (UID cursor); **Hard Sync** = re-fetch last 30 days. Both upsert by `messageId` — mail outside the window is not deleted, no duplicates. Search `done` → light merge (no IMAP/AI). Set `CMAE_DISABLE_SYNC=1` to disable IMAP.
+Sync: **Gmail sync** = incremental (UID cursor); **Full sync** = re-fetch last 30 days. Both upsert by `messageId` — mail outside the window is not deleted, no duplicates. Research `done` → light merge (no IMAP/AI). Set `CMAE_DISABLE_SYNC=1` to disable IMAP.
 
-## Search architecture
+## Research architecture
 
 **Conductor** + specialist agents (parallel URLs, each URL has its own conductor):
 
@@ -84,9 +268,10 @@ Native modules (`better-sqlite3`, `@napi-rs/canvas`) must be built on the target
 ### Local
 
 ```bash
-npm run desktop:dev          # Next + Electron window (uses project .env)
-npm run desktop:build:mac    # macOS only → dist-desktop/*.dmg
-npm run desktop:build:win    # Windows only → dist-desktop/*.exe
+npm run desktop:dev               # Next + Electron window (uses project .env)
+npm run desktop:build:mac         # macOS — unsigned DMG/ZIP
+npm run desktop:build:mac:signed  # macOS — Developer ID + notarize if APPLE_* set
+npm run desktop:build:win         # Windows only → dist-desktop/*.exe (unsigned)
 ```
 
 Packaged builds (DMG/EXE) do **not** inherit your project `.env` or shell secrets
@@ -123,7 +308,7 @@ Without signing secrets, release builds still upload **unsigned** artefacts (Gat
 
 Encode a cert: `base64 -i cert.p12 | pbcopy` (macOS) / `certutil -encode cert.pfx -` (Windows).
 
-Local Mac builds keep `mac.identity: null` in `electron-builder.yml` so keychain “Apple Development” certs are never auto-picked. CI runs `scripts/ci-enable-mac-signing.mjs` to strip that line before build, then signs only when `MAC_CSC_LINK` is set.
+Default local Mac builds keep `mac.identity: null` (unsigned). Opt in with `npm run desktop:build:mac:signed` / `--sign` — uses a temp config so the committed yml stays clean. CI runs `scripts/ci-enable-mac-signing.mjs` when `MAC_CSC_LINK` is set.
 
 ### CI (artefacts only)
 

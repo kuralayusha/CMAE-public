@@ -1,4 +1,4 @@
-export type AppPageId = "tracker" | "search" | "folders" | "settings";
+export type AppPageId = "tracker" | "research" | "folders" | "settings";
 
 export type PageHelp = {
   /** Navbar / product label */
@@ -27,22 +27,22 @@ export const PAGE_HELP: Record<AppPageId, PageHelp> = {
       "Follow every application in one list. Drafts go to Gmail; you always send them yourself.",
     helpTitle: "How Tracker works",
     helpBody: [
-      "Tracker brings together Gmail application threads and companies you researched in Search.",
+      "Tracker brings together Gmail application threads and companies from Research.",
       "Each row is one application: its status, latest activity, and the next actions you can take.",
     ],
     helpSteps: [
       "Run Gmail sync to load recent mail. The first time, Full sync can look back about 30 days.",
-      "Companies you research in Search also appear here automatically.",
+      "Companies from Research also appear here automatically.",
       "For a follow-up, reply, or thank-you, use the action — CMAE writes a draft into Gmail Drafts.",
       "You always open Gmail and send yourself; CMAE never sends mail for you.",
     ],
   },
-  search: {
-    navLabel: "Search",
-    title: "Search",
+  research: {
+    navLabel: "Research",
+    title: "Research",
     subtitle:
       "Paste company or careers page URLs. CMAE finds contacts and prepares an outreach draft.",
-    helpTitle: "How Search works",
+    helpTitle: "How Research works",
     helpBody: [
       "Start research with one or more URLs. Each link is processed on its own so you can run several in parallel.",
       "Results are saved under Folders; good matches also show up in Tracker.",

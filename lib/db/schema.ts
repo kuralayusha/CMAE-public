@@ -58,7 +58,7 @@ export const trackerItems = sqliteTable("tracker_items", {
   nextFollowUpAt: text("next_follow_up_at"),
   ignored: integer("ignored").notNull().default(0),
   workspaceFolder: text("workspace_folder"),
-  searchJobId: text("search_job_id"),
+  researchJobId: text("research_job_id"),
   primaryTo: text("primary_to"),
   notesJson: text("notes_json"),
   hasFollowUpDraft: integer("has_follow_up_draft").notNull().default(0),

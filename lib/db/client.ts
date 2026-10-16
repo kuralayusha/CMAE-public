@@ -149,7 +149,7 @@ function ensureSchema(db: Database.Database) {
       next_follow_up_at TEXT,
       ignored INTEGER NOT NULL DEFAULT 0,
       workspace_folder TEXT,
-      search_job_id TEXT,
+      research_job_id TEXT,
       primary_to TEXT,
       notes_json TEXT,
       has_follow_up_draft INTEGER NOT NULL DEFAULT 0,
@@ -212,7 +212,23 @@ function ensureSchema(db: Database.Database) {
     name: string;
   }[];
   const itemColNames = new Set(itemCols.map((c) => c.name));
+  // Legacy column rename (Search → Research product rename)
+  if (
+    itemColNames.has("search_job_id") &&
+    !itemColNames.has("research_job_id")
+  ) {
+    try {
+      db.exec(
+        `ALTER TABLE tracker_items RENAME COLUMN search_job_id TO research_job_id`,
+      );
+      itemColNames.delete("search_job_id");
+      itemColNames.add("research_job_id");
+    } catch {
+      /* ignore — will add column below if needed */
+    }
+  }
   const softCols: [string, string][] = [
+    ["research_job_id", "TEXT"],
     ["has_follow_up_draft", "INTEGER NOT NULL DEFAULT 0"],
     ["has_thanks_draft", "INTEGER NOT NULL DEFAULT 0"],
     ["has_reply_draft", "INTEGER NOT NULL DEFAULT 0"],

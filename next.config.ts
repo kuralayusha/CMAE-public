@@ -2,6 +2,22 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  async redirects() {
+    return [
+      { source: "/search", destination: "/research", permanent: true },
+      {
+        source: "/search/live/:jobId",
+        destination: "/research/live/:jobId",
+        permanent: true,
+      },
+      { source: "/api/search", destination: "/api/research", permanent: false },
+      {
+        source: "/api/search/:path*",
+        destination: "/api/research/:path*",
+        permanent: false,
+      },
+    ];
+  },
   outputFileTracingIncludes: {
     "/**": [
       "./locales/**/*",

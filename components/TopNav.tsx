@@ -6,7 +6,7 @@ import type { AppPageId } from "@/lib/help/pages";
 
 const LINKS: { href: string; id: AppPageId }[] = [
   { href: "/tracker", id: "tracker" },
-  { href: "/search", id: "search" },
+  { href: "/research", id: "research" },
   { href: "/folders", id: "folders" },
   { href: "/settings", id: "settings" },
 ];

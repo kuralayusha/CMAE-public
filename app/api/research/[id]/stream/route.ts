@@ -1,6 +1,6 @@
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
-import { getJob, getJobBus } from "@/lib/search/events";
-import type { JobEvent } from "@/lib/search/types";
+import { getJob, getJobBus } from "@/lib/research/events";
+import type { JobEvent } from "@/lib/research/types";
 
 export const runtime = "nodejs";
 

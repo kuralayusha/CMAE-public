@@ -63,7 +63,7 @@ export type TrackerItemRow = {
   nextFollowUpAt: string | null;
   ignored: boolean;
   workspaceFolder: string | null;
-  searchJobId: string | null;
+  researchJobId: string | null;
   primaryTo: string | null;
   notesJson: string | null;
   hasFollowUpDraft: boolean;

@@ -11,8 +11,8 @@ import {
   isOnboardingFlagSet,
 } from "@/lib/onboarding/status";
 import { clearUserPack } from "@/lib/i18n/pack";
-import { clearAllSearchJobs } from "@/lib/search/persist";
-import { getWorkspaceRoot } from "@/lib/search/workspace";
+import { clearAllResearchJobs } from "@/lib/research/persist";
+import { getWorkspaceRoot } from "@/lib/research/workspace";
 
 /**
  * Full local wipe — app should behave like a fresh install.
@@ -20,7 +20,7 @@ import { getWorkspaceRoot } from "@/lib/search/workspace";
  * then verifies onboarding flag is gone.
  */
 export function resetAppForOnboarding(): void {
-  clearAllSearchJobs();
+  clearAllResearchJobs();
   wipeWorkspaceContents();
   try {
     clearUserPack();

@@ -1,12 +1,12 @@
 import { EventEmitter } from "events";
 import { hydrateJobsFromDisk, persistJobDebounced, persistJobNow } from "./persist";
-import type { JobEvent, SearchJob, TermKind, TermLine } from "./types";
+import type { JobEvent, ResearchJob, TermKind, TermLine } from "./types";
 
 declare global {
   // eslint-disable-next-line no-var
   var __cmaeSearchBus: EventEmitter | undefined;
   // eslint-disable-next-line no-var
-  var __cmaeSearchJobs: Map<string, SearchJob> | undefined;
+  var __cmaeResearchJobs: Map<string, ResearchJob> | undefined;
 }
 
 export function getJobBus(): EventEmitter {
@@ -17,15 +17,15 @@ export function getJobBus(): EventEmitter {
   return globalThis.__cmaeSearchBus;
 }
 
-export function getJobs(): Map<string, SearchJob> {
-  if (!globalThis.__cmaeSearchJobs) {
-    globalThis.__cmaeSearchJobs = new Map();
+export function getJobs(): Map<string, ResearchJob> {
+  if (!globalThis.__cmaeResearchJobs) {
+    globalThis.__cmaeResearchJobs = new Map();
   }
-  hydrateJobsFromDisk(globalThis.__cmaeSearchJobs);
-  return globalThis.__cmaeSearchJobs;
+  hydrateJobsFromDisk(globalThis.__cmaeResearchJobs);
+  return globalThis.__cmaeResearchJobs;
 }
 
-export function getJob(id: string): SearchJob | undefined {
+export function getJob(id: string): ResearchJob | undefined {
   return getJobs().get(id);
 }
 
@@ -58,7 +58,7 @@ export function emitLine(
 
 export function setJobStatus(
   jobId: string,
-  status: SearchJob["status"],
+  status: ResearchJob["status"],
   extra?: {
     companyName?: string | null;
     error?: string | null;
@@ -83,14 +83,14 @@ export function setJobStatus(
     getJobBus().emit(`job:${jobId}`, { type: "done", status } satisfies JobEvent);
   }
 
-  // Search finished → light merge into tracker (no IMAP/AI); tracker page refreshes via SSE
+  // Research finished → light merge into tracker (no IMAP/AI); tracker page refreshes via SSE
   if (status === "done") {
     void Promise.resolve()
       .then(async () => {
-        const { mergeSearchJobIntoTracker } = await import(
+        const { mergeResearchJobIntoTracker } = await import(
           "@/lib/tracker/light-merge"
         );
-        const result = mergeSearchJobIntoTracker(jobId);
+        const result = mergeResearchJobIntoTracker(jobId);
         if (!result.ok) {
           console.warn(
             `[tracker/light-merge] ${jobId}: ${result.reason || result.action}`,

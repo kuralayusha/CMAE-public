@@ -11,7 +11,7 @@ import { emitTrackerLive } from "./live";
 export type LightMergeResult = {
   ok: boolean;
   action: "inserted" | "updated" | "linked" | "skipped";
-  searchJobId: string;
+  researchJobId: string;
   itemId?: number;
   reason?: string;
 };
@@ -43,7 +43,7 @@ function insertReadyToSend(c: WorkspaceCandidate): number {
       nextFollowUpAt: null,
       ignored: 0,
       workspaceFolder: c.workspaceFolder,
-      searchJobId: c.searchJobId,
+      researchJobId: c.researchJobId,
       primaryTo: c.primaryTo,
       notesJson: JSON.stringify({
         notes: "workspace search only (light merge)",
@@ -61,10 +61,10 @@ function insertReadyToSend(c: WorkspaceCandidate): number {
   return inserted.id;
 }
 
-function patchSearchMeta(
+function patchResearchMeta(
   itemId: number,
   c: WorkspaceCandidate,
-  opts?: { overwriteSearchJobId?: boolean },
+  opts?: { overwriteResearchJobId?: boolean },
 ) {
   const db = getDb();
   const row = db
@@ -75,15 +75,15 @@ function patchSearchMeta(
   if (!row) return;
 
   const nextJobId =
-    opts?.overwriteSearchJobId || !row.searchJobId
-      ? c.searchJobId
-      : row.searchJobId;
+    opts?.overwriteResearchJobId || !row.researchJobId
+      ? c.researchJobId
+      : row.researchJobId;
 
   db.update(trackerItems)
     .set({
       company: c.company || row.company,
       workspaceFolder: c.workspaceFolder || row.workspaceFolder,
-      searchJobId: nextJobId,
+      researchJobId: nextJobId,
       primaryTo: c.primaryTo || row.primaryTo,
       updatedAt: new Date().toISOString(),
     })
@@ -95,34 +95,34 @@ function patchSearchMeta(
  * No IMAP/AI/wipe. Merges a finished search workspace candidate into the current tracker.
  * Gmail sync remains the heavy path that updates mail statuses.
  */
-export function mergeSearchJobIntoTracker(
-  searchJobId: string,
+export function mergeResearchJobIntoTracker(
+  researchJobId: string,
 ): LightMergeResult {
-  const c = getWorkspaceCandidate(searchJobId);
+  const c = getWorkspaceCandidate(researchJobId);
   if (!c) {
     return {
       ok: false,
       action: "skipped",
-      searchJobId,
+      researchJobId,
       reason: "no workspace candidate (done + folder)",
     };
   }
 
   const db = getDb();
   const all = db.select().from(trackerItems).all();
-  const byJob = all.find((r) => r.searchJobId === searchJobId);
+  const byJob = all.find((r) => r.researchJobId === researchJobId);
 
   if (byJob) {
-    patchSearchMeta(byJob.id, c, { overwriteSearchJobId: true });
+    patchResearchMeta(byJob.id, c, { overwriteResearchJobId: true });
     const result: LightMergeResult = {
       ok: true,
       action: "updated",
-      searchJobId,
+      researchJobId,
       itemId: byJob.id,
     };
     emitTrackerLive({
-      type: "search_merged",
-      searchJobId,
+      type: "research_merged",
+      researchJobId,
       action: result.action,
       itemId: result.itemId,
     });
@@ -148,18 +148,18 @@ export function mergeSearchJobIntoTracker(
     const itemId = insertReadyToSend(c);
     for (const r of sameCompany) {
       if (mailFlags.get(r.id)) {
-        patchSearchMeta(r.id, c, { overwriteSearchJobId: true });
+        patchResearchMeta(r.id, c, { overwriteResearchJobId: true });
       }
     }
     const result: LightMergeResult = {
       ok: true,
       action: "inserted",
-      searchJobId,
+      researchJobId,
       itemId,
     };
     emitTrackerLive({
-      type: "search_merged",
-      searchJobId,
+      type: "research_merged",
+      researchJobId,
       action: result.action,
       itemId,
     });
@@ -168,20 +168,20 @@ export function mergeSearchJobIntoTracker(
 
   if (companyHasMails) {
     // Attach to rows without search meta; otherwise update folder on same-company rows
-    const bare = sameCompany.filter((r) => !r.searchJobId);
+    const bare = sameCompany.filter((r) => !r.researchJobId);
     const targets = bare.length ? bare : sameCompany;
     for (const r of targets) {
-      patchSearchMeta(r.id, c, { overwriteSearchJobId: !r.searchJobId });
+      patchResearchMeta(r.id, c, { overwriteResearchJobId: !r.researchJobId });
     }
     const result: LightMergeResult = {
       ok: true,
       action: "linked",
-      searchJobId,
+      researchJobId,
       itemId: sameCompany[0]?.id,
     };
     emitTrackerLive({
-      type: "search_merged",
-      searchJobId,
+      type: "research_merged",
+      researchJobId,
       action: result.action,
       itemId: result.itemId,
     });
@@ -192,12 +192,12 @@ export function mergeSearchJobIntoTracker(
   const result: LightMergeResult = {
     ok: true,
     action: "inserted",
-    searchJobId,
+    researchJobId,
     itemId,
   };
   emitTrackerLive({
-    type: "search_merged",
-    searchJobId,
+    type: "research_merged",
+    researchJobId,
     action: result.action,
     itemId,
   });

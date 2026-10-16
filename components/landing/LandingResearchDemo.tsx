@@ -125,7 +125,7 @@ export function LandingResearchDemo() {
       </p>
 
       <div className="cmae-land-inset">
-        <div className="cmae-land-demo-search">
+        <div className="cmae-land-demo-research">
           <label className="cmae-land-demo-label" htmlFor="cmae-land-urls">
             Company / careers URLs
           </label>

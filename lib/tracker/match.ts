@@ -50,7 +50,7 @@ export type AiGroup = {
   isClickAction: boolean;
   followUpCountHint: number;
   mailIds: number[];
-  searchJobId: string | null;
+  researchJobId: string | null;
   notes: string;
 };
 
@@ -68,7 +68,7 @@ type AiResponse = {
     isClickAction?: boolean;
     followUpCountHint?: number;
     mailIds: number[];
-    searchJobId?: string | null;
+    researchJobId?: string | null;
     notes?: string;
   }>;
 };
@@ -176,7 +176,7 @@ function heuristicGroups(
       isClickAction,
       followUpCountHint: 0,
       mailIds: list.map((m) => m.id),
-      searchJobId: null,
+      researchJobId: null,
       notes: "heuristic fallback",
     });
   }
@@ -184,7 +184,7 @@ function heuristicGroups(
   for (const s of searches) {
     const already = groups.some(
       (g) =>
-        g.searchJobId === s.searchJobId ||
+        g.researchJobId === s.researchJobId ||
         companyKey(g.company) === companyKey(s.company),
     );
     if (already) continue;
@@ -201,7 +201,7 @@ function heuristicGroups(
       isClickAction: false,
       followUpCountHint: 0,
       mailIds: [],
-      searchJobId: s.searchJobId,
+      researchJobId: s.researchJobId,
       notes: "workspace search only",
     });
   }
@@ -264,7 +264,7 @@ Return ONLY JSON:
       "isClickAction": false,
       "followUpCountHint": 0,
       "mailIds": [1,2,3],
-      "searchJobId": "uuid-or-null",
+      "researchJobId": "uuid-or-null",
       "notes": "short reason"
     }
   ]
@@ -291,7 +291,7 @@ ${JSON.stringify(
 SEARCH_CANDIDATES:
 ${JSON.stringify(
   searches.map((s) => ({
-    searchJobId: s.searchJobId,
+    researchJobId: s.researchJobId,
     company: s.company,
     url: s.url,
     hasEmailDraft: s.hasEmailDraft,
@@ -342,7 +342,7 @@ ${JSON.stringify(
         isClickAction,
         followUpCountHint: Number(g.followUpCountHint) || 0,
         mailIds,
-        searchJobId: g.searchJobId ? String(g.searchJobId) : null,
+        researchJobId: g.researchJobId ? String(g.researchJobId) : null,
         notes: g.notes ? String(g.notes) : "",
       };
     });
@@ -464,7 +464,7 @@ function emptyReadyGroup(
     isClickAction: false,
     followUpCountHint: 0,
     mailIds: [],
-    searchJobId: s.searchJobId,
+    researchJobId: s.researchJobId,
     notes,
   };
 }
@@ -484,7 +484,7 @@ function mergeMissingSearches(
 
   for (const s of newestFirst) {
     const ck = companyKey(s.company);
-    const exact = out.some((g) => g.searchJobId === s.searchJobId);
+    const exact = out.some((g) => g.researchJobId === s.researchJobId);
     if (exact) continue;
 
     const sameCompany = out.filter((g) => companyKey(g.company) === ck);
@@ -501,7 +501,7 @@ function mergeMissingSearches(
       if (readyCompanyAdded.has(ck)) {
         // Still point the mail thread at the newest folder for browsing
         for (const g of sameCompany) {
-          if (!g.searchJobId) g.searchJobId = s.searchJobId;
+          if (!g.researchJobId) g.researchJobId = s.researchJobId;
         }
         continue;
       }
@@ -514,14 +514,14 @@ function mergeMissingSearches(
       );
       // Link newest search onto an existing mail group for folder access
       for (const g of sameCompany) {
-        if (g.mailIds.length > 0) g.searchJobId = s.searchJobId;
+        if (g.mailIds.length > 0) g.researchJobId = s.researchJobId;
       }
       continue;
     }
 
     if (companyHasMails) {
       for (const g of sameCompany) {
-        if (!g.searchJobId) g.searchJobId = s.searchJobId;
+        if (!g.researchJobId) g.researchJobId = s.researchJobId;
       }
       continue;
     }

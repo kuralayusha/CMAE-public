@@ -288,33 +288,42 @@ export type WorkspaceEntry = {
   badges?: WorkspaceEntryBadge[];
 };
 
-/** Count job URLs in basvuru_linkleri.md (jobfit output). */
+function isHttpishUrl(u: string): boolean {
+  return /https?:\/\//i.test(u) || /^www\./i.test(u);
+}
+
+/** Count job URLs in job_links.md / basvuru_linkleri.md (jobfit output). */
 export function analyzeBasvuruLinkleri(content: string): {
   count: number;
   empty: boolean;
 } {
   const text = String(content || "");
-  if (
+  // Explicit empty templates (EN + common TR) — only when no URLs present
+  const looksEmptyTemplate =
     /uygun\s+a[cç][ıi]k\s+ilan\s+yok/i.test(text) ||
-    /no\s+matching\s+(open\s+)?(job|role)/i.test(text)
-  ) {
+    /no\s+matching\s+(open\s+)?(job|role)/i.test(text) ||
+    /a[cç][ıi]k\s+pozisyon\s+bulunamad[ıi]/i.test(text) ||
+    /cold\s*\/\s*speculative\s+application/i.test(text) ||
+    /spek[üu]latif\s+ba[sş]vuru/i.test(text);
+
+  // "- Link: url" / "- Bağlantı: url" / any "- Label: http…" (locale-agnostic)
+  const fromLinkLines = [...text.matchAll(/^\s*-\s*[^:\n]{1,80}:\s*(\S+)/gim)]
+    .map((m) => (m[1] || "").replace(/[),.;]+$/, ""))
+    .filter(isHttpishUrl);
+
+  const fromMd = [...text.matchAll(/\]\((https?:\/\/[^)\s]+)\)/gi)].map((m) =>
+    m[1]!.replace(/[),.;]+$/, ""),
+  );
+
+  // Prefer per-role link lines (same URL on two jobs → count 2); else unique md links
+  const count =
+    fromLinkLines.length > 0
+      ? fromLinkLines.length
+      : new Set(fromMd).size;
+
+  if (count === 0 && looksEmptyTemplate) {
     return { count: 0, empty: true };
   }
-
-  const fromLinkLines = [
-    ...text.matchAll(/^\s*-\s*Link:\s*(\S+)/gim),
-  ]
-    .map((m) => m[1] || "")
-    .filter((u) => /https?:\/\//i.test(u) || /^www\./i.test(u));
-
-  const fromMd = [...text.matchAll(/\]\((https?:\/\/[^)\s]+)\)/gi)].map(
-    (m) => m[1]!,
-  );
-
-  const unique = new Set(
-    [...fromLinkLines, ...fromMd].map((u) => u.replace(/[),.;]+$/, "")),
-  );
-  const count = unique.size;
   return { count, empty: count === 0 };
 }
 

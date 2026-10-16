@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { getWorkspaceRoot } from "@/lib/search/workspace";
+import { getWorkspaceRoot } from "@/lib/research/workspace";
 
 export const MAX_CV_COUNT = 4;
 

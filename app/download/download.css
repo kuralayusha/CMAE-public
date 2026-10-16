@@ -106,7 +106,6 @@
 
 /* —— Tour chapter: separates marketing hero from demos —— */
 .cmae-land-tour {
-  border-top: 1px solid var(--line, #e3e3e3);
   padding-top: 8px;
 }
 
@@ -120,9 +119,10 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint, #8a8a8a);
+  text-align: center;
 }
 
-/* —— Scenario stages: white step copy (right) + light-gray demo band —— */
+/* —— Scenario stages: centered step copy + light-gray demo band —— */
 .cmae-land-stage {
   width: 100%;
   background: transparent;
@@ -134,8 +134,8 @@
   padding: 36px 20px 20px;
   display: grid;
   gap: 8px;
-  justify-items: end;
-  text-align: right;
+  justify-items: center;
+  text-align: center;
 }
 
 .cmae-land-stage-step {
@@ -143,7 +143,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  justify-content: flex-end;
+  justify-content: center;
   gap: 10px 14px;
 }
 
@@ -167,6 +167,7 @@
   line-height: 1.5;
   color: var(--ink-muted, #555);
   max-width: 42ch;
+  text-wrap: balance;
 }
 
 .cmae-land-stage-panel {

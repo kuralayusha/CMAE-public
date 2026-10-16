@@ -174,9 +174,30 @@ export function getWorkspaceRootPath(): string {
   return dir;
 }
 
-export function getSearchJobsDir(): string {
-  const dir = path.join(/*turbopackIgnore: true*/ getDataDir(), "search-jobs");
+export function getResearchJobsDir(): string {
+  const dataDir = getDataDir();
+  const dir = path.join(/*turbopackIgnore: true*/ dataDir, "research-jobs");
   fs.mkdirSync(dir, { recursive: true });
+  // One-time migrate from legacy Search product name
+  const legacy = path.join(/*turbopackIgnore: true*/ dataDir, "search-jobs");
+  try {
+    if (fs.existsSync(/*turbopackIgnore: true*/ legacy)) {
+      for (const name of fs.readdirSync(/*turbopackIgnore: true*/ legacy)) {
+        const from = path.join(/*turbopackIgnore: true*/ legacy, name);
+        const to = path.join(/*turbopackIgnore: true*/ dir, name);
+        if (!fs.existsSync(/*turbopackIgnore: true*/ to)) {
+          fs.renameSync(from, to);
+        }
+      }
+      try {
+        fs.rmdirSync(/*turbopackIgnore: true*/ legacy);
+      } catch {
+        /* not empty — leave leftovers */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
   return dir;
 }
 

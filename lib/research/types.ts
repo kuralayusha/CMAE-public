@@ -13,7 +13,7 @@ export type TermLine = {
 
 export type JobStatus = "queued" | "running" | "done" | "error" | "canceled";
 
-export type SearchJob = {
+export type ResearchJob = {
   id: string;
   url: string;
   folderName: string;

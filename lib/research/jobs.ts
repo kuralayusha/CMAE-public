@@ -3,12 +3,12 @@ import { runSearchAgent } from "./agent";
 import { getJobs } from "./events";
 import { stripFolderStatusSuffix } from "./folder-status";
 import { listAllJobs, listUnfinishedJobs, persistJobNow } from "./persist";
-import type { SearchJob } from "./types";
+import type { ResearchJob } from "./types";
 
 export type JobUiRow = {
   id: string;
   url: string;
-  status: SearchJob["status"];
+  status: ResearchJob["status"];
   folderName: string;
   companyName: string | null;
   error: string | null;
@@ -16,7 +16,7 @@ export type JobUiRow = {
   displayName: string;
 };
 
-function toUiRow(j: SearchJob): JobUiRow {
+function toUiRow(j: ResearchJob): JobUiRow {
   const host = (() => {
     try {
       return new URL(j.url).hostname.replace(/^www\./, "");
@@ -55,14 +55,14 @@ export function parseUrls(raw: string): string[] {
     });
 }
 
-export function startSearchJobs(urls: string[]): SearchJob[] {
-  const jobs: SearchJob[] = [];
+export function startResearchJobs(urls: string[]): ResearchJob[] {
+  const jobs: ResearchJob[] = [];
   const store = getJobs();
 
   for (const url of urls) {
     new URL(url); // validate
     const id = randomUUID();
-    const job: SearchJob = {
+    const job: ResearchJob = {
       id,
       url,
       folderName: "(pending)",

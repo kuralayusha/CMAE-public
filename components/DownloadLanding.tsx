@@ -15,28 +15,72 @@ type Props = {
 
 const FAQ: { q: string; a: string }[] = [
   {
+    q: "What is CMAE?",
+    a: "CMAE (Cold Mail AI Engine) is a local desktop app for job outreach: research company sites, find contacts, draft personalized emails, sync Gmail threads into a Tracker, and keep follow-ups organized — without sending mail for you.",
+  },
+  {
+    q: "What can I do in the app?",
+    a: "Research pastes careers URLs and runs parallel agents (scout → job fit → contact → research → writer → review). Folders browses the company workspace files. Tracker lists applications by status (Ready to send, Reply needed, Follow-up due, and more) and creates Gmail drafts for apply / follow-up / reply / thanks.",
+  },
+  {
     q: "Is CMAE free?",
-    a: "Yes for personal use. You need your own Gmail App Password and a Cursor API key for research agents.",
+    a: "The desktop app is free for personal use. You bring your own Gmail (App Password) and a Cursor API key. Cursor usage is billed on your Cursor account, not by CMAE.",
   },
   {
     q: "Does CMAE send emails for me?",
-    a: "No. CMAE writes drafts into Gmail Drafts. You always review and send yourself.",
+    a: "No. CMAE never sends mail or push notifications. It writes drafts into Gmail Drafts (with your CV attached when relevant). You always open Gmail, review, and send yourself.",
   },
   {
-    q: "Where is my data stored?",
-    a: "On your machine — SQLite and files under the app’s user data folder. Nothing is uploaded to our servers except optional language-pack translation.",
+    q: "Do I need Gmail, or will Outlook work?",
+    a: "Gmail only for now. CMAE uses IMAP sync and Gmail Drafts with a Google App Password — not your normal Gmail password. Outlook and other providers are not supported.",
   },
   {
-    q: "Mac or Windows?",
-    a: "macOS Apple Silicon (arm64) and Windows x64. Use the buttons in the hero.",
+    q: "What is a Gmail App Password?",
+    a: "A 16-character password from Google for apps (requires 2-Step Verification). CMAE uses it to read recent mail and save drafts. It is encrypted and stored only on your computer — never uploaded to CMAE servers.",
   },
   {
-    q: "Why does macOS ask to open the app?",
-    a: "Signed and notarized builds show a one-time “downloaded from the Internet” prompt. Click Open once.",
+    q: "Why do I need a Cursor API key?",
+    a: "Research agents, email drafting, and follow-up suggestions run through Cursor’s API. The key stays encrypted on your machine. Without it, Research and AI drafting cannot run.",
   },
   {
-    q: "Windows SmartScreen?",
-    a: "Unsigned Windows builds may warn. Choose More info → Run anyway until a code-signing certificate is added.",
+    q: "Where is my data stored? Is it private?",
+    a: "On your computer: SQLite + files under the app userData folder (company folders, CVs, settings). Secrets are encrypted locally. CMAE does not upload your mail or keys to our servers. The only optional cloud step is interface language-pack translation when you pick a non-English UI language.",
+  },
+  {
+    q: "Do I need a CV?",
+    a: "Yes — at least one PDF. CMAE reads the text to personalize outreach and attaches the PDF to application and follow-up drafts. You can add more CVs (languages/labels) later in Settings.",
+  },
+  {
+    q: "Which platforms are supported?",
+    a: "macOS Apple Silicon (arm64) via .dmg, and Windows x64 via .exe. Intel Macs and Linux desktop builds are not offered yet.",
+  },
+  {
+    q: "Is there a web app I can use in the browser?",
+    a: "This site is the download landing page. Day-to-day use is the desktop app so your Gmail credentials and research files stay on your machine.",
+  },
+  {
+    q: "Do I need to be online?",
+    a: "Yes for Research (fetching pages + Cursor), Gmail sync, and updates. Browsing already-saved Folders and reviewing Tracker rows works offline once data is on disk.",
+  },
+  {
+    q: "How do updates work?",
+    a: "The app checks a version policy and can prompt you when a newer build is available. Reinstalling a newer installer keeps your userData. Avoid Settings → wipe/uninstall if you only meant to upgrade.",
+  },
+  {
+    q: "Why does macOS warn when I open CMAE?",
+    a: "First launch after download: right-click CMAE → Open → confirm Open (Gatekeeper). Signed/notarized builds usually need this once; unsigned builds may need the same path.",
+  },
+  {
+    q: "Windows SmartScreen blocked the installer — is that normal?",
+    a: "Unsigned Windows builds often trigger SmartScreen. Choose More info → Run anyway, then finish the installer. Signed builds reduce this warning.",
+  },
+  {
+    q: "Can I change the interface language?",
+    a: "Yes in onboarding or Settings. UI language packs can be generated for your locale. Emails to companies still follow each company’s language; translated copies are for you.",
+  },
+  {
+    q: "How do I wipe everything?",
+    a: "Settings includes a full wipe of local settings, mail cache, tracker, CVs, company folders, and research history on this computer. That cannot be undone — you will set up CMAE again from scratch.",
   },
 ];
 

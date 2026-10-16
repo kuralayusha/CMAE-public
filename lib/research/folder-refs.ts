@@ -4,7 +4,7 @@ import { getDb } from "@/lib/db/client";
 import { trackerItems } from "@/lib/db/schema";
 import { getJobs } from "./events";
 import { loadJobsFromDisk, persistJobNow } from "./persist";
-import type { SearchJob } from "./types";
+import type { ResearchJob } from "./types";
 import { getWorkspaceRoot } from "./workspace";
 
 /** Keep tracker + search-job refs in sync after a top-level workspace folder rename/delete. */
@@ -39,7 +39,7 @@ export function syncTopLevelFolderRefs(
   const store = getJobs();
   const seen = new Set<string>();
 
-  const touch = (job: SearchJob) => {
+  const touch = (job: ResearchJob) => {
     if (seen.has(job.id)) return;
     const matches =
       job.folderName === oldName ||

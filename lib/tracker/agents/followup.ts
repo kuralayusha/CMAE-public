@@ -20,7 +20,7 @@ import {
   createCompanyFolder,
   getWorkspaceRoot,
   writeFile,
-} from "@/lib/search/workspace";
+} from "@/lib/research/workspace";
 import { assertItemActiveForDrafts } from "../inactive";
 import { askTrackerLlm } from "../llm";
 import {

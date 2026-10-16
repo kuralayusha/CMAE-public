@@ -611,14 +611,14 @@ select.cmae-input {
   }
 }
 
-/* —— Search: fixed right history rail —— */
-.cmae-search {
+/* —— Research: fixed right history rail —— */
+.cmae-research {
   --hist-w: 260px;
   --hist-surface: #ffffff;
   min-height: 100vh;
 }
 
-.cmae-search-body {
+.cmae-research-body {
   position: relative;
   min-width: 0;
 }
@@ -956,13 +956,13 @@ select.cmae-input {
 }
 
 @media (max-width: 760px) {
-  .cmae-search {
+  .cmae-research {
     --hist-w: 0px;
     display: flex;
     flex-direction: column;
   }
 
-  .cmae-search-body {
+  .cmae-research-body {
     display: flex;
     flex-direction: column;
   }

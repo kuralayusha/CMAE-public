@@ -7,7 +7,7 @@ import {
 import { getDb } from "@/lib/db/client";
 import { trackerItems } from "@/lib/db/schema";
 import { getGmailCredentials, getSettingsRow } from "@/lib/settings/service";
-import { getWorkspaceRoot } from "@/lib/search/workspace";
+import { getWorkspaceRoot } from "@/lib/research/workspace";
 import { appendDraft } from "./imap";
 import { assertItemActiveForDrafts } from "./inactive";
 import {
@@ -45,7 +45,7 @@ export function resolveDraftContent(
   const folder = folderPathForItem(item);
   if (!folder) {
     throw new Error(
-      "This row has no workspace folder — search output is required",
+      "This row has no workspace folder — research output is required",
     );
   }
 

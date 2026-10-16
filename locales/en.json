@@ -4,9 +4,9 @@
     "helpAria": "About this page",
     "helpTitle": "About this page",
     "tracker": "Tracker",
-    "search": "Search",
     "folders": "Folders",
-    "settings": "Settings"
+    "settings": "Settings",
+    "research": "Research"
   },
   "common": {
     "save": "Save",
@@ -144,7 +144,7 @@
       "cursor": "Checking Cursor key",
       "locale": "Language ready",
       "cv": "CV ready",
-      "unlock": "Opening Tracker and Search"
+      "unlock": "Opening Tracker and Research"
     },
     "bootLocalePreparing": "Preparing language…",
     "bootGmailTrying": "Checking Gmail connection…",
@@ -153,7 +153,7 @@
     "bootCursorTrying": "Checking Cursor key…",
     "bootCursorOk": "Cursor key confirmed",
     "bootCursorFail": "Cursor key check failed",
-    "bootUnlockOk": "Tracker and Search are ready",
+    "bootUnlockOk": "Tracker and Research are ready",
     "stepLabel": "Step {current} / {total}"
   },
   "help": {
@@ -162,23 +162,12 @@
       "title": "Tracker",
       "subtitle": "Follow every application in one list. Drafts go to Gmail; you always send them yourself.",
       "helpTitle": "How Tracker works",
-      "helpBody0": "Tracker brings together Gmail application threads and companies you researched in Search.",
+      "helpBody0": "Tracker brings together Gmail application threads and companies from Research.",
       "helpBody1": "Each row is one application: its status, latest activity, and the next actions you can take.",
       "helpStep0": "Run Gmail sync to load recent mail. The first time, Full sync can look back about 30 days.",
-      "helpStep1": "Companies you research in Search also appear here automatically.",
+      "helpStep1": "Companies from Research also appear here automatically.",
       "helpStep2": "For a follow-up, reply, or thank-you, use the action — CMAE writes a draft into Gmail Drafts.",
       "helpStep3": "You always open Gmail and send yourself; CMAE never sends mail for you."
-    },
-    "search": {
-      "title": "Search",
-      "subtitle": "Paste company or careers page URLs. CMAE finds contacts and prepares an outreach draft.",
-      "helpTitle": "How Search works",
-      "helpBody0": "Start research with one or more URLs. Each link is processed on its own so you can run several in parallel.",
-      "helpBody1": "Results are saved under Folders; good matches also show up in Tracker.",
-      "helpStep0": "Paste careers or company URLs (one per line, or separated by commas).",
-      "helpStep1": "Start research — CMAE reviews the site, looks for contacts, and drafts an email.",
-      "helpStep2": "Re-open earlier runs from the history list on the left.",
-      "helpStep3": "When a run finishes, check Tracker and send the draft from Gmail."
     },
     "folders": {
       "title": "Folders",
@@ -201,6 +190,17 @@
       "helpStep1": "To change Gmail or Cursor details, paste a new value; leave the field blank to keep the current one.",
       "helpStep2": "Job preferences (work type, notice period, salary) shape application and follow-up wording.",
       "helpStep3": "Add PDF CVs here; they attach to drafts based on language and tags."
+    },
+    "research": {
+      "title": "Research",
+      "subtitle": "Paste company or careers page URLs. CMAE finds contacts and prepares an outreach draft.",
+      "helpTitle": "How Research works",
+      "helpBody0": "Start research with one or more URLs. Each link is processed on its own so you can run several in parallel.",
+      "helpBody1": "Results are saved under Folders; good matches also show up in Tracker.",
+      "helpStep0": "Paste careers or company URLs (one per line, or separated by commas).",
+      "helpStep1": "Start research — CMAE reviews the site, looks for contacts, and drafts an email.",
+      "helpStep2": "Re-open earlier runs from the history list on the left.",
+      "helpStep3": "When a run finishes, check Tracker and send the draft from Gmail."
     }
   },
   "tracker": {
@@ -210,7 +210,7 @@
     "hardSyncTitle": "Checks the last 30 days of mail again. Older messages already in CMAE are kept.",
     "syncTitle": "Quick sync — only new mail since the last sync",
     "empty": "No applications yet.",
-    "emptyHint": "Sync Gmail, or add companies from Search.",
+    "emptyHint": "Sync Gmail, or add companies from Research.",
     "loading": "Loading…",
     "draft": "Draft",
     "prepare": "Prepare",
@@ -310,19 +310,6 @@
     },
     "gmailModalLead": "{company} — {count} conversation parts. A normal click opens Gmail in a new tab; to stay here,"
   },
-  "search": {
-    "start": "Start research",
-    "starting": "Starting research…",
-    "placeholder": "https://stExampleSoft.com\nhttps://example-corp.com/careers",
-    "loadingTerminals": "Loading research panels…",
-    "loadingTerminal": "Loading research panel…",
-    "panelEmpty": "Nothing here yet. Start a new research or open one from history.",
-    "pastSession": "Earlier research",
-    "removeFromPanel": "Remove from panel",
-    "historyAria": "Search history",
-    "historyEmpty": "No searches yet",
-    "historyEmptyHint": "When you start with a new URL, it appears here."
-  },
   "settings": {
     "accProfile": "Profile",
     "accGmail": "Gmail",
@@ -349,12 +336,12 @@
     "cvConfirmDelete": "Delete this CV?",
     "uninstallDesktopOnly": "Uninstall is only available in the desktop app",
     "saved": "Saved",
-    "dangerWipeHint": "Removes your settings, mail data, tracker, CVs, company folders, and search history from this computer. CMAE will ask you to set up again from the start.",
+    "dangerWipeHint": "Removes your settings, mail data, tracker, CVs, company folders, and research history from this computer. CMAE will ask you to set up again from the start.",
     "dangerWipeBtn": "Delete all data",
     "dangerUninstallHint": "Removes CMAE and all of its data from this Mac. Your installer file (.dmg) is not deleted — you can install again later.",
     "dangerUninstallBtn": "Uninstall CMAE",
     "wipeTitle": "Delete all data?",
-    "wipeBody": "Settings, emails, tracker, CVs, company folders, and search history will be permanently deleted. This cannot be undone.",
+    "wipeBody": "Settings, emails, tracker, CVs, company folders, and research history will be permanently deleted. This cannot be undone.",
     "wipeConfirm": "Yes, delete everything",
     "uninstallTitle": "Uninstall CMAE?",
     "uninstallBody": "This removes the app and all of its data on this Mac. Your installer file (.dmg) is left alone so you can install again later. The app will quit immediately.",
@@ -385,7 +372,7 @@
     "colSize": "Size",
     "colModified": "Modified",
     "emptyTitle": "This folder is empty",
-    "emptyHint": "Company folders appear here after you run Search.",
+    "emptyHint": "Company folders appear here after you run Research.",
     "renameAria": "Edit folder name",
     "badgeNoLink": "No application link",
     "badgeAiOnly": "Internal research notes for CMAE",
@@ -533,5 +520,18 @@
     "ready": "Update downloaded — restart to install.",
     "dismiss": "Later",
     "offline": "Could not reach the update server. You can keep using this build for now."
+  },
+  "research": {
+    "start": "Start research",
+    "starting": "Starting research…",
+    "placeholder": "https://stExampleSoft.com\nhttps://example-corp.com/careers",
+    "loadingTerminals": "Loading research panels…",
+    "loadingTerminal": "Loading research panel…",
+    "panelEmpty": "Nothing here yet. Start a new research or open one from history.",
+    "pastSession": "Earlier research",
+    "removeFromPanel": "Remove from panel",
+    "historyAria": "Research history",
+    "historyEmpty": "No research yet",
+    "historyEmptyHint": "When you start with a new URL, it appears here."
   }
 }

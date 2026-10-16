@@ -47,6 +47,7 @@ export function derivePlain(input: {
       agent || "scout",
     );
   }
+  // Legacy job logs (pre JS-only email scan still tagged "python")
   if (input.kind === "python") {
     return withAgent("Scanning text for emails / patterns", agent || "contact");
   }

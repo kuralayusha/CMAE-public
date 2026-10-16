@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
-import { listJobsForUi, parseUrls, startSearchJobs } from "@/lib/search/jobs";
+import { listJobsForUi, parseUrls, startResearchJobs } from "@/lib/research/jobs";
 
 export const runtime = "nodejs";
 
@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Maximum 20 links" }, { status: 400 });
     }
 
-    const jobs = startSearchJobs(urls);
+    const jobs = startResearchJobs(urls);
     return NextResponse.json({
       jobs: jobs.map((j) => ({
         id: j.id,

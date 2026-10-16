@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
-import { getSearchJobsDir } from "@/lib/paths";
-import type { SearchJob } from "./types";
+import { getResearchJobsDir } from "@/lib/paths";
+import type { ResearchJob } from "./types";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -11,14 +11,14 @@ declare global {
 }
 
 function ensureDir() {
-  getSearchJobsDir();
+  getResearchJobsDir();
 }
 
 function jobPath(id: string) {
-  return path.join(getSearchJobsDir(), `${id}.json`);
+  return path.join(getResearchJobsDir(), `${id}.json`);
 }
 
-export function persistJobNow(job: SearchJob) {
+export function persistJobNow(job: ResearchJob) {
   try {
     ensureDir();
     const payload = {
@@ -31,7 +31,7 @@ export function persistJobNow(job: SearchJob) {
   }
 }
 
-export function persistJobDebounced(job: SearchJob, ms = 250) {
+export function persistJobDebounced(job: ResearchJob, ms = 250) {
   if (!globalThis.__cmaePersistTimers) {
     globalThis.__cmaePersistTimers = new Map();
   }
@@ -47,9 +47,9 @@ export function persistJobDebounced(job: SearchJob, ms = 250) {
   );
 }
 
-export function loadJobsFromDisk(): SearchJob[] {
+export function loadJobsFromDisk(): ResearchJob[] {
   try {
-    const dir = getSearchJobsDir();
+    const dir = getResearchJobsDir();
     return fs
       .readdirSync(dir)
       .filter((f) => f.endsWith(".json"))
@@ -57,19 +57,19 @@ export function loadJobsFromDisk(): SearchJob[] {
         try {
           return JSON.parse(
             fs.readFileSync(path.join(dir, f), "utf8"),
-          ) as SearchJob;
+          ) as ResearchJob;
         } catch {
           return null;
         }
       })
-      .filter((j): j is SearchJob => Boolean(j?.id));
+      .filter((j): j is ResearchJob => Boolean(j?.id));
   } catch {
     return [];
   }
 }
 
 /** Cold start: disk → memory. Dead running jobs become interrupted errors. */
-export function hydrateJobsFromDisk(store: Map<string, SearchJob>) {
+export function hydrateJobsFromDisk(store: Map<string, ResearchJob>) {
   if (globalThis.__cmaeJobsHydrated) return;
   globalThis.__cmaeJobsHydrated = true;
 
@@ -77,7 +77,7 @@ export function hydrateJobsFromDisk(store: Map<string, SearchJob>) {
     if (store.has(job.id)) continue;
     if (job.status === "queued" || job.status === "running") {
       job.status = "error";
-      job.error = "Interrupted (server restarted) — re-run from Search if needed";
+      job.error = "Interrupted (server restarted) — re-run from Research if needed";
       job.cancelRequested = false;
       persistJobNow(job);
     }
@@ -86,7 +86,7 @@ export function hydrateJobsFromDisk(store: Map<string, SearchJob>) {
   }
 }
 
-export function listUnfinishedJobs(store: Map<string, SearchJob>): SearchJob[] {
+export function listUnfinishedJobs(store: Map<string, ResearchJob>): ResearchJob[] {
   const unfinished = new Set(["queued", "running", "error"]);
   return [...store.values()]
     .filter((j) => unfinished.has(j.status))
@@ -99,23 +99,23 @@ export function listUnfinishedJobs(store: Map<string, SearchJob>): SearchJob[] {
 }
 
 /** All searches (including done / canceled) — history bar */
-export function listAllJobs(store: Map<string, SearchJob>): SearchJob[] {
+export function listAllJobs(store: Map<string, ResearchJob>): ResearchJob[] {
   return [...store.values()].sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /** Wipe persisted search jobs + in-memory map (fresh install). */
-export function clearAllSearchJobs(): void {
+export function clearAllResearchJobs(): void {
   if (globalThis.__cmaePersistTimers) {
     for (const t of globalThis.__cmaePersistTimers.values()) clearTimeout(t);
     globalThis.__cmaePersistTimers.clear();
   }
-  if (globalThis.__cmaeSearchJobs) {
-    globalThis.__cmaeSearchJobs.clear();
+  if (globalThis.__cmaeResearchJobs) {
+    globalThis.__cmaeResearchJobs.clear();
   }
   globalThis.__cmaeJobsHydrated = false;
 
   try {
-    const dir = getSearchJobsDir();
+    const dir = getResearchJobsDir();
     if (!fs.existsSync(dir)) return;
     for (const name of fs.readdirSync(dir)) {
       try {

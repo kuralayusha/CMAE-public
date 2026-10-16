@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
-import { syncTopLevelFolderRefs } from "@/lib/search/folder-refs";
+import { syncTopLevelFolderRefs } from "@/lib/research/folder-refs";
 import {
   compactTopLevelFolderIndices,
   deleteWorkspaceEntry,
@@ -9,7 +9,7 @@ import {
   renameWorkspaceEntry,
   resolveWorkspacePath,
   revealInFileManager,
-} from "@/lib/search/workspace";
+} from "@/lib/research/workspace";
 
 export const runtime = "nodejs";
 

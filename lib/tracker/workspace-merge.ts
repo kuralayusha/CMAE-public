@@ -3,16 +3,16 @@ import path from "path";
 import {
   hasFolderStatusSuffix,
   stripFolderStatusSuffix,
-} from "@/lib/search/folder-status";
-import { loadJobsFromDisk } from "@/lib/search/persist";
-import { getWorkspaceRoot } from "@/lib/search/workspace";
+} from "@/lib/research/folder-status";
+import { loadJobsFromDisk } from "@/lib/research/persist";
+import { getWorkspaceRoot } from "@/lib/research/workspace";
 import {
   extractPrimaryEmailFromWorkspace,
   findEmailDraftInFolder,
 } from "./parse-mail-md";
 
 export type WorkspaceCandidate = {
-  searchJobId: string;
+  researchJobId: string;
   company: string;
   workspaceFolder: string;
   folderPath: string;
@@ -61,7 +61,7 @@ function candidateFromJob(job: {
 
   const draft = findEmailDraftInFolder(folderPath);
   return {
-    searchJobId: job.id,
+    researchJobId: job.id,
     company: displayCompany(job),
     workspaceFolder: path.basename(folderPath),
     folderPath,
@@ -73,9 +73,9 @@ function candidateFromJob(job: {
 }
 
 export function getWorkspaceCandidate(
-  searchJobId: string,
+  researchJobId: string,
 ): WorkspaceCandidate | null {
-  const job = loadJobsFromDisk().find((j) => j.id === searchJobId);
+  const job = loadJobsFromDisk().find((j) => j.id === researchJobId);
   if (!job) return null;
   return candidateFromJob(job);
 }

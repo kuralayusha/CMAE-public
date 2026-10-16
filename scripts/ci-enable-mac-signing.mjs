@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * CI-only: strip `mac.identity: null` from electron-builder.yml so CSC_LINK
- * can codesign. Local builds keep identity: null (avoids ambiguous keychain
- * "Apple Development" identities).
+ * CI-only: strip `mac.identity: null` from electron-builder.yml so the
+ * imported Developer ID can codesign. Local signed builds use
+ * scripts/desktop-build-mac.mjs --sign (temp config; does not mutate this file).
  *
- * With CSC_IDENTITY_AUTO_DISCOVERY=false and no CSC_LINK → still unsigned.
+ * With CSC_IDENTITY_AUTO_DISCOVERY=false and no cert → still unsigned.
  */
 import { readFileSync, writeFileSync } from "fs";
 import path from "path";

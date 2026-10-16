@@ -2,7 +2,7 @@
 
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
 
-export type SearchHistoryJob = {
+export type ResearchHistoryJob = {
   id: string;
   url: string;
   folderName: string;
@@ -24,14 +24,14 @@ const STATUS_TONE: Record<
 };
 
 type Props = {
-  items: SearchHistoryJob[];
+  items: ResearchHistoryJob[];
   panelIds: string[];
   selectedId: string | null;
   loading?: boolean;
-  onSelect: (job: SearchHistoryJob) => void;
+  onSelect: (job: ResearchHistoryJob) => void;
 };
 
-export function SearchHistory({
+export function ResearchHistory({
   items,
   panelIds,
   selectedId,
@@ -45,7 +45,7 @@ export function SearchHistory({
     t("folders.suffixError"),
   ];
   return (
-    <aside className="cmae-hist" aria-label={t("search.historyAria")}>
+    <aside className="cmae-hist" aria-label={t("research.historyAria")}>
       <div className="cmae-hist-scroll">
         {loading && items.length === 0 ? (
           <div className="cmae-hist-empty" role="status">
@@ -55,9 +55,9 @@ export function SearchHistory({
         ) : items.length === 0 ? (
           <div className="cmae-hist-empty">
             <span className="cmae-hist-empty-mark" aria-hidden />
-            <p>{t("search.historyEmpty")}</p>
+            <p>{t("research.historyEmpty")}</p>
             <span className="cmae-hist-empty-hint">
-              {t("search.historyEmptyHint")}
+              {t("research.historyEmptyHint")}
             </span>
           </div>
         ) : (
