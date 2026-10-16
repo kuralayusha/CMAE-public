@@ -1,18 +1,20 @@
 import {
   loadBundledPolicy,
   normalizePolicy,
-  resolveCdnBase,
+  resolveReleasesRepo,
   type VersionPolicy,
 } from "@/lib/version/policy";
 
 /**
- * Live policy written by CI after each desktop upload.
- * Prefer this over the git-bundled copy so landing links work as soon as
- * Blob upload finishes — no Vercel redeploy required.
+ * Live policy attached to each GitHub Release on the public releases repo.
+ * Prefer this over the git-bundled copy so landing links update as soon as
+ * assets are uploaded — no Vercel redeploy required.
  */
 export function getCdnPolicyUrl(policy?: VersionPolicy | null): string {
-  const cdn = resolveCdnBase(policy || loadBundledPolicy());
-  return `${cdn}/releases/policy.json`;
+  const bundled = policy || loadBundledPolicy();
+  const repo = resolveReleasesRepo(bundled);
+  const version = bundled.latest.replace(/^v/i, "");
+  return `https://github.com/${repo}/releases/download/v${version}/policy.json`;
 }
 
 export async function fetchCdnPolicy(
@@ -24,6 +26,7 @@ export async function fetchCdnPolicy(
     method: "GET",
     headers: { Accept: "application/json" },
     cache: "no-store",
+    redirect: "follow",
     signal,
   });
   if (!res.ok) {

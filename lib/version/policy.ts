@@ -13,17 +13,26 @@ export type VersionPolicy = {
   minSupported: string;
   /** When true, lock even if current meets minSupported but is behind latest. */
   force: boolean;
-  /** Public Vercel Blob origin (no trailing slash). */
+  /** Public releases repo, e.g. kuralayusha/cmae-releases. */
+  releasesRepo?: string;
+  /** Base for tagged assets: …/releases/download (no trailing slash). */
   cdnBase?: string;
   releaseUrl: string;
-  /** electron-updater generic feed directory (latest-mac.yml / latest.yml). */
+  /** Prefer GitHub Releases latest page / feed for electron-updater. */
   updateFeedUrl?: string;
   downloads: VersionDownloads;
   notes?: string;
 };
 
-const DEFAULT_CDN_BASE =
-  "https://j99zof4rag1z9ajs.public.blob.vercel-storage.com";
+const DEFAULT_RELEASES_REPO = "kuralayusha/cmae-releases";
+
+export function resolveReleasesRepo(
+  policy?: Partial<VersionPolicy> | null,
+): string {
+  const fromEnv = (process.env.CMAE_RELEASES_REPO || "").trim();
+  if (fromEnv) return fromEnv;
+  return String(policy?.releasesRepo || "").trim() || DEFAULT_RELEASES_REPO;
+}
 
 export function resolveCdnBase(policy?: Partial<VersionPolicy> | null): string {
   const fromEnv = (process.env.CMAE_CDN_BASE || "").trim().replace(/\/$/, "");
@@ -31,26 +40,29 @@ export function resolveCdnBase(policy?: Partial<VersionPolicy> | null): string {
   const fromPolicy = String(policy?.cdnBase || "")
     .trim()
     .replace(/\/$/, "");
-  return fromPolicy || DEFAULT_CDN_BASE;
+  if (fromPolicy) return fromPolicy;
+  return `https://github.com/${resolveReleasesRepo(policy)}/releases/download`;
 }
 
-/** Fill download / release URLs from cdnBase + latest when missing. */
+/** Fill download / release URLs from public releases repo + latest when missing. */
 export function applyCdnDownloads(policy: VersionPolicy): VersionPolicy {
-  const cdn = resolveCdnBase(policy);
+  const repo = resolveReleasesRepo(policy);
   const version = policy.latest.replace(/^v/i, "");
+  const tagBase = `https://github.com/${repo}/releases/download/v${version}`;
+  const latestPage = `https://github.com/${repo}/releases/latest`;
   const downloads: VersionDownloads = { ...policy.downloads };
   if (!downloads["darwin-arm64"]) {
-    downloads["darwin-arm64"] =
-      `${cdn}/releases/CMAE-${version}-arm64-mac.zip`;
+    downloads["darwin-arm64"] = `${tagBase}/CMAE-${version}-mac-arm64.dmg`;
   }
   if (!downloads["win32-x64"]) {
-    downloads["win32-x64"] = `${cdn}/releases/CMAE-${version}-win-x64.exe`;
+    downloads["win32-x64"] = `${tagBase}/CMAE-${version}-win-x64.exe`;
   }
   return {
     ...policy,
-    cdnBase: cdn,
-    releaseUrl: policy.releaseUrl || `${cdn}/releases`,
-    updateFeedUrl: policy.updateFeedUrl || `${cdn}/releases`,
+    releasesRepo: repo,
+    cdnBase: `https://github.com/${repo}/releases/download`,
+    releaseUrl: policy.releaseUrl || latestPage,
+    updateFeedUrl: policy.updateFeedUrl || latestPage,
     downloads,
   };
 }
@@ -95,13 +107,16 @@ export function normalizePolicy(raw: Partial<VersionPolicy> | null | undefined):
     : {}) as VersionDownloads;
   const cdn = resolveCdnBase(raw);
   const latest = String(raw?.latest || "0.0.0").replace(/^v/i, "");
+  const repo = resolveReleasesRepo(raw);
+  const latestPage = `https://github.com/${repo}/releases/latest`;
   return applyCdnDownloads({
     latest,
     minSupported: String(raw?.minSupported || "0.0.0").replace(/^v/i, ""),
     force: Boolean(raw?.force),
+    releasesRepo: repo,
     cdnBase: cdn,
-    releaseUrl: String(raw?.releaseUrl || `${cdn}/releases`),
-    updateFeedUrl: String(raw?.updateFeedUrl || `${cdn}/releases`),
+    releaseUrl: String(raw?.releaseUrl || latestPage),
+    updateFeedUrl: String(raw?.updateFeedUrl || latestPage),
     downloads,
     notes: String(raw?.notes || ""),
   });

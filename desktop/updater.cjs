@@ -21,12 +21,21 @@ function loadUpdater() {
   }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  // Feed URL is baked by electron-builder (generic → Blob CDN). Optional
-  // override for QA: CMAE_UPDATE_FEED_URL=https://…/releases
+  // Default: GitHub provider → public kuralayusha/cmae-releases (baked by
+  // electron-builder.yml). Optional override for QA:
+  //   CMAE_UPDATE_FEED_URL=https://github.com/…/cmae-releases
   const feed = (process.env.CMAE_UPDATE_FEED_URL || "").trim().replace(/\/$/, "");
   if (feed) {
     try {
-      autoUpdater.setFeedURL({ provider: "generic", url: feed });
+      if (feed.includes("github.com")) {
+        autoUpdater.setFeedURL({
+          provider: "github",
+          owner: "kuralayusha",
+          repo: "cmae-releases",
+        });
+      } else {
+        autoUpdater.setFeedURL({ provider: "generic", url: feed });
+      }
     } catch (err) {
       console.warn("[updater] setFeedURL failed:", err);
     }

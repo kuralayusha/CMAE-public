@@ -4,33 +4,38 @@ Local-first cold mail agent.
 
 ## Release & deploy (ne ne zaman olur?)
 
+Installer’lar **public** [`kuralayusha/cmae-releases`](https://github.com/kuralayusha/cmae-releases) reposunda yaşar. Kaynak kod private kalabilir.
+
 ### 1) Normal `git push` (main’e kod)
 
 - **Vercel** siteyi yeniler (landing / API).
-- **Desktop Release** CI çalışmaz — paket üretilmez, Blob’a bir şey yüklenmez.
-- Landing linkleri değişmez (CDN’deki `policy.json` / `version-policy.json` neyse o kalır).
-- Not: `Desktop Mac` / `Desktop Win` job’ları bazen push’ta açılabilir; bunlar sadece Actions artefact üretir, CDN’e basmaz.
+- Paket üretilmez; landing linkleri `version-policy.json` / release `policy.json` neyse odur.
+- Not: `Desktop Mac` / `Desktop Win` job’ları bazen push’ta açılır — sadece Actions artefact, public release’e basmaz.
 
 ### 2) Yeni sürüm (paket + link + auto-update)
 
 Sıra:
 
 1. `package.json` version’ı yükselt (örn. `0.1.0` → `0.2.0`)
-2. `node scripts/bump-version-policy.mjs` — CDN linklerini yeni versiyona yazar
+2. `node scripts/bump-version-policy.mjs`
 3. Commit + push
-4. Tag at: `git tag v0.2.0 && git push origin v0.2.0`  
-   **veya** Actions → **Desktop Release** → Use workflow from **`main`** → Run workflow → `v0.2.0`  
-   (Manuel çalıştırmada kod **seçilen branch’ten** gelir; tag alanı sadece version kontrolü içindir — eski tag commit’i checkout edilmez.)
+4. Lokal (Actions dakikası yokken):  
+   `npm run desktop:publish:mac` / `desktop:publish:win`  
+   (**veya** build + `npm run desktop:upload:github -- --platform mac`)  
+5. Actions açıksa: **Desktop Release** → `main` → tag `v0.2.0`  
+   Secret: `RELEASES_GITHUB_TOKEN` (PAT → `cmae-releases` üzerinde `contents:write`)
 
-Sonra CI Mac/Win paketini yapar → **Vercel Blob**’a yükler → `policy.json` güncellenir → landing linkleri yeni dosyaya bakar. Auto-update aynı feed’i okur.
+Upload, `cmae-releases` üzerinde `vX.Y.Z` Release + asset’leri yazar; landing URL’leri otomatik o tag’e bakar.
 
-**Sadece push yetmez;** tag veya manuel Desktop Release şart.
+### 3) Lokal upload (Actions yokken)
 
-### 3) Tek seferlik Blob secret
+```bash
+npm run desktop:build:mac          # imzalı/notarized mümkünse
+npm run desktop:upload:github -- --platform mac
+# Win için Windows makinede: --platform win
+```
 
-GitHub Actions secret: `BLOB_READ_WRITE_TOKEN` (Vercel → Storage → `cmae-releases`, veya `node scripts/sync-blob-token-to-github.mjs`).
-
-**Hobby Blob = 1GB:** Mac DMG+ZIP+Win EXE sığmaz. CDN’de Mac **`.zip`** (updater + indirme), Win **`.exe`**. Daha fazla alan olursa `CMAE_BLOB_UPLOAD_DMG=1` ile DMG de yüklenebilir.
+`gh auth login` yeterli (repo write).
 
 ## Active surfaces
 
@@ -94,12 +99,12 @@ Desktop compares `package.json` version against the remote policy at
 `https://cmae.vercel.app/api/version` (from [`version-policy.json`](version-policy.json)).
 
 - Below `minSupported` (or `force: true`) → full-screen lock + download / install CTA
-- Behind `latest` only → dismissible banner; `electron-updater` checks the public Blob feed (`updateFeedUrl`)
+- Behind `latest` only → dismissible banner; `electron-updater` reads public `cmae-releases`
 - Reinstalling a newer DMG/NSIS **keeps** userData (do not use Settings → Uninstall)
 
-### Release (Vercel Blob CDN)
+### Release (public GitHub Releases repo)
 
-See **Release & deploy** at the top. Short version: bump version → `bump-version-policy` → commit → tag / Desktop Release → artefacts land on Blob; landing reads CDN `policy.json`.
+See **Release & deploy** at the top. Artefacts → [`kuralayusha/cmae-releases`](https://github.com/kuralayusha/cmae-releases).
 
 ### Code signing secrets (GitHub Actions)
 
@@ -112,9 +117,9 @@ See **Release & deploy** at the top. Short version: bump version → `bump-versi
 | `APPLE_TEAM_ID` | Mac | Team ID |
 | `WIN_CSC_LINK` | Win | Base64 Authenticode `.pfx` |
 | `WIN_CSC_KEY_PASSWORD` | Win | pfx password |
-| `BLOB_READ_WRITE_TOKEN` | Both | Vercel Blob upload (required for CDN publish) |
+| `RELEASES_GITHUB_TOKEN` | Both | PAT with `contents:write` on `cmae-releases` |
 
-Without signing secrets, release builds still upload **unsigned** artefacts (Gatekeeper / SmartScreen warnings remain). Without `BLOB_READ_WRITE_TOKEN`, Desktop Release fails before upload.
+Without signing secrets, release builds still upload **unsigned** artefacts (Gatekeeper / SmartScreen warnings remain). Without `RELEASES_GITHUB_TOKEN`, CI cannot publish to the public releases repo.
 
 Encode a cert: `base64 -i cert.p12 | pbcopy` (macOS) / `certutil -encode cert.pfx -` (Windows).
 
@@ -124,7 +129,7 @@ Local Mac builds keep `mac.identity: null` in `electron-builder.yml` so keychain
 
 - Mac: [`.github/workflows/desktop-mac.yml`](.github/workflows/desktop-mac.yml) → artefact **CMAE-mac-dmg**
 - Windows: [`.github/workflows/desktop-win.yml`](.github/workflows/desktop-win.yml) → artefact **CMAE-win-nsis**
-- Release: [`.github/workflows/desktop-release.yml`](.github/workflows/desktop-release.yml) on `v*` tags / workflow_dispatch → Vercel Blob CDN
+- Release: [`.github/workflows/desktop-release.yml`](.github/workflows/desktop-release.yml) workflow_dispatch → public `cmae-releases`
 
 ### First open (unsigned)
 

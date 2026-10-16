@@ -11,11 +11,13 @@ files:
   - package.json
 afterPack: scripts/after-pack.cjs
 afterSign: scripts/notarize.cjs
-# Public CDN (Vercel Blob). CI uploads artefacts via scripts/upload-desktop-blob.mjs.
-# Repo stays private — landing + electron-updater use this feed URL.
+# Public artefacts live in a separate public repo so source can stay private.
+# CI/local upload: scripts/upload-desktop-github.mjs (gh release upload).
 publish:
-  provider: generic
-  url: https://j99zof4rag1z9ajs.public.blob.vercel-storage.com/releases
+  provider: github
+  owner: kuralayusha
+  repo: cmae-releases
+  releaseType: release
 mac:
   category: public.app-category.productivity
   # zip required for electron-updater; dmg for humans

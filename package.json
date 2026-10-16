@@ -21,13 +21,12 @@
     "desktop:prepare": "node scripts/obfuscate-desktop.mjs && node scripts/prepare-desktop.mjs",
     "desktop:build:mac": "npm run build && npm run desktop:prepare && electron-builder --mac --config electron-builder.yml --publish never",
     "desktop:build:win": "npm run build && npm run desktop:prepare && electron-builder --win --config electron-builder.yml --publish never",
-    "desktop:upload:blob": "node scripts/upload-desktop-blob.mjs",
-    "desktop:publish:mac": "npm run desktop:build:mac && node scripts/upload-desktop-blob.mjs --platform mac",
-    "desktop:publish:win": "npm run desktop:build:win && node scripts/upload-desktop-blob.mjs --platform win"
+    "desktop:upload:github": "node scripts/upload-desktop-github.mjs",
+    "desktop:publish:mac": "npm run desktop:build:mac && node scripts/upload-desktop-github.mjs --platform mac",
+    "desktop:publish:win": "npm run desktop:build:win && node scripts/upload-desktop-github.mjs --platform win"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.37",
-    "@vercel/blob": "^2.8.2",
     "better-sqlite3": "^13.0.3",
     "cheerio": "^1.2.0",
     "drizzle-orm": "^0.45.4",

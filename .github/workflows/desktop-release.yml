@@ -1,18 +1,15 @@
 name: Desktop Release
 
-# Tag a version (v0.2.0) after bumping package.json + version-policy.json.
+# Manual only (saves Actions minutes). Bump package.json + version-policy.json,
+# then run this workflow from the Actions tab — optionally pass tag (e.g. v0.2.0).
 # Builds signed (when secrets exist) + obfuscated Mac/Win artefacts and
-# uploads them to public Vercel Blob (landing + electron-updater CDN).
-# Repo can stay private — downloads do not go through GitHub Releases.
+# uploads them to the public repo kuralayusha/cmae-releases (source stays private).
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Expected version tag (e.g. v0.1.0). On manual runs, code comes from the branch above — not the old tag commit."
+        description: "Expected version tag (e.g. v0.1.0). Code comes from the branch selected above — not an old tag commit."
         required: false
         type: string
 
@@ -33,11 +30,9 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+      # PAT with contents:write on kuralayusha/cmae-releases (GITHUB_TOKEN cannot write another repo).
+      RELEASES_GITHUB_TOKEN: ${{ secrets.RELEASES_GITHUB_TOKEN }}
     steps:
-      # Checkout defaults to the branch/tag that triggered the run:
-      # - workflow_dispatch → branch selected in UI (main) — not the old tag commit
-      # - push tags/v* → that tag
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -54,10 +49,10 @@ jobs:
             exit 1
           fi
 
-      - name: Require Blob token
+      - name: Require releases token
         run: |
-          if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
-            echo "::error::Add GitHub secret BLOB_READ_WRITE_TOKEN (from Vercel → Storage → cmae-releases → .env.local)"
+          if [ -z "$RELEASES_GITHUB_TOKEN" ]; then
+            echo "::error::Add GitHub secret RELEASES_GITHUB_TOKEN (PAT with contents:write on kuralayusha/cmae-releases)"
             exit 1
           fi
 
@@ -85,17 +80,18 @@ jobs:
         if: env.MAC_CSC_LINK != ''
         run: security find-identity -v -p codesigning
 
-      - name: Build + upload Mac → Blob
+      - name: Build + upload Mac → cmae-releases
         run: npm run desktop:publish:mac
         env:
           CMAE_OBFUSCATE: "1"
+          GH_TOKEN: ${{ env.RELEASES_GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ env.MAC_CSC_LINK != '' && 'true' || 'false' }}
 
   release-win:
     runs-on: windows-2022
     timeout-minutes: 60
     env:
-      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+      RELEASES_GITHUB_TOKEN: ${{ secrets.RELEASES_GITHUB_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,11 +109,11 @@ jobs:
             exit 1
           fi
 
-      - name: Require Blob token
+      - name: Require releases token
         shell: bash
         run: |
-          if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
-            echo "::error::Add GitHub secret BLOB_READ_WRITE_TOKEN"
+          if [ -z "$RELEASES_GITHUB_TOKEN" ]; then
+            echo "::error::Add GitHub secret RELEASES_GITHUB_TOKEN"
             exit 1
           fi
 
@@ -130,11 +126,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build + upload Windows → Blob
-        # Prefer PowerShell (default) so PATH uses System32 tar/tools, not Git bash.
+      - name: Build + upload Windows → cmae-releases
         run: npm run desktop:publish:win
         env:
           CMAE_OBFUSCATE: "1"
+          GH_TOKEN: ${{ env.RELEASES_GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}

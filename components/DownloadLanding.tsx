@@ -66,7 +66,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
           <div className="cmae-land-ctas">
             <a className="cmae-land-cta is-primary" href={macUrl}>
               Download for Mac
-              <span>Apple Silicon · .zip · v{initialPolicy.latest}</span>
+              <span>Apple Silicon · .dmg · v{initialPolicy.latest}</span>
             </a>
             <a className="cmae-land-cta" href={winUrl}>
               Download for Windows
@@ -145,7 +145,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
         </p>
         <div className="cmae-land-ctas">
           <a className="cmae-land-cta is-primary" href={macUrl}>
-            Mac · .zip
+            Mac · .dmg
           </a>
           <a className="cmae-land-cta" href={winUrl}>
             Windows · .exe
