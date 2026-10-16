@@ -6,7 +6,7 @@
   "releaseUrl": "https://j99zof4rag1z9ajs.public.blob.vercel-storage.com/releases",
   "updateFeedUrl": "https://j99zof4rag1z9ajs.public.blob.vercel-storage.com/releases",
   "downloads": {
-    "darwin-arm64": "https://j99zof4rag1z9ajs.public.blob.vercel-storage.com/releases/CMAE-0.1.0-mac-arm64.dmg",
+    "darwin-arm64": "https://j99zof4rag1z9ajs.public.blob.vercel-storage.com/releases/CMAE-0.1.0-arm64-mac.zip",
     "win32-x64": "https://j99zof4rag1z9ajs.public.blob.vercel-storage.com/releases/CMAE-0.1.0-win-x64.exe"
   },
   "notes": ""

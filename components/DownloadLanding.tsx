@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import type { VersionPolicy } from "@/lib/version/policy";
 import { LandingResearchDemo } from "@/components/landing/LandingResearchDemo";
+import { LandingFoldersDemo } from "@/components/landing/LandingFoldersDemo";
 import { LandingTrackerDemo } from "@/components/landing/LandingTrackerDemo";
+import { LandingScenarioProvider } from "@/components/landing/LandingScenario";
+import { LandingStage } from "@/components/landing/LandingStage";
 import "@/app/download/download.css";
 
 type Props = {
@@ -63,7 +66,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
           <div className="cmae-land-ctas">
             <a className="cmae-land-cta is-primary" href={macUrl}>
               Download for Mac
-              <span>Apple Silicon · .dmg · v{initialPolicy.latest}</span>
+              <span>Apple Silicon · .zip · v{initialPolicy.latest}</span>
             </a>
             <a className="cmae-land-cta" href={winUrl}>
               Download for Windows
@@ -73,51 +76,34 @@ export function DownloadLanding({ initialPolicy }: Props) {
         </div>
       </header>
 
-      <div className="cmae-land-hero-stage">
-        <LandingResearchDemo />
+      <div className="cmae-land-tour" aria-label="Interactive product tour">
+        <p className="cmae-land-tour-label">Interactive tour</p>
+        <LandingScenarioProvider>
+          <LandingStage
+            step="01"
+            title="Research"
+            lead="Paste careers URLs — agents find contacts and draft outreach. Try Start research."
+          >
+            <LandingResearchDemo />
+          </LandingStage>
+
+          <LandingStage
+            step="02"
+            title="Folders"
+            lead="Open a company folder — read the brief or the drafted email. Everything stays on your machine."
+          >
+            <LandingFoldersDemo />
+          </LandingStage>
+
+          <LandingStage
+            step="03"
+            title="Tracker"
+            lead="Sync Gmail — researched companies show up Ready to send. You always send from Gmail yourself."
+          >
+            <LandingTrackerDemo />
+          </LandingStage>
+        </LandingScenarioProvider>
       </div>
-
-      <section className="cmae-land-section" aria-labelledby="cmae-land-how">
-        <h2 id="cmae-land-how" className="cmae-land-h2">
-          How it works
-        </h2>
-        <p className="cmae-land-section-lead">
-          Three steps. CMAE never sends mail on your behalf.
-        </p>
-        <ol className="cmae-land-steps">
-          <li>
-            <span className="cmae-land-step-n">01</span>
-            <span className="cmae-land-step-t">Research</span>
-            <span className="cmae-land-step-d">
-              Paste careers URLs — agents find contacts and draft outreach.
-            </span>
-          </li>
-          <li>
-            <span className="cmae-land-step-n">02</span>
-            <span className="cmae-land-step-t">Draft</span>
-            <span className="cmae-land-step-d">
-              Sync Gmail, prepare follow-ups — drafts land in Gmail Drafts.
-            </span>
-          </li>
-          <li>
-            <span className="cmae-land-step-n">03</span>
-            <span className="cmae-land-step-t">You send</span>
-            <span className="cmae-land-step-d">
-              Open Gmail, review, send. You stay in control.
-            </span>
-          </li>
-        </ol>
-      </section>
-
-      <section className="cmae-land-section" aria-labelledby="cmae-land-track">
-        <h2 id="cmae-land-track" className="cmae-land-h2">
-          One list for every application
-        </h2>
-        <p className="cmae-land-section-lead">
-          Try a sync — statuses update the way Tracker does in the app.
-        </p>
-        <LandingTrackerDemo />
-      </section>
 
       <section className="cmae-land-section" aria-labelledby="cmae-land-faq">
         <h2 id="cmae-land-faq" className="cmae-land-h2">
@@ -159,7 +145,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
         </p>
         <div className="cmae-land-ctas">
           <a className="cmae-land-cta is-primary" href={macUrl}>
-            Mac · .dmg
+            Mac · .zip
           </a>
           <a className="cmae-land-cta" href={winUrl}>
             Windows · .exe

@@ -11,7 +11,7 @@
 import { createReadStream, existsSync, readFileSync, writeFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { put } from "@vercel/blob";
+import { del, put } from "@vercel/blob";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const dist = path.join(root, "dist-desktop");
@@ -59,13 +59,22 @@ const CDN_BASE = String(
     "https://j99zof4rag1z9ajs.public.blob.vercel-storage.com",
 ).replace(/\/$/, "");
 
+// Hobby Blob = 1GB. Mac DMG (~370MB) + ZIP (~350MB) + Win EXE (~280MB)
+// exceeds the quota, so CDN ships Mac as ZIP only (also what electron-updater
+// needs). Set CMAE_BLOB_UPLOAD_DMG=1 if you have more storage headroom.
+const uploadDmg = process.env.CMAE_BLOB_UPLOAD_DMG === "1";
+
 /** @type {{ local: string; remote: string; required?: boolean }[]} */
 const macFiles = [
-  {
-    local: `CMAE-${version}-mac-arm64.dmg`,
-    remote: `releases/CMAE-${version}-mac-arm64.dmg`,
-    required: true,
-  },
+  ...(uploadDmg
+    ? [
+        {
+          local: `CMAE-${version}-mac-arm64.dmg`,
+          remote: `releases/CMAE-${version}-mac-arm64.dmg`,
+          required: true,
+        },
+      ]
+    : []),
   {
     local: `CMAE-${version}-arm64-mac.zip`,
     remote: `releases/CMAE-${version}-arm64-mac.zip`,
@@ -74,10 +83,6 @@ const macFiles = [
   {
     local: `CMAE-${version}-arm64-mac.zip.blockmap`,
     remote: `releases/CMAE-${version}-arm64-mac.zip.blockmap`,
-  },
-  {
-    local: `CMAE-${version}-mac-arm64.dmg.blockmap`,
-    remote: `releases/CMAE-${version}-mac-arm64.dmg.blockmap`,
   },
   { local: "latest-mac.yml", remote: "releases/latest-mac.yml", required: true },
 ];
@@ -111,6 +116,14 @@ async function uploadOne(localName, remotePath, required) {
     console.log(`[upload-desktop-blob] skip (missing): ${localName}`);
     return null;
   }
+  // Hobby Blob is 1GB — overwrite still needs headroom during multipart.
+  // Delete first so Mac DMG+ZIP+Win EXE (~1GB) can re-publish cleanly.
+  try {
+    await del(remotePath, { token });
+    console.log(`[upload-desktop-blob] removed old ${remotePath}`);
+  } catch {
+    // missing is fine
+  }
   console.log(`[upload-desktop-blob] → ${remotePath}`);
   const blob = await put(remotePath, createReadStream(localPath), {
     access: "public",
@@ -140,7 +153,9 @@ async function main() {
     updateFeedUrl: `${CDN_BASE}/releases`,
     downloads: {
       ...(policy.downloads || {}),
-      "darwin-arm64": `${CDN_BASE}/releases/CMAE-${version}-mac-arm64.dmg`,
+      "darwin-arm64": uploadDmg
+        ? `${CDN_BASE}/releases/CMAE-${version}-mac-arm64.dmg`
+        : `${CDN_BASE}/releases/CMAE-${version}-arm64-mac.zip`,
       "win32-x64": `${CDN_BASE}/releases/CMAE-${version}-win-x64.exe`,
     },
   };

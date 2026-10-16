@@ -30,6 +30,8 @@ Sonra CI Mac/Win paketini yapar → **Vercel Blob**’a yükler → `policy.json
 
 GitHub Actions secret: `BLOB_READ_WRITE_TOKEN` (Vercel → Storage → `cmae-releases`, veya `node scripts/sync-blob-token-to-github.mjs`).
 
+**Hobby Blob = 1GB:** Mac DMG+ZIP+Win EXE sığmaz. CDN’de Mac **`.zip`** (updater + indirme), Win **`.exe`**. Daha fazla alan olursa `CMAE_BLOB_UPLOAD_DMG=1` ile DMG de yüklenebilir.
+
 ## Active surfaces
 
 - **Tracker** (`/` → `/tracker`) — Gmail sync (last 30 days) + search outputs; application status list; Gmail Drafts (you send)

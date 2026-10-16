@@ -25,9 +25,10 @@ if (!policy.minSupported) policy.minSupported = version;
 policy.cdnBase = cdnBase;
 policy.releaseUrl = `${cdnBase}/releases`;
 policy.updateFeedUrl = `${cdnBase}/releases`;
+// Hobby Blob ~1GB: Mac ships as zip (updater + download). DMG optional later.
 policy.downloads = {
   ...policy.downloads,
-  "darwin-arm64": `${cdnBase}/releases/CMAE-${version}-mac-arm64.dmg`,
+  "darwin-arm64": `${cdnBase}/releases/CMAE-${version}-arm64-mac.zip`,
   "win32-x64": `${cdnBase}/releases/CMAE-${version}-win-x64.exe`,
 };
 if (notes) policy.notes = notes;

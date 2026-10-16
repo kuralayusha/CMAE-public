@@ -41,7 +41,7 @@ export function applyCdnDownloads(policy: VersionPolicy): VersionPolicy {
   const downloads: VersionDownloads = { ...policy.downloads };
   if (!downloads["darwin-arm64"]) {
     downloads["darwin-arm64"] =
-      `${cdn}/releases/CMAE-${version}-mac-arm64.dmg`;
+      `${cdn}/releases/CMAE-${version}-arm64-mac.zip`;
   }
   if (!downloads["win32-x64"]) {
     downloads["win32-x64"] = `${cdn}/releases/CMAE-${version}-win-x64.exe`;
