@@ -358,7 +358,7 @@ async function badgesForEntry(
       if (empty || count === 0) {
         return [{ text: t("folders.empty"), tone: "muted" }];
       }
-      return [{ text: `(${count})`, tone: "ok" }];
+      return [{ text: String(count), tone: "ok" }];
     } catch {
       return [];
     }

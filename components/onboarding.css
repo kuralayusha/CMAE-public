@@ -12,13 +12,25 @@
 }
 
 .cmae-onb-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ink-faint, #8a8a8a);
+  color: var(--ink, #1a1a1a);
   margin-bottom: 28px;
+}
+
+.cmae-onb-brand-mark {
+  display: block;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  shape-rendering: geometricPrecision;
 }
 
 .cmae-onb-card {

@@ -41,13 +41,20 @@ function setSyncState(patch: {
     .run();
 }
 
+export type UpsertMailsResult = {
+  upserted: number;
+  /** DB ids of rows that did not exist before this upsert */
+  insertedIds: number[];
+};
+
 /**
  * Upsert by messageId — duplicates yok.
  * Hard/incremental never deletes mail_messages (31+ day records are kept).
  */
-export function upsertMails(mails: FetchedMail[]): number {
+export function upsertMails(mails: FetchedMail[]): UpsertMailsResult {
   const db = getDb();
   let upserted = 0;
+  const insertedIds: number[] = [];
   for (const m of mails) {
     const existing = db
       .select()
@@ -73,7 +80,8 @@ export function upsertMails(mails: FetchedMail[]): number {
         .where(eq(mailMessages.id, existing.id))
         .run();
     } else {
-      db.insert(mailMessages)
+      const row = db
+        .insert(mailMessages)
         .values({
           messageId: m.messageId,
           threadId: m.threadId,
@@ -88,11 +96,13 @@ export function upsertMails(mails: FetchedMail[]): number {
           bodyText: m.bodyText,
           headersHash: m.headersHash,
         })
-        .run();
+        .returning({ id: mailMessages.id })
+        .get();
+      if (row?.id) insertedIds.push(row.id);
     }
     upserted += 1;
   }
-  return upserted;
+  return { upserted, insertedIds };
 }
 
 export async function syncMailsFromGmail(opts?: {
@@ -103,6 +113,7 @@ export async function syncMailsFromGmail(opts?: {
   skipped: boolean;
   reason?: string;
   upserted: number;
+  insertedIds: number[];
   mode: SyncMode;
   keptOutsideWindow: number;
 }> {
@@ -117,6 +128,7 @@ export async function syncMailsFromGmail(opts?: {
       skipped: true,
       reason: "CMAE_DISABLE_SYNC=1",
       upserted: 0,
+      insertedIds: [],
       mode,
       keptOutsideWindow: 0,
     };
@@ -131,6 +143,7 @@ export async function syncMailsFromGmail(opts?: {
       skipped: true,
       reason: msg,
       upserted: 0,
+      insertedIds: [],
       mode,
       keptOutsideWindow: 0,
     };
@@ -164,7 +177,7 @@ export async function syncMailsFromGmail(opts?: {
       "think",
       t("sync.writingUpsert", { count: fetched.mails.length }),
     );
-    const upserted = upsertMails(fetched.mails);
+    const { upserted, insertedIds } = upsertMails(fetched.mails);
 
     // Safety: row count must never drop after sync (no deletes)
     const afterRows = db
@@ -194,7 +207,13 @@ export async function syncMailsFromGmail(opts?: {
     if (mode === "hard") {
       log?.("system", t("sync.hardSyncNote"));
     }
-    return { skipped: false, upserted, mode, keptOutsideWindow };
+    return {
+      skipped: false,
+      upserted,
+      insertedIds,
+      mode,
+      keptOutsideWindow,
+    };
   } catch (err) {
     if (err instanceof SyncCanceledError) {
       log?.("err", t("sync.imapCanceled"));

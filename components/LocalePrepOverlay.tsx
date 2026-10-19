@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { useI18n } from "@/components/I18nProvider";
 import { APP_LANGUAGE, type LocalePack } from "@/lib/i18n/types";
 import "./onboarding.css";
@@ -334,7 +335,10 @@ export function LocalePrepOverlay({
   if (mode === "page") {
     return (
       <div className="cmae-onb" role="status" aria-live="polite" aria-busy={!done && !failMsg}>
-        <div className="cmae-onb-brand">CMAE</div>
+        <div className="cmae-onb-brand">
+          <BrandMark size={28} className="cmae-onb-brand-mark" />
+          CMAE
+        </div>
         {body}
       </div>
     );
@@ -350,7 +354,10 @@ export function LocalePrepOverlay({
       aria-label={t("onboarding.localePrepTitle")}
     >
       <div className="cmae-locale-prep-overlay-inner">
-        <div className="cmae-onb-brand">CMAE</div>
+        <div className="cmae-onb-brand">
+          <BrandMark size={28} className="cmae-onb-brand-mark" />
+          CMAE
+        </div>
         {body}
       </div>
     </div>

@@ -9,6 +9,17 @@ import "@/components/folder-browser.css";
 export const metadata: Metadata = {
   title: "CMAE",
   description: "Local-first cold mail agent — tracker, search, and Gmail drafts",
+  openGraph: {
+    title: "CMAE",
+    description: "Local-first cold mail agent — tracker, search, and Gmail drafts",
+    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "CMAE" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "CMAE",
+    description: "Local-first cold mail agent — tracker, search, and Gmail drafts",
+    images: ["/icons/icon-512.png"],
+  },
 };
 
 export const dynamic = "force-dynamic";

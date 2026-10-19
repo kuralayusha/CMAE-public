@@ -19,6 +19,8 @@ publish:
   repo: cmae-releases
   releaseType: release
 mac:
+  # Resolved under directories.buildResources (desktop/build/)
+  icon: icon.icns
   category: public.app-category.productivity
   # zip required for electron-updater; dmg for humans
   target:
@@ -40,6 +42,7 @@ mac:
 dmg:
   artifactName: CMAE-${version}-mac-${arch}.${ext}
 win:
+  icon: icon.ico
   target:
     - target: nsis
       arch:

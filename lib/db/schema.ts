@@ -104,3 +104,29 @@ export const mailFolderCursors = sqliteTable("mail_folder_cursors", {
     .notNull()
     .default(sql`(datetime('now'))`),
 });
+
+/**
+ * Cached AI timeline for a mail set. Keyed by fingerprint of sorted messageIds
+ * so it survives tracker_items wipe+rebuild on sync (item ids are not stable).
+ */
+export const trackerTimelines = sqliteTable(
+  "tracker_timelines",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    fingerprint: text("fingerprint").notNull(),
+    company: text("company").notNull().default(""),
+    position: text("position"),
+    eventsJson: text("events_json").notNull().default("[]"),
+    origin: text("origin").notNull().default("unknown"), // unknown | app | mixed
+    model: text("model").notNull().default("composer-2.5"),
+    locale: text("locale").notNull().default("en"),
+    mailCount: integer("mail_count").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (t) => [uniqueIndex("tracker_timelines_fp_uq").on(t.fingerprint)],
+);

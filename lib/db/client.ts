@@ -17,8 +17,11 @@ function dbPaths() {
 
 export function getDb() {
   const { dbPath } = dbPaths();
-  if (dbInstance && openedDbPath === dbPath) return dbInstance;
-  if (dbInstance) closeDb();
+  if (dbInstance && openedDbPath === dbPath && sqlite?.open) {
+    return dbInstance;
+  }
+  // Path flip or closed handle — drop stale drizzle wrapper before reopen.
+  if (dbInstance || sqlite) closeDb();
 
   sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
@@ -59,6 +62,7 @@ export function wipeDatabaseContents() {
   if (!sqlite) throw new Error("SQLite handle missing");
   sqlite.exec(`
     PRAGMA foreign_keys = OFF;
+    DELETE FROM tracker_timelines;
     DELETE FROM tracker_item_mails;
     DELETE FROM tracker_items;
     DELETE FROM mail_messages;
@@ -182,6 +186,22 @@ function ensureSchema(db: Database.Database) {
       last_uid INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS tracker_timelines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      fingerprint TEXT NOT NULL,
+      company TEXT NOT NULL DEFAULT '',
+      position TEXT,
+      events_json TEXT NOT NULL DEFAULT '[]',
+      origin TEXT NOT NULL DEFAULT 'unknown',
+      model TEXT NOT NULL DEFAULT 'composer-2.5',
+      locale TEXT NOT NULL DEFAULT 'en',
+      mail_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS tracker_timelines_fp_uq
+      ON tracker_timelines(fingerprint);
   `);
   // soft migrate
   const cols = db.prepare(`PRAGMA table_info(settings)`).all() as { name: string }[];

@@ -12,19 +12,27 @@
  *   CMAE_MAC_SIGN=1 npm run desktop:build:mac
  */
 import {
+  copyFileSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "fs";
-import { tmpdir } from "os";
+import { homedir, tmpdir } from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const builderYml = path.join(root, "electron-builder.yml");
+const distDesktop = path.join(root, "dist-desktop");
+// iCloud-synced folders (e.g. ~/Desktop) keep re-adding FinderInfo/fileprovider
+// xattrs to the .app, which codesign rejects. Package outside iCloud.
+const buildOut = path.join(homedir(), "Library", "Caches", "cmae-desktop-build");
 
 /**
  * Old packaged trees + Finder “foo 2.ts” copies under .next poison `next build` tsc.
@@ -40,6 +48,16 @@ function scrubStaleDesktopOut() {
     if (!existsSync(p)) continue;
     console.log(`[desktop-build-mac] removing stale ${name}/`);
     rmSync(p, { recursive: true, force: true });
+  }
+  rmSync(buildOut, { recursive: true, force: true });
+}
+
+function copyArtefactsBack() {
+  mkdirSync(distDesktop, { recursive: true });
+  for (const name of readdirSync(buildOut)) {
+    const src = path.join(buildOut, name);
+    if (!statSync(src).isFile()) continue;
+    copyFileSync(src, path.join(distDesktop, name));
   }
 }
 
@@ -155,6 +173,10 @@ try {
     delete env.CSC_LINK;
   } else {
     env.CSC_IDENTITY_AUTO_DISCOVERY = "false";
+    // .env.local may have APPLE_* for signed publishes — don't notarize unsigned apps
+    delete env.APPLE_ID;
+    delete env.APPLE_APP_SPECIFIC_PASSWORD;
+    delete env.APPLE_TEAM_ID;
   }
 
   run(
@@ -164,11 +186,13 @@ try {
       "--mac",
       "--config",
       configPath,
+      `-c.directories.output=${buildOut}`,
       "--publish",
       "never",
     ],
     env,
   );
+  copyArtefactsBack();
 } finally {
   if (tempDir) {
     try {
@@ -179,4 +203,6 @@ try {
   }
 }
 
-console.log("[desktop-build-mac] done → dist-desktop/");
+console.log(
+  `[desktop-build-mac] done → dist-desktop/ (unpacked .app: ${buildOut}/mac-arm64)`,
+);

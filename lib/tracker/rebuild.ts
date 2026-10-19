@@ -25,6 +25,13 @@ import { t } from "@/lib/i18n/t";
 import { throwIfSyncCanceled } from "./cancel";
 import type { SyncProgressFn } from "./types";
 import { listWorkspaceCandidates } from "./workspace-merge";
+import {
+  normalizeCompanyKey,
+  parseEmailAddr,
+  sameCompanyIdentity,
+  samePrimaryEmail,
+} from "./identity";
+import { collapseInactiveActiveTwins } from "./inactive";
 
 function countFollowUps(
   mails: { folder: string; subject: string; bodyText: string }[],
@@ -65,7 +72,6 @@ export async function rebuildTrackerItems(opts?: {
 }): Promise<{ itemCount: number }> {
   const log = opts?.onProgress;
   const signal = opts?.signal;
-  const db = getDb();
   const settings = getSettingsRow();
   const followUpDays = settings?.followUpDays ?? 5;
   const userEmail = (
@@ -74,7 +80,7 @@ export async function rebuildTrackerItems(opts?: {
   ).toLowerCase();
 
   throwIfSyncCanceled(signal);
-  const allMails = db.select().from(mailMessages).all();
+  const allMails = getDb().select().from(mailMessages).all();
   const briefs: MailBrief[] = allMails.map((m) => ({
     id: m.id,
     folder: m.folder,
@@ -115,14 +121,42 @@ export async function rebuildTrackerItems(opts?: {
     t("sync.writingGroups", { count: groups.length }),
   );
 
-  // Preserve draft flags + inactive keyed by researchJobId / company
+  // Re-acquire after long awaits — held drizzle handles can be closed if
+  // another request reopened SQLite (path flip / reconcile / HMR).
+  const db = getDb();
+
+  // Preserve draft flags + inactive keyed by researchJobId / company / email
   const prev = db.select().from(trackerItems).all();
   const prevByJob = new Map(
     prev.filter((p) => p.researchJobId).map((p) => [p.researchJobId!, p]),
   );
-  const prevByCompany = new Map(prev.map((p) => [p.company.toLowerCase(), p]));
+  /** Prefer inactive when two rows share a key (paused wins over active twin). */
+  const prefer = (
+    map: Map<string, (typeof prev)[number]>,
+    key: string,
+    row: (typeof prev)[number],
+  ) => {
+    if (!key) return;
+    const cur = map.get(key);
+    if (!cur || row.status === "inactive") map.set(key, row);
+  };
+  const prevByCompany = new Map<string, (typeof prev)[number]>();
+  const prevByCompanyNorm = new Map<string, (typeof prev)[number]>();
+  const prevByPrimary = new Map<string, (typeof prev)[number]>();
+  for (const p of prev) {
+    prefer(prevByCompany, p.company.toLowerCase(), p);
+    prefer(prevByCompanyNorm, normalizeCompanyKey(p.company), p);
+    const email = parseEmailAddr(p.primaryTo);
+    if (email) prefer(prevByPrimary, email, p);
+  }
   const inactivePrev = prev.filter((p) => p.status === "inactive");
   const rematchedInactive = new Set<number>();
+  type InsertedRef = {
+    id: number;
+    company: string;
+    primaryTo: string | null;
+  };
+  const insertedRefs: InsertedRef[] = [];
 
   db.delete(trackerItemMails).run();
   db.delete(trackerItems).run();
@@ -216,9 +250,24 @@ export async function rebuildTrackerItems(opts?: {
         )
       : "unknown";
 
+    const primaryTo =
+      search?.primaryTo ||
+      extractPrimaryEmailFromWorkspace(folderPath || "") ||
+      outbounds
+        .map((m) => m.toAddr.split(",")[0]?.trim())
+        .find(Boolean) ||
+      inbounds
+        .map((m) => m.fromAddr.split(",")[0]?.trim())
+        .find((a) => a && a.toLowerCase() !== userEmail) ||
+      null;
+
+    const primaryEmail = parseEmailAddr(primaryTo);
     const old =
       (g.researchJobId && prevByJob.get(g.researchJobId)) ||
-      prevByCompany.get(g.company.toLowerCase());
+      prevByCompany.get(g.company.toLowerCase()) ||
+      prevByCompanyNorm.get(normalizeCompanyKey(g.company)) ||
+      (primaryEmail ? prevByPrimary.get(primaryEmail) : undefined) ||
+      null;
 
     const followUpCount = Math.max(
       g.followUpCountHint,
@@ -256,17 +305,6 @@ export async function rebuildTrackerItems(opts?: {
       isRejected:
         lastFlags.isRejected || meaningfulIntent === "rejection",
     });
-
-    const primaryTo =
-      search?.primaryTo ||
-      extractPrimaryEmailFromWorkspace(folderPath || "") ||
-      outbounds
-        .map((m) => m.toAddr.split(",")[0]?.trim())
-        .find(Boolean) ||
-      inbounds
-        .map((m) => m.fromAddr.split(",")[0]?.trim())
-        .find((a) => a && a.toLowerCase() !== userEmail) ||
-      null;
 
     // Inactive survives sync: keep frozen until user activates
     const stayInactive = old?.status === "inactive";
@@ -340,6 +378,11 @@ export async function rebuildTrackerItems(opts?: {
 
     if (!inserted) continue;
     itemCount += 1;
+    insertedRefs.push({
+      id: inserted.id,
+      company: g.company,
+      primaryTo,
+    });
 
     for (const m of linkedMails) {
       const role =
@@ -360,6 +403,33 @@ export async function rebuildTrackerItems(opts?: {
   // (so sync cannot drop a user-paused company).
   for (const old of inactivePrev) {
     if (rematchedInactive.has(old.id)) continue;
+
+    // AI renamed company slightly (ExampleCo → ExampleCo) but same mailbox —
+    // fold into the twin instead of creating a duplicate inactive row.
+    const twin = insertedRefs.find(
+      (r) =>
+        sameCompanyIdentity(r.company, old.company) ||
+        samePrimaryEmail(r.primaryTo, old.primaryTo),
+    );
+    if (twin) {
+      db.update(trackerItems)
+        .set({
+          status: "inactive",
+          sentiment: null,
+          waitingOn: null,
+          nextFollowUpAt: null,
+          notesJson: old.notesJson,
+          hasFollowUpDraft: old.hasFollowUpDraft,
+          hasThanksDraft: old.hasThanksDraft,
+          hasReplyDraft: old.hasReplyDraft,
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(trackerItems.id, twin.id))
+        .run();
+      rematchedInactive.add(old.id);
+      continue;
+    }
+
     db.insert(trackerItems)
       .values({
         company: old.company,
@@ -400,6 +470,9 @@ export async function rebuildTrackerItems(opts?: {
       itemCount -= 1;
     }
   }
+
+  // Collapse leftover inactive+active twins (same identity) if any slipped through.
+  itemCount -= collapseInactiveActiveTwins();
 
   return { itemCount };
 }

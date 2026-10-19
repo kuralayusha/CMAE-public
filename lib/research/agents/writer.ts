@@ -31,13 +31,18 @@ ABSOLUTE RULES for SUBJECT and BODY:
 - NEVER explain missing info inside the mail (e.g. "I couldn't find…", "Not: …", "Note: …", "P.S. for the agent…").
 - If you lack a fact (recipient name, role title, specific product detail): OMIT it. Do not invent. Do not annotate the gap.
 - SUBJECT = only the subject line text. BODY = only the email body the recipient should read.
-- Output format exactly:
+- Do NOT wrap labels in markdown (**SUBJECT:** is forbidden). Plain "SUBJECT:" / "BODY:" only.
+- NEVER put SUBJECT and BODY on the same line. Never write "SUBJECT: … BODY: …".
+- Output format EXACTLY (newlines matter — copy this shape):
 
 SUBJECT: <one line, ready to send>
 BODY:
 <full body, ready to send>
 
-No other sections. No footnotes under BODY. No markdown callouts about process.
+Line 1 = SUBJECT: + subject text.
+Line 2 = BODY: alone (nothing after the colon on that line).
+Line 3+ = the email body only.
+No other sections. No footnotes under BODY. No markdown titles, callouts, or process notes.
 
 ${EMAIL_SIGNATURE_PROMPT_RULES}
 `.trim();

@@ -6,14 +6,15 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { RichText } from "@/components/RichText";
 import { SyncTerminal } from "@/components/SyncTerminal";
 import { TruncateTip } from "@/components/TruncateTip";
 import { Button } from "@/components/ui";
 import type { SyncLogLine } from "@/lib/tracker/types";
 import type { TVars } from "@/lib/i18n/lookup";
+import "./tracker-list.css";
 
 function IconGmail({ count }: { count?: number }) {
   return (
@@ -28,6 +29,17 @@ function IconGmail({ count }: { count?: number }) {
         <span className="cmae-tracker-ico-badge">{count}</span>
       ) : null}
     </span>
+  );
+}
+
+function IconSync() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="currentColor"
+        d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"
+      />
+    </svg>
   );
 }
 
@@ -118,40 +130,6 @@ type SyncStreamResult = {
   total?: number;
 };
 
-type SortMode = "status" | "activity";
-
-const SORT_STORAGE_KEY = "cmae.tracker.sort";
-const SORT_EVENT = "cmae-tracker-sort";
-
-function readSortMode(): SortMode {
-  try {
-    const v = localStorage.getItem(SORT_STORAGE_KEY);
-    if (v === "activity" || v === "status") return v;
-  } catch {
-    /* ignore */
-  }
-  return "status";
-}
-
-function subscribeSortMode(onChange: () => void) {
-  const handler = () => onChange();
-  window.addEventListener("storage", handler);
-  window.addEventListener(SORT_EVENT, handler);
-  return () => {
-    window.removeEventListener("storage", handler);
-    window.removeEventListener(SORT_EVENT, handler);
-  };
-}
-
-function writeSortMode(mode: SortMode) {
-  try {
-    localStorage.setItem(SORT_STORAGE_KEY, mode);
-  } catch {
-    /* ignore */
-  }
-  window.dispatchEvent(new Event(SORT_EVENT));
-}
-
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -233,23 +211,10 @@ export function TrackerList() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [syncSessionId, setSyncSessionId] = useState<string | null>(null);
+  const [hardSync, setHardSync] = useState(false);
   const syncEsRef = useRef<EventSource | null>(null);
   const liveEsRef = useRef<EventSource | null>(null);
   const syncShowToastRef = useRef(false);
-  const sortMode = useSyncExternalStore(
-    subscribeSortMode,
-    readSortMode,
-    () => "status" as SortMode,
-  );
-
-  const activityItems = useMemo(() => {
-    const flat = sections.flatMap((s) => s.items);
-    return [...flat].sort((a, b) => {
-      const ta = a.lastActivityAt || "";
-      const tb = b.lastActivityAt || "";
-      return tb.localeCompare(ta);
-    });
-  }, [sections]);
 
   const allItems = useMemo(
     () => sections.flatMap((s) => s.items),
@@ -295,7 +260,7 @@ export function TrackerList() {
         body: JSON.stringify({ action, ids }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Bulk action failed");
+      if (!res.ok) throw new Error(data.error || t("tracker.error.bulkFailed"));
       if (data.sections) {
         setSections(data.sections);
         setSync(data.sync || null);
@@ -332,7 +297,7 @@ export function TrackerList() {
   const load = useCallback(async () => {
     const res = await fetch("/api/tracker");
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Could not load list");
+    if (!res.ok) throw new Error(data.error || t("tracker.error.loadList"));
     setSections(data.sections || []);
     setSync(data.sync || null);
     setTotal(data.total || 0);
@@ -492,7 +457,7 @@ export function TrackerList() {
           body: JSON.stringify({ mode }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Could not start sync");
+        if (!res.ok) throw new Error(data.error || t("tracker.error.startSync"));
         attachSyncStream(data.id as string, { showToast: !opts?.quiet });
       } catch (err) {
         setSyncing(false);
@@ -565,7 +530,7 @@ export function TrackerList() {
         body: JSON.stringify({ kind }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Prepare failed");
+      if (!res.ok) throw new Error(data.error || t("tracker.error.prepare"));
       setToast(t("tracker.toast.draftWritten", { file: data.fileName }));
       await load();
     } catch (err) {
@@ -589,7 +554,7 @@ export function TrackerList() {
         body: JSON.stringify({ kind }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not create Gmail draft");
+      if (!res.ok) throw new Error(data.error || t("tracker.error.gmailDraft"));
       {
         const bits = [
           t("tracker.toast.gmailDraft", { subject: data.subject }),
@@ -622,6 +587,7 @@ export function TrackerList() {
           rel="noopener noreferrer"
           title={t("tracker.action.openGmail")}
           aria-label={t("tracker.action.openGmail")}
+          onClick={(e) => e.stopPropagation()}
         >
           <IconGmail />
         </a>
@@ -635,7 +601,10 @@ export function TrackerList() {
         className="cmae-tracker-icon-btn"
         title={t("tracker.action.openGmailN", { count: urls.length })}
         aria-label={t("tracker.action.openGmailN", { count: urls.length })}
-        onClick={() => setGmailModal({ company: item.company, urls })}
+        onClick={(e) => {
+          e.stopPropagation();
+          setGmailModal({ company: item.company, urls });
+        }}
       >
         <IconGmail count={urls.length} />
       </Button>
@@ -656,7 +625,10 @@ export function TrackerList() {
           disabled={spinning}
           title={t("tracker.action.createDraft")}
           aria-label={t("tracker.action.createDraft")}
-          onClick={() => void draft(item, "application")}
+          onClick={(e) => {
+            e.stopPropagation();
+            void draft(item, "application");
+          }}
         >
           {busyId === `${item.id}:draft:application` ? "…" : <IconDraft />}
         </Button>
@@ -673,7 +645,10 @@ export function TrackerList() {
             disabled={spinning}
             title={t("tracker.action.prepareFollowUp")}
             aria-label={t("tracker.action.prepareFollowUp")}
-            onClick={() => void prepare(item, "follow_up")}
+            onClick={(e) => {
+              e.stopPropagation();
+              void prepare(item, "follow_up");
+            }}
           >
             {busyId === `${item.id}:prep:follow_up` ? "…" : <IconPrepare />}
           </Button>
@@ -686,7 +661,10 @@ export function TrackerList() {
           disabled={spinning}
           title={t("tracker.action.draftFollowUp")}
           aria-label={t("tracker.action.draftFollowUp")}
-          onClick={() => void draft(item, "follow_up")}
+          onClick={(e) => {
+            e.stopPropagation();
+            void draft(item, "follow_up");
+          }}
         >
           {busyId === `${item.id}:draft:follow_up` ? "…" : <IconDraft />}
         </Button>
@@ -722,7 +700,10 @@ export function TrackerList() {
             disabled={spinning}
             title={t("tracker.action.prepareReply")}
             aria-label={t("tracker.action.prepareReply")}
-            onClick={() => void prepare(item, "reply")}
+            onClick={(e) => {
+              e.stopPropagation();
+              void prepare(item, "reply");
+            }}
           >
             {busyId === `${item.id}:prep:reply` ? "…" : <IconPrepare />}
           </Button>
@@ -735,7 +716,10 @@ export function TrackerList() {
           disabled={spinning}
           title={t("tracker.action.draftReply")}
           aria-label={t("tracker.action.draftReply")}
-          onClick={() => void draft(item, "reply")}
+          onClick={(e) => {
+            e.stopPropagation();
+            void draft(item, "reply");
+          }}
         >
           {busyId === `${item.id}:draft:reply` ? "…" : <IconDraft />}
         </Button>
@@ -752,7 +736,10 @@ export function TrackerList() {
             disabled={spinning}
             title={t("tracker.action.prepareThanks")}
             aria-label={t("tracker.action.prepareThanks")}
-            onClick={() => void prepare(item, "thanks")}
+            onClick={(e) => {
+              e.stopPropagation();
+              void prepare(item, "thanks");
+            }}
           >
             {busyId === `${item.id}:prep:thanks` ? "…" : <IconPrepare />}
           </Button>
@@ -765,7 +752,10 @@ export function TrackerList() {
           disabled={spinning}
           title={t("tracker.action.draftThanks")}
           aria-label={t("tracker.action.draftThanks")}
-          onClick={() => void draft(item, "thanks")}
+          onClick={(e) => {
+            e.stopPropagation();
+            void draft(item, "thanks");
+          }}
         >
           {busyId === `${item.id}:draft:thanks` ? "…" : <IconDraft />}
         </Button>
@@ -805,10 +795,26 @@ export function TrackerList() {
     return (
       <div
         key={item.id}
-        className={`cmae-tracker-row${item.status === "ignored" ? " is-ignored" : ""}${checked ? " is-selected" : ""}${item.status === "inactive" ? " is-inactive" : ""}`}
+        className={`cmae-tracker-row is-clickable${item.status === "ignored" ? " is-ignored" : ""}${checked ? " is-selected" : ""}${item.status === "inactive" ? " is-inactive" : ""}`}
         role="row"
+        tabIndex={0}
+        onClick={() => {
+          window.open(`/tracker/${item.id}`, "_blank", "noopener,noreferrer");
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            window.open(`/tracker/${item.id}`, "_blank", "noopener,noreferrer");
+          }
+        }}
+        aria-label={t("tracker.detailPage.openRow", { company: item.company })}
       >
-        <span className="cmae-tracker-check" role="cell">
+        <span
+          className="cmae-tracker-check"
+          role="cell"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <input
             type="checkbox"
             className="cmae-tracker-checkbox"
@@ -842,7 +848,11 @@ export function TrackerList() {
         <span className="cmae-tracker-muted" role="cell">
           <TruncateTip text={item.primaryTo || "—"} />
         </span>
-        <span className="cmae-tracker-actions" role="cell">
+        <span
+          className="cmae-tracker-actions"
+          role="cell"
+          onClick={(e) => e.stopPropagation()}
+        >
           {renderActions(item)}
         </span>
       </div>
@@ -936,35 +946,50 @@ export function TrackerList() {
             ) : null}
           </div>
           <div className="cmae-tracker-toolbar-right">
-            <label className="cmae-tracker-sort">
-              <span>{t("tracker.sort.label")}</span>
-              <select
-                className="cmae-input cmae-tracker-sort-select"
-                value={sortMode}
-                onChange={(e) => writeSortMode(e.target.value as SortMode)}
-                aria-label={t("tracker.sort.aria")}
+            <div className="cmae-tracker-sync-controls">
+              <div
+                className={`cmae-tracker-hard-sync${hardSync ? " is-on" : ""}`}
               >
-                <option value="status">{t("tracker.sort.byStatus")}</option>
-                <option value="activity">{t("tracker.sort.byActivity")}</option>
-              </select>
-            </label>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void runSync({ mode: "hard" })}
-              disabled={syncing || loading}
-              title={t("tracker.hardSyncTitle")}
-            >
-              {t("tracker.hardSync")}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void runSync({ mode: "incremental" })}
-              disabled={syncing || loading}
-              title={t("tracker.syncTitle")}
-            >
-              {syncing ? t("tracker.syncing") : t("tracker.sync")}
-            </Button>
+                <button
+                  type="button"
+                  role="switch"
+                  className={`cmae-tracker-switch-btn${hardSync ? " is-on" : ""}`}
+                  aria-checked={hardSync}
+                  aria-label={t("tracker.hardSyncToggle")}
+                  title={t("tracker.hardSyncTitle")}
+                  disabled={syncing || loading}
+                  onClick={() => setHardSync((v) => !v)}
+                >
+                  <span className="cmae-tracker-switch-knob" aria-hidden />
+                </button>
+                <div className="cmae-tracker-hard-sync-text">
+                  <span className="cmae-tracker-hard-sync-label">
+                    {t("tracker.hardSyncToggle")}
+                  </span>
+                  <span className="cmae-tracker-hard-sync-hint">
+                    {t("tracker.hardSyncHint")}
+                  </span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                className="cmae-tracker-icon-btn"
+                onClick={() => {
+                  const mode = hardSync ? "hard" : "incremental";
+                  setHardSync(false);
+                  void runSync({ mode });
+                }}
+                disabled={syncing || loading}
+                title={
+                  hardSync ? t("tracker.hardSyncTitle") : t("tracker.syncTitle")
+                }
+                aria-label={
+                  hardSync ? t("tracker.hardSync") : t("tracker.sync")
+                }
+              >
+                {syncing ? "…" : <IconSync />}
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -991,12 +1016,24 @@ export function TrackerList() {
                   {t("tracker.gmailModal.title")}
                 </h2>
                 <p>
-                  {t("tracker.gmailModalLead", {
-                    company: gmailModal.company,
-                    count: gmailModal.urls.length,
-                  })}{" "}
-                  <kbd className="cmae-kbd">Cmd</kbd>/
-                  <kbd className="cmae-kbd">Ctrl</kbd>+click.
+                  <RichText
+                    text={t("tracker.gmailModalLead")}
+                    parts={{
+                      company: gmailModal.company,
+                      count: String(gmailModal.urls.length),
+                      mod: (
+                        <>
+                          <kbd className="cmae-kbd">
+                            {t("tracker.gmailModal.modMac")}
+                          </kbd>
+                          /
+                          <kbd className="cmae-kbd">
+                            {t("tracker.gmailModal.modWin")}
+                          </kbd>
+                        </>
+                      ),
+                    }}
+                  />
                 </p>
               </div>
               <button
@@ -1049,21 +1086,14 @@ export function TrackerList() {
           <div className="cmae-tracker-empty-actions">
             <Button
               type="button"
-              onClick={() => void runSync({ mode: "hard" })}
+              onClick={() => void runSync({ mode: "incremental" })}
               disabled={syncing}
+              title={t("tracker.syncTitle")}
             >
               {syncing ? t("tracker.syncing") : t("tracker.sync")}
             </Button>
           </div>
         </div>
-      ) : sortMode === "activity" ? (
-        <section className="cmae-tracker-section">
-          <header className="cmae-tracker-section-head">
-            <h2>{upper(t("tracker.sectionActivity"))}</h2>
-            <span>{activityItems.length}</span>
-          </header>
-          {renderTable(activityItems)}
-        </section>
       ) : (
         sections.map((section) => {
           const sectionKey = `tracker.section.${section.status}`;

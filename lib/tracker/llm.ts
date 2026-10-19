@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { decryptOptional } from "@/lib/crypto/encryption";
 import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/t";
 import { getAgentCwd } from "@/lib/paths";
 
 async function resolveApiKey(): Promise<string> {
@@ -10,9 +11,7 @@ async function resolveApiKey(): Promise<string> {
   const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
   const key = decryptOptional(row?.cursorApiKeyEnc);
   if (!key) {
-    throw new Error(
-      "Cursor API key missing — add it in Settings or set CURSOR_API_KEY",
-    );
+    throw new Error(t("errors.cursorKeyMissing"));
   }
   return key;
 }
@@ -26,7 +25,7 @@ export async function askTrackerLlm(prompt: string): Promise<string> {
   });
   if (result.status === "error" || !result.result) {
     throw new Error(
-      `LLM did not respond (status=${result.status ?? "unknown"})`,
+      t("errors.llmNoResponse", { status: result.status ?? "unknown" }),
     );
   }
   return String(result.result).trim();

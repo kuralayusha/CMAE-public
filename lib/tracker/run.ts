@@ -1,5 +1,11 @@
+import { getDb } from "@/lib/db/client";
+import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { throwIfSyncCanceled } from "./cancel";
+import {
+  INCREMENTAL_PATCH_MAX,
+  patchTrackerWithNewMails,
+} from "./incremental";
 import { rebuildTrackerItems } from "./rebuild";
 import { syncMailsFromGmail, type SyncMode } from "./sync";
 import type { SyncProgressFn } from "./types";
@@ -24,6 +30,7 @@ export async function runTrackerSync(opts?: {
   let skipReason: string | undefined;
   let upserted = 0;
   let keptOutsideWindow = 0;
+  let insertedIds: number[] = [];
 
   throwIfSyncCanceled(signal);
   log?.(
@@ -37,13 +44,41 @@ export async function runTrackerSync(opts?: {
     skipReason = sync.reason;
     upserted = sync.upserted;
     keptOutsideWindow = sync.keptOutsideWindow;
+    insertedIds = sync.insertedIds;
   } else {
     log?.("think", t("sync.imapSkipped"));
   }
 
   throwIfSyncCanceled(signal);
-  log?.("think", t("sync.rebuildingList"));
-  const { itemCount } = await rebuildTrackerItems({ onProgress: log, signal });
+
+  const existingRows = getDb().select().from(trackerItems).all().length;
+  const canPatch =
+    mode === "incremental" &&
+    !opts?.skipImap &&
+    !skippedImap &&
+    existingRows > 0 &&
+    insertedIds.length <= INCREMENTAL_PATCH_MAX;
+
+  let itemCount: number;
+  if (canPatch) {
+    log?.("think", t("sync.rebuildingListIncremental"));
+    const patch = await patchTrackerWithNewMails(insertedIds, {
+      onProgress: log,
+      signal,
+    });
+    itemCount = patch.itemCount;
+  } else {
+    if (mode === "incremental" && insertedIds.length > INCREMENTAL_PATCH_MAX) {
+      log?.(
+        "system",
+        t("sync.incrementalFallbackFull", { count: insertedIds.length }),
+      );
+    }
+    log?.("think", t("sync.rebuildingList"));
+    const rebuilt = await rebuildTrackerItems({ onProgress: log, signal });
+    itemCount = rebuilt.itemCount;
+  }
+
   throwIfSyncCanceled(signal);
   log?.(
     "ok",

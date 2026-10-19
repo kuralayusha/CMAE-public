@@ -8,13 +8,19 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui";
+import { parseSubjectBody } from "@/lib/mail/subject-body";
 import {
   couldNotOpenFileManager,
   detectFileManagerKind,
   type FileManagerKind,
 } from "@/lib/platform/file-manager";
+
+function isMarkdownName(name: string): boolean {
+  return /\.md$/i.test(name);
+}
 
 type EntryBadge = { text: string; tone: "muted" | "ok" | "ai" };
 
@@ -500,7 +506,7 @@ export function FolderBrowser() {
                             ).map((badge, i) => (
                               <span
                                 key={`${badge.text}-${i}`}
-                                className={`cmae-fb-badge is-${badge.tone}`}
+                                className={`cmae-fb-chip is-${badge.tone}`}
                                 title={
                                   badge.tone === "muted"
                                     ? t("folders.badgeNoLink")
@@ -559,13 +565,56 @@ export function FolderBrowser() {
                 </div>
               </div>
               <div className="cmae-fb-preview-body">
-                {preview.binary ? (
-                  <p className="cmae-fb-loading">
-                    {t("folders.previewBinary")}
-                  </p>
-                ) : (
-                  <pre>{preview.content}</pre>
-                )}
+                {(() => {
+                  if (preview.binary) {
+                    return (
+                      <p className="cmae-fb-loading">
+                        {t("folders.previewBinary")}
+                      </p>
+                    );
+                  }
+                  const mail = parseSubjectBody(preview.content);
+                  if (mail) {
+                    return (
+                      <div className="cmae-fb-mail">
+                        <div className="cmae-fb-mail-field">
+                          <span className="cmae-fb-mail-label">
+                            {t("folders.previewSubject")}
+                          </span>
+                          <p className="cmae-fb-mail-subject">{mail.subject}</p>
+                        </div>
+                        <div className="cmae-fb-mail-field">
+                          <span className="cmae-fb-mail-label">
+                            {t("folders.previewBody")}
+                          </span>
+                          <pre className="cmae-fb-mail-body">{mail.body}</pre>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (isMarkdownName(preview.name)) {
+                    return (
+                      <div className="cmae-fb-md">
+                        <ReactMarkdown
+                          components={{
+                            a: ({ href, children }) => (
+                              <a
+                                href={href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                {children}
+                              </a>
+                            ),
+                          }}
+                        >
+                          {preview.content}
+                        </ReactMarkdown>
+                      </div>
+                    );
+                  }
+                  return <pre>{preview.content}</pre>;
+                })()}
               </div>
             </aside>
           ) : null}

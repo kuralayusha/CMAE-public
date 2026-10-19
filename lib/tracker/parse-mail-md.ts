@@ -1,38 +1,18 @@
 import fs from "fs";
 import path from "path";
+import {
+  formatSubjectBody,
+  parseSubjectBody,
+  type SubjectBody,
+} from "@/lib/mail/subject-body";
 import { WS, WS_LEGACY } from "@/lib/workspace/filenames";
 
-export type ParsedMailDraft = {
-  subject: string;
-  body: string;
+export type ParsedMailDraft = SubjectBody & {
   fileName: string;
 };
 
-/**
- * Parse SUBJECT:/BODY: mail fields.
- * LLMs sometimes wrap labels as **SUBJECT:** / **BODY:** — accept that so
- * email_original.md is not skipped in favor of a translated copy.
- */
-export function parseSubjectBody(
-  content: string,
-): { subject: string; body: string } | null {
-  const text = String(content || "").replace(/^\uFEFF/, "");
-  const subjectMatch = text.match(/^\*{0,2}SUBJECT:\*{0,2}\s*(.+)$/im);
-  const bodyMatch = text.match(/^\*{0,2}BODY:\*{0,2}\s*\r?\n([\s\S]*)$/im);
-  if (!subjectMatch || !bodyMatch) return null;
-  const subject = subjectMatch[1]!
-    .trim()
-    .replace(/^\*{1,2}\s*/, "")
-    .replace(/\s*\*{1,2}$/, "");
-  const body = bodyMatch[1]!.trim();
-  if (!subject || !body) return null;
-  return { subject, body };
-}
-
-/** Re-serialize to canonical SUBJECT:/BODY: (no markdown on labels). */
-export function formatSubjectBody(subject: string, body: string): string {
-  return `SUBJECT: ${subject.trim()}\nBODY:\n${body.trim()}\n`;
-}
+export { formatSubjectBody, parseSubjectBody };
+export type { SubjectBody };
 
 export function findEmailDraftInFolder(
   folderPath: string,

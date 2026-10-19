@@ -16,6 +16,11 @@ export const metadata: Metadata = {
   title: "Download CMAE",
   description: "Download the CMAE desktop app for macOS and Windows",
   robots: { index: false, follow: false },
+  openGraph: {
+    title: "Download CMAE",
+    description: "Download the CMAE desktop app for macOS and Windows",
+    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "CMAE" }],
+  },
 };
 
 async function policyForLanding(): Promise<VersionPolicy> {

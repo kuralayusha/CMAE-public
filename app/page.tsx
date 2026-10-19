@@ -15,6 +15,11 @@ export const revalidate = 0;
 export const metadata: Metadata = {
   title: "CMAE",
   description: "Cold Mail AI Engine — download the desktop app",
+  openGraph: {
+    title: "CMAE",
+    description: "Cold Mail AI Engine — download the desktop app",
+    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "CMAE" }],
+  },
 };
 
 async function policyForLanding(): Promise<VersionPolicy> {

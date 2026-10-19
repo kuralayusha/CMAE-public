@@ -39,11 +39,17 @@ ABSOLUTE RULES:
 - NEVER invent facts. Omit unknown details.
 - NEVER write placeholders like [Name], [Company], TBD, TODO, N/A, "unknown".
 - If a detail is missing: OMIT it. Do not invent. Do not annotate the gap.
-- Output format exactly:
+- Do NOT wrap labels in markdown (**SUBJECT:** is forbidden). Plain "SUBJECT:" / "BODY:" only.
+- NEVER put SUBJECT and BODY on the same line. Never write "SUBJECT: … BODY: …".
+- Output format EXACTLY (newlines matter — copy this shape):
 
 SUBJECT: <one line>
 BODY:
 <full body>
+
+Line 1 = SUBJECT: + subject text.
+Line 2 = BODY: alone (nothing after the colon on that line).
+Line 3+ = the email body only.
 
 ${EMAIL_SIGNATURE_PROMPT_RULES}
 `.trim();

@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { useI18n } from "@/components/I18nProvider";
 import type { VersionStatus } from "@/lib/version/policy";
 import "./version-gate.css";
@@ -232,6 +233,7 @@ export function VersionGate({ children }: { children: ReactNode }) {
         >
           <div className="cmae-version-lock-inner">
             <div className="cmae-version-lock-brand">
+              <BrandMark size={28} className="cmae-version-lock-brand-mark" />
               {t("versionGate.brand")}
             </div>
             <h1 id="cmae-version-lock-title">{t("versionGate.title")}</h1>

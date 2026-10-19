@@ -132,14 +132,18 @@ export function getAppRoot(): string {
     return cachedAppRoot;
   }
 
-  // Sticky before in-memory cache — another process may have written the real root.
+  // Freeze once resolved in this process. Mid-flight sticky flips (e.g. desktop
+  // writing ~/.cmae-app-root while next dev sync holds an open SQLite handle)
+  // close the DB under long-running rebuilds → "database connection is not open".
+  // Fresh workers still pick sticky below when cache is empty.
+  if (cachedAppRoot) return cachedAppRoot;
+
   const sticky = readStickyAppRoot();
   if (sticky) {
     cachedAppRoot = sticky;
     return cachedAppRoot;
   }
 
-  if (cachedAppRoot) return cachedAppRoot;
 
   if (isVercel()) {
     cachedAppRoot = "/tmp/cmae";

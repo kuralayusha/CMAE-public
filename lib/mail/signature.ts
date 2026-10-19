@@ -3,6 +3,8 @@
  * Body is cut after the closing line (Viele Grüße / Best regards / …), then signature appended as-is.
  */
 
+import { formatSubjectBody, parseSubjectBody } from "@/lib/mail/subject-body";
+
 /** Single-line closings (whole line match, optional trailing punctuation). */
 const CLOSING_LINE =
   /^(viele\s*gr[uü](?:ß|ss)e?|mit\s+freundlichen\s+gr[uü](?:ß|ss)en|freundliche\s+gr[uü](?:ß|ss)e|best\s+regards|kind\s+regards|warm\s+regards|with\s+kind\s+regards|yours\s+sincerely|sincerely|sayg[ıi]lar[ıi]mla|iyi\s+[çc]al[ıi][şs]malar|kolay\s+gelsin|cordialement|salutations(?:\s+distingu[eé]es)?|met\s+vriendelijke\s+groet(?:en)?|atenamente|un\s+saludo)[,!.…]*$/i;
@@ -50,18 +52,12 @@ export function applySignatureToMailDraft(
   raw: string,
   signature: string | null | undefined,
 ): string {
-  const text = String(raw || "").replace(/^\uFEFF/, "");
-  // Tolerate **SUBJECT:** / **BODY:** from LLM markdown wrapping
-  const match = text.match(
-    /^\*{0,2}SUBJECT:\*{0,2}\s*([^\n]+)\r?\n\*{0,2}BODY:\*{0,2}\s*\r?\n([\s\S]*)$/im,
-  );
-  if (!match) {
-    return appendEmailSignature(text, signature);
+  const parsed = parseSubjectBody(raw);
+  if (!parsed) {
+    return appendEmailSignature(String(raw || "").replace(/^\uFEFF/, ""), signature);
   }
-  const subject = match[1]!
-    .trim()
-    .replace(/^\*{1,2}\s*/, "")
-    .replace(/\s*\*{1,2}$/, "");
-  const body = match[2]!;
-  return `SUBJECT: ${subject}\nBODY:\n${appendEmailSignature(body, signature)}`;
+  return formatSubjectBody(
+    parsed.subject,
+    appendEmailSignature(parsed.body, signature),
+  );
 }

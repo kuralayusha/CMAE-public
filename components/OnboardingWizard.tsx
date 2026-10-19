@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BrandMark } from "@/components/BrandMark";
 import { useI18n, useLocaleUpper } from "@/components/I18nProvider";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import { RichText } from "@/components/RichText";
@@ -687,7 +688,10 @@ export function OnboardingWizard() {
   if (stepId === "boot") {
     return (
       <div className="cmae-onb">
-        <div className="cmae-onb-brand">CMAE</div>
+        <div className="cmae-onb-brand">
+          <BrandMark size={28} className="cmae-onb-brand-mark" />
+          CMAE
+        </div>
         <div className="cmae-onb-boot">
           <h1 className="cmae-onb-boot-title">
             {t("onboarding.bootTitle")}
@@ -738,7 +742,10 @@ export function OnboardingWizard() {
 
   return (
     <div className="cmae-onb">
-      <div className="cmae-onb-brand">CMAE</div>
+      <div className="cmae-onb-brand">
+        <BrandMark size={28} className="cmae-onb-brand-mark" />
+        CMAE
+      </div>
       <div className="cmae-onb-card">
         {showProgress ? (
           <>

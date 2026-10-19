@@ -17,6 +17,7 @@ import {
   saveUserPack,
 } from "./pack";
 import { isVercelRuntime } from "./remote";
+import { t } from "./t";
 import { APP_LANGUAGE, type LocaleMeta, type LocalePack } from "./types";
 
 async function resolveApiKey(): Promise<string> {
@@ -32,9 +33,7 @@ async function resolveApiKey(): Promise<string> {
   const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
   const key = decryptOptional(row?.cursorApiKeyEnc);
   if (!key) {
-    throw new Error(
-      "Cursor API key missing — add it in Settings or set CURSOR_API_KEY",
-    );
+    throw new Error(t("errors.cursorKeyMissing"));
   }
   return key;
 }
@@ -79,7 +78,7 @@ async function askTranslateLlm(prompt: string): Promise<string> {
   });
   if (result.status === "error" || !result.result) {
     throw new Error(
-      `Translation LLM did not respond (status=${result.status ?? "unknown"})`,
+      t("errors.llmNoResponse", { status: result.status ?? "unknown" }),
     );
   }
   return String(result.result).trim();

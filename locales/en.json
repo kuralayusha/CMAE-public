@@ -156,6 +156,17 @@
     "bootUnlockOk": "Tracker and Research are ready",
     "stepLabel": "Step {current} / {total}"
   },
+  "errors": {
+    "cursorKeyMissing": "Cursor API key missing — add it in Settings or set CURSOR_API_KEY",
+    "llmNoResponse": "AI did not respond (status={status})"
+  },
+  "mail": {
+    "folder": {
+      "inbox": "Inbox",
+      "sent": "Sent"
+    },
+    "noSubject": "(no subject)"
+  },
   "help": {
     "gotIt": "Got it",
     "tracker": {
@@ -163,11 +174,11 @@
       "subtitle": "Follow every application in one list. Drafts go to Gmail; you always send them yourself.",
       "helpTitle": "How Tracker works",
       "helpBody0": "Tracker brings together Gmail application threads and companies from Research.",
-      "helpBody1": "Each row is one application: its status, latest activity, and the next actions you can take.",
-      "helpStep0": "Run Gmail sync to load recent mail. The first time, Full sync can look back about 30 days.",
+      "helpBody1": "Each row is one application: its status, latest activity, and the next actions you can take. Open a row for a timeline of that conversation.",
+      "helpStep0": "Run Gmail sync to load recent mail. Turn on Thorough sync if something looks missing (last ~30 days).",
       "helpStep1": "Companies from Research also appear here automatically.",
       "helpStep2": "For a follow-up, reply, or thank-you, use the action — CMAE writes a draft into Gmail Drafts.",
-      "helpStep3": "You always open Gmail and send yourself; CMAE never sends mail for you."
+      "helpStep3": "Click a company row to open its timeline. You always send from Gmail yourself; CMAE never sends mail for you."
     },
     "folders": {
       "title": "Folders",
@@ -207,7 +218,9 @@
     "sync": "Gmail sync",
     "syncing": "Syncing…",
     "hardSync": "Full sync",
-    "hardSyncTitle": "Checks the last 30 days of mail again. Older messages already in CMAE are kept.",
+    "hardSyncToggle": "Thorough sync",
+    "hardSyncHint": "If mail looks missing",
+    "hardSyncTitle": "Re-fetches the last 30 days of mail. Use when something looks missing. Older messages already in CMAE are kept.",
     "syncTitle": "Quick sync — only new mail since the last sync",
     "empty": "No applications yet.",
     "emptyHint": "Sync Gmail, or add companies from Research.",
@@ -219,7 +232,7 @@
     "metaCount": "{count} applications",
     "metaLastSync": "Last sync:",
     "metaNoneYet": "not yet",
-    "sectionActivity": "Last activity",
+    "unknownCompany": "Unknown",
     "col": {
       "select": "Select",
       "company": "Company",
@@ -264,11 +277,17 @@
       "waitingOnUs": "you",
       "waitingOnThem": "them"
     },
-    "sort": {
-      "label": "Sort",
-      "aria": "List sort order",
-      "byStatus": "By status (priority)",
-      "byActivity": "By last activity"
+    "error": {
+      "bulkFailed": "Bulk action failed",
+      "loadList": "Could not load list",
+      "startSync": "Could not start sync",
+      "prepare": "Prepare failed",
+      "gmailDraft": "Could not create Gmail draft",
+      "inactive": "Cannot prepare mail for inactive applications",
+      "invalidId": "Invalid application id",
+      "invalidKind": "Invalid draft kind",
+      "notFound": "Application not found",
+      "createItemFailed": "Failed to create tracker item"
     },
     "sel": {
       "aria": "Selection bar",
@@ -293,7 +312,9 @@
     },
     "gmailModal": {
       "title": "Gmail threads",
-      "threadLink": "Thread {n} — Open in Gmail"
+      "threadLink": "Thread {n} — Open in Gmail",
+      "modMac": "Cmd",
+      "modWin": "Ctrl"
     },
     "toast": {
       "markedInactive": "{count} applications marked inactive",
@@ -308,7 +329,32 @@
       "gmailDraft": "Saved to Gmail Drafts: {subject}",
       "attachment": "attachment: {name}"
     },
-    "gmailModalLead": "{company} — {count} conversation parts. A normal click opens Gmail in a new tab; to stay here,"
+    "gmailModalLead": "{company} — {count} conversation parts. A normal click opens Gmail in a new tab; to stay here, use {mod}+click.",
+    "detailPage": {
+      "title": "Application",
+      "subtitle": "Timeline of what happened with this company.",
+      "back": "Back to Tracker",
+      "loading": "Loading…",
+      "notFound": "This application is no longer in Tracker. Sync may have rebuilt the list — go back and open it again.",
+      "openRow": "Open timeline for {company}",
+      "timeline": "Timeline",
+      "preparing": "Building timeline…",
+      "timelineError": "Could not build timeline",
+      "retry": "Try again",
+      "refresh": "Refresh",
+      "emptyTimeline": "No email history to summarize yet.",
+      "unknownDate": "Unknown",
+      "lowConfidence": "uncertain",
+      "recipient": "Recipient",
+      "showEmails": "Show emails",
+      "fallbackUnknownStart": "Unknown application start (outside this app)",
+      "fallbackEmptyTimeline": "Could not build a timeline from these mails",
+      "origin": {
+        "unknown": "Start unknown",
+        "app": "Started in CMAE",
+        "mixed": "Mixed origin"
+      }
+    }
   },
   "settings": {
     "accProfile": "Profile",
@@ -359,9 +405,9 @@
     "companyInfoTranslatedTitle": "{company} — research note · translated ({lang})"
   },
   "folders": {
-    "empty": "(empty)",
-    "forAi": "(for CMAE)",
-    "forUser": "(for you)",
+    "empty": "empty",
+    "forAi": "for CMAE",
+    "forUser": "for you",
     "suffixCanceled": "(canceled)",
     "suffixError": "(error)",
     "parent": "Parent folder",
@@ -379,6 +425,8 @@
     "badgeLinked": "File for you {status}",
     "badgeBoth": "Readable by you and used by CMAE",
     "previewAria": "File preview",
+    "previewSubject": "Subject",
+    "previewBody": "Body",
     "opening": "Opening…",
     "fileManagerFinder": "Finder",
     "fileManagerExplorer": "File Explorer",
@@ -459,6 +507,16 @@
     "hardStarted": "Full Gmail sync started",
     "imapSkipped": "Gmail sync was skipped",
     "rebuildingList": "Updating your application list…",
+    "rebuildingListIncremental": "Updating only new mail in your list…",
+    "incrementalNoNew": "No new messages to attach",
+    "incrementalStart": "Matching {count} new message(s) to applications…",
+    "incrementalAttached": "Attached {folder} mail → {company}",
+    "incrementalCreated": "New application row → {company}",
+    "incrementalSkippedNoise": "Skipped non-job mail: {subject}",
+    "incrementalSkippedUnmatched": "Skipped unmatched sent mail: {subject}",
+    "incrementalDone": "Quick update · {attached} attached · {created} new · {skipped} skipped · {rows} applications",
+    "incrementalFallbackFull": "{count} new messages — running full list rebuild",
+    "collapsedTwins": "Merged {count} duplicate row(s) with inactive applications",
     "complete": "Sync complete · {mails} messages · {rows} applications",
     "canceled": "Sync canceled",
     "cancelRequested": "Canceling…",

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { VersionPolicy } from "@/lib/version/policy";
+import { BrandMark } from "@/components/BrandMark";
 import { LandingResearchDemo } from "@/components/landing/LandingResearchDemo";
 import { LandingFoldersDemo } from "@/components/landing/LandingFoldersDemo";
 import { LandingTrackerDemo } from "@/components/landing/LandingTrackerDemo";
@@ -13,50 +14,68 @@ type Props = {
   initialPolicy: VersionPolicy;
 };
 
-const FAQ: { q: string; a: string }[] = [
+const TRUST: { title: string; body: string }[] = [
   {
-    q: "What is CMAE?",
-    a: "CMAE (Cold Mail AI Engine) is a local desktop app for job outreach: research company sites, find contacts, draft personalized emails, sync Gmail threads into a Tracker, and keep follow-ups organized — without sending mail for you.",
+    title: "Never sends",
+    body: "CMAE writes Gmail Drafts. You open Gmail, review, and send.",
   },
   {
-    q: "What can I do in the app?",
-    a: "Research pastes careers URLs and runs parallel agents (scout → job fit → contact → research → writer → review). Folders browses the company workspace files. Tracker lists applications by status (Ready to send, Reply needed, Follow-up due, and more) and creates Gmail drafts for apply / follow-up / reply / thanks.",
+    title: "Local-first",
+    body: "Workspace data and keys stay on disk. Research and drafts use your Cursor API key.",
+  },
+  {
+    title: "First open",
+    body: "macOS Gatekeeper or Windows SmartScreen may warn. Expected for desktop installs.",
+  },
+];
+
+const PREREQS: { title: string; body: string }[] = [
+  {
+    title: "Gmail App Password",
+    body: "Google App Password with 2-Step Verification. Gmail only — not Outlook.",
+  },
+  {
+    title: "Cursor API key",
+    body: "Powers Research and drafting. You pay Cursor on your own account.",
+  },
+  {
+    title: "PDF CV",
+    body: "At least one CV as PDF. Add more languages or labels later in Settings.",
+  },
+];
+
+const FAQ: { q: string; a: string }[] = [
+  {
+    q: "Does CMAE send emails for me?",
+    a: "No. CMAE never sends mail. It writes into Gmail Drafts (with your CV attached when relevant). You open Gmail, review, and send yourself.",
   },
   {
     q: "Is CMAE free?",
-    a: "The desktop app is free for personal use. You bring your own Gmail (App Password) and a Cursor API key. Cursor usage is billed on your Cursor account, not by CMAE.",
+    a: "The desktop app itself is free. You bring a Gmail App Password and a Cursor API key; you pay Cursor for API usage on your own account.",
   },
   {
-    q: "Does CMAE send emails for me?",
-    a: "No. CMAE never sends mail or push notifications. It writes drafts into Gmail Drafts (with your CV attached when relevant). You always open Gmail, review, and send yourself.",
-  },
-  {
-    q: "Do I need Gmail, or will Outlook work?",
-    a: "Gmail only for now. CMAE uses IMAP sync and Gmail Drafts with a Google App Password — not your normal Gmail password. Outlook and other providers are not supported.",
-  },
-  {
-    q: "What is a Gmail App Password?",
-    a: "A 16-character password from Google for apps (requires 2-Step Verification). CMAE uses it to read recent mail and save drafts. It is encrypted and stored only on your computer — never uploaded to CMAE servers.",
-  },
-  {
-    q: "Why do I need a Cursor API key?",
-    a: "Research agents, email drafting, and follow-up suggestions run through Cursor’s API. The key stays encrypted on your machine. Without it, Research and AI drafting cannot run.",
+    q: "What do I need to get started?",
+    a: "Three things: a Gmail account with a Google App Password (2-Step Verification), a Cursor API key (powers Research and email drafting), and at least one CV as PDF. Keys stay encrypted on your machine; you can add more CVs (languages/labels) later in Settings.",
   },
   {
     q: "Where is my data stored? Is it private?",
-    a: "On your computer: SQLite + files under the app userData folder (company folders, CVs, settings). Secrets are encrypted locally. CMAE does not upload your mail or keys to our servers. The only optional cloud step is interface language-pack translation when you pick a non-English UI language.",
+    a: "Workspace data lives on your computer (SQLite + userData): company folders, CVs, Tracker state, and settings. Your Gmail App Password and Cursor API key are encrypted locally and are never uploaded to CMAE servers. Research and draft generation send content to your Cursor account via the API key. Separately, choosing a non-English UI language may use an optional remote step to build a language pack.",
   },
   {
-    q: "Do I need a CV?",
-    a: "Yes — at least one PDF. CMAE reads the text to personalize outreach and attaches the PDF to application and follow-up drafts. You can add more CVs (languages/labels) later in Settings.",
+    q: "Why Gmail only — and what is an App Password?",
+    a: "CMAE syncs mail and saves drafts via Gmail IMAP with a Google App Password — not your normal Gmail password. Outlook and other providers are not supported yet. The App Password is encrypted and stored only on your computer.",
   },
   {
     q: "Which platforms are supported?",
-    a: "macOS Apple Silicon (arm64) via .dmg, and Windows x64 via .exe. Intel Macs and Linux desktop builds are not offered yet.",
+    a: "macOS Apple Silicon (arm64) via .dmg, and Windows x64 via .exe. Intel Macs and Linux are not offered yet. There is no browser app — day-to-day use is the desktop client so credentials and research files stay local.",
   },
   {
-    q: "Is there a web app I can use in the browser?",
-    a: "This site is the download landing page. Day-to-day use is the desktop app so your Gmail credentials and research files stay on your machine.",
+    q: "Why does my OS warn when I install or open CMAE?",
+    a: "On Mac, first launch after download: right-click CMAE → Open → confirm (Gatekeeper). On Windows, unsigned builds often hit SmartScreen — choose More info → Run anyway. Signed builds reduce these warnings.",
+  },
+  {
+    q: "What is CMAE?",
+    a: "CMAE (Cold Mail AI Engine) is a local-first desktop app for job outreach that never sends mail for you. You get Research, Folders, Tracker, and Settings in one place.",
   },
   {
     q: "Do I need to be online?",
@@ -64,23 +83,15 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "How do updates work?",
-    a: "The app checks a version policy and can prompt you when a newer build is available. Reinstalling a newer installer keeps your userData. Avoid Settings → wipe/uninstall if you only meant to upgrade.",
-  },
-  {
-    q: "Why does macOS warn when I open CMAE?",
-    a: "First launch after download: right-click CMAE → Open → confirm Open (Gatekeeper). Signed/notarized builds usually need this once; unsigned builds may need the same path.",
-  },
-  {
-    q: "Windows SmartScreen blocked the installer — is that normal?",
-    a: "Unsigned Windows builds often trigger SmartScreen. Choose More info → Run anyway, then finish the installer. Signed builds reduce this warning.",
+    a: "The app checks for a newer build and can prompt you to download it. Installing a newer .dmg or .exe keeps your userData. Do not use Settings → wipe if you only meant to upgrade.",
   },
   {
     q: "Can I change the interface language?",
-    a: "Yes in onboarding or Settings. UI language packs can be generated for your locale. Emails to companies still follow each company’s language; translated copies are for you.",
+    a: "Yes, in onboarding or Settings. UI language packs can be generated for your locale. Emails to companies still follow each company’s language; translated copies are for you.",
   },
   {
     q: "How do I wipe everything?",
-    a: "Settings includes a full wipe of local settings, mail cache, tracker, CVs, company folders, and research history on this computer. That cannot be undone — you will set up CMAE again from scratch.",
+    a: "Settings includes a full wipe of local settings, mail cache, tracker, CVs, company folders, and research history on this computer. It cannot be undone — you will set up CMAE again from scratch.",
   },
 ];
 
@@ -102,7 +113,10 @@ export function DownloadLanding({ initialPolicy }: Props) {
     <div className={`cmae-land${visible ? " is-ready" : ""}`}>
       <header className="cmae-land-hero">
         <div className="cmae-land-hero-copy">
-          <p className="cmae-land-brand">CMAE</p>
+          <p className="cmae-land-brand">
+            <BrandMark size={48} className="cmae-land-brand-mark" />
+            <span>CMAE</span>
+          </p>
           <h1 className="cmae-land-title">Cold mail, without the chaos.</h1>
           <p className="cmae-land-lead">
             Research companies, draft outreach, sync Gmail — you always send.
@@ -117,8 +131,43 @@ export function DownloadLanding({ initialPolicy }: Props) {
               <span>x64 · .exe · v{initialPolicy.latest}</span>
             </a>
           </div>
+          <p className="cmae-land-trust-line">
+            Local desktop · Gmail Drafts · you hit send
+          </p>
         </div>
       </header>
+
+      <section
+        className="cmae-land-section cmae-land-trust"
+        aria-label="Trust points"
+      >
+        <ul className="cmae-land-trust-list">
+          {TRUST.map((item) => (
+            <li key={item.title} className="cmae-land-trust-item">
+              <p className="cmae-land-trust-title">{item.title}</p>
+              <p className="cmae-land-trust-body">{item.body}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="cmae-land-section" aria-labelledby="cmae-land-prereq">
+        <h2 id="cmae-land-prereq" className="cmae-land-h2">
+          What you&apos;ll need
+        </h2>
+        <p className="cmae-land-section-lead">
+          Three things for first launch. The app is free; Cursor API usage is
+          billed to you.
+        </p>
+        <ol className="cmae-land-prereq-list">
+          {PREREQS.map((item) => (
+            <li key={item.title} className="cmae-land-prereq-item">
+              <p className="cmae-land-prereq-title">{item.title}</p>
+              <p className="cmae-land-prereq-body">{item.body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
 
       <div className="cmae-land-tour" aria-label="Interactive product tour">
         <p className="cmae-land-tour-label">Interactive tour</p>
@@ -126,7 +175,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
           <LandingStage
             step="01"
             title="Research"
-            lead="Paste careers URLs — agents find contacts and draft outreach. Try Start research."
+            lead="Paste careers URLs — contacts and drafted outreach, ready to review. Try Start research."
           >
             <LandingResearchDemo />
           </LandingStage>
@@ -134,7 +183,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
           <LandingStage
             step="02"
             title="Folders"
-            lead="Open a company folder — read the brief or the drafted email. Everything stays on your machine."
+            lead="Open a company folder — read the brief or the draft. Files stay on your machine."
           >
             <LandingFoldersDemo />
           </LandingStage>
@@ -142,19 +191,44 @@ export function DownloadLanding({ initialPolicy }: Props) {
           <LandingStage
             step="03"
             title="Tracker"
-            lead="Sync Gmail — researched companies show up Ready to send. You always send from Gmail yourself."
+            lead="Sync Gmail — researched companies land Ready to send."
           >
             <LandingTrackerDemo />
           </LandingStage>
         </LandingScenarioProvider>
       </div>
 
+      <section className="cmae-land-section" aria-labelledby="cmae-land-install">
+        <h2 id="cmae-land-install" className="cmae-land-h2">
+          Install &amp; open
+        </h2>
+        <p className="cmae-land-section-lead">
+          Apple Silicon .dmg and Windows x64 .exe. First launch may warn —
+          that&apos;s your OS.
+        </p>
+        <div className="cmae-land-install">
+          <div className="cmae-land-install-block">
+            <p className="cmae-land-install-os">Mac</p>
+            <p className="cmae-land-install-steps">
+              After download, right-click CMAE → Open → confirm in Gatekeeper.
+            </p>
+          </div>
+          <div className="cmae-land-install-block">
+            <p className="cmae-land-install-os">Windows</p>
+            <p className="cmae-land-install-steps">
+              If SmartScreen appears, choose More info → Run anyway. Signed
+              builds warn less often.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="cmae-land-section" aria-labelledby="cmae-land-faq">
         <h2 id="cmae-land-faq" className="cmae-land-h2">
           FAQ
         </h2>
         <p className="cmae-land-section-lead">
-          Short answers before you install.
+          Cost, sending, privacy, and setup — decide before you download.
         </p>
         <div className="cmae-land-faq">
           {FAQ.map((item, i) => {
@@ -185,7 +259,8 @@ export function DownloadLanding({ initialPolicy }: Props) {
       <section className="cmae-land-section cmae-land-footer-cta">
         <h2 className="cmae-land-h2">Get the desktop app</h2>
         <p className="cmae-land-section-lead">
-          Local-first. Signed installers via CDN (v{initialPolicy.latest}).
+          Local-first desktop installers via CDN (v{initialPolicy.latest}). Some
+          builds may be unsigned — see FAQ if your OS warns.
         </p>
         <div className="cmae-land-ctas">
           <a className="cmae-land-cta is-primary" href={macUrl}>
@@ -198,7 +273,10 @@ export function DownloadLanding({ initialPolicy }: Props) {
       </section>
 
       <footer className="cmae-land-foot">
-        <span>CMAE</span>
+        <span className="cmae-land-foot-brand">
+          <BrandMark size={16} className="cmae-land-foot-mark" />
+          CMAE
+        </span>
         <span>v{initialPolicy.latest}</span>
       </footer>
     </div>
