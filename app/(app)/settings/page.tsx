@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { CvDropzone } from "@/components/CvDropzone";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
-import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
-import { TopNav } from "@/components/TopNav";
 import { Button, Field, PageShell } from "@/components/ui";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
 
@@ -83,7 +81,6 @@ function SettingsAcc({
 export default function SettingsPage() {
   const t = useT();
   const upper = useLocaleUpper();
-  const help = usePageHelp("settings");
   const [form, setForm] = useState({
     fullName: "",
     gmailAddress: "",
@@ -320,14 +317,10 @@ export default function SettingsPage() {
 
   return (
     <>
-      <TopNav
-        active="settings"
-        onHelp={localeLocked ? undefined : help.reopen}
-        locked={localeLocked}
-      />
       <PageShell
         title={t("help.settings.title")}
         subtitle={t("help.settings.subtitle")}
+        helpPageId={localeLocked ? undefined : "settings"}
       >
         <form
           className="cmae-form"
@@ -756,12 +749,6 @@ export default function SettingsPage() {
           }}
         />
       ) : null}
-
-      <PageHelpModal
-        pageId="settings"
-        open={help.open}
-        onClose={help.close}
-      />
 
       {wipeOpen ? (
         <div

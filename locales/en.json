@@ -3,10 +3,17 @@
     "aria": "Main navigation",
     "helpAria": "About this page",
     "helpTitle": "About this page",
+    "helpLabel": "Help",
     "tracker": "Tracker",
     "folders": "Folders",
     "settings": "Settings",
-    "research": "Research"
+    "research": "Research",
+    "themeToDark": "Switch to dark mode",
+    "themeToSystem": "Switch to system theme",
+    "themeToLight": "Switch to light mode",
+    "themeModeLight": "Theme: Light",
+    "themeModeDark": "Theme: Dark",
+    "themeModeSystem": "Theme: System"
   },
   "common": {
     "save": "Save",

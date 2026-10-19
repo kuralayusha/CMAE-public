@@ -14,36 +14,6 @@ type Props = {
   initialPolicy: VersionPolicy;
 };
 
-const TRUST: { title: string; body: string }[] = [
-  {
-    title: "Never sends",
-    body: "CMAE writes Gmail Drafts. You open Gmail, review, and send.",
-  },
-  {
-    title: "Local-first",
-    body: "Workspace data and keys stay on disk. Research and drafts use your Cursor API key.",
-  },
-  {
-    title: "First open",
-    body: "macOS Gatekeeper or Windows SmartScreen may warn. Expected for desktop installs.",
-  },
-];
-
-const PREREQS: { title: string; body: string }[] = [
-  {
-    title: "Gmail App Password",
-    body: "Google App Password with 2-Step Verification. Gmail only — not Outlook.",
-  },
-  {
-    title: "Cursor API key",
-    body: "Powers Research and drafting. You pay Cursor on your own account.",
-  },
-  {
-    title: "PDF CV",
-    body: "At least one CV as PDF. Add more languages or labels later in Settings.",
-  },
-];
-
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Does CMAE send emails for me?",
@@ -117,9 +87,9 @@ export function DownloadLanding({ initialPolicy }: Props) {
             <BrandMark size={48} className="cmae-land-brand-mark" />
             <span>CMAE</span>
           </p>
-          <h1 className="cmae-land-title">Cold mail, without the chaos.</h1>
+          <h1 className="cmae-land-title">Cold mail under your control.</h1>
           <p className="cmae-land-lead">
-            Research companies, draft outreach, sync Gmail — you always send.
+            Research. Draft. Gmail sync. You send.
           </p>
           <div className="cmae-land-ctas">
             <a className="cmae-land-cta is-primary" href={macUrl}>
@@ -132,42 +102,10 @@ export function DownloadLanding({ initialPolicy }: Props) {
             </a>
           </div>
           <p className="cmae-land-trust-line">
-            Local desktop · Gmail Drafts · you hit send
+            Local desktop · Drafts only · You hit send
           </p>
         </div>
       </header>
-
-      <section
-        className="cmae-land-section cmae-land-trust"
-        aria-label="Trust points"
-      >
-        <ul className="cmae-land-trust-list">
-          {TRUST.map((item) => (
-            <li key={item.title} className="cmae-land-trust-item">
-              <p className="cmae-land-trust-title">{item.title}</p>
-              <p className="cmae-land-trust-body">{item.body}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className="cmae-land-section" aria-labelledby="cmae-land-prereq">
-        <h2 id="cmae-land-prereq" className="cmae-land-h2">
-          What you&apos;ll need
-        </h2>
-        <p className="cmae-land-section-lead">
-          Three things for first launch. The app is free; Cursor API usage is
-          billed to you.
-        </p>
-        <ol className="cmae-land-prereq-list">
-          {PREREQS.map((item) => (
-            <li key={item.title} className="cmae-land-prereq-item">
-              <p className="cmae-land-prereq-title">{item.title}</p>
-              <p className="cmae-land-prereq-body">{item.body}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
 
       <div className="cmae-land-tour" aria-label="Interactive product tour">
         <p className="cmae-land-tour-label">Interactive tour</p>
@@ -175,7 +113,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
           <LandingStage
             step="01"
             title="Research"
-            lead="Paste careers URLs — contacts and drafted outreach, ready to review. Try Start research."
+            lead="Paste careers URLs. Contacts and drafts, ready to review."
           >
             <LandingResearchDemo />
           </LandingStage>
@@ -183,7 +121,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
           <LandingStage
             step="02"
             title="Folders"
-            lead="Open a company folder — read the brief or the draft. Files stay on your machine."
+            lead="Open a company. Brief and draft on disk."
           >
             <LandingFoldersDemo />
           </LandingStage>
@@ -191,37 +129,12 @@ export function DownloadLanding({ initialPolicy }: Props) {
           <LandingStage
             step="03"
             title="Tracker"
-            lead="Sync Gmail — researched companies land Ready to send."
+            lead="Sync Gmail. Ready when you are."
           >
             <LandingTrackerDemo />
           </LandingStage>
         </LandingScenarioProvider>
       </div>
-
-      <section className="cmae-land-section" aria-labelledby="cmae-land-install">
-        <h2 id="cmae-land-install" className="cmae-land-h2">
-          Install &amp; open
-        </h2>
-        <p className="cmae-land-section-lead">
-          Apple Silicon .dmg and Windows x64 .exe. First launch may warn —
-          that&apos;s your OS.
-        </p>
-        <div className="cmae-land-install">
-          <div className="cmae-land-install-block">
-            <p className="cmae-land-install-os">Mac</p>
-            <p className="cmae-land-install-steps">
-              After download, right-click CMAE → Open → confirm in Gatekeeper.
-            </p>
-          </div>
-          <div className="cmae-land-install-block">
-            <p className="cmae-land-install-os">Windows</p>
-            <p className="cmae-land-install-steps">
-              If SmartScreen appears, choose More info → Run anyway. Signed
-              builds warn less often.
-            </p>
-          </div>
-        </div>
-      </section>
 
       <section className="cmae-land-section" aria-labelledby="cmae-land-faq">
         <h2 id="cmae-land-faq" className="cmae-land-h2">
@@ -259,8 +172,7 @@ export function DownloadLanding({ initialPolicy }: Props) {
       <section className="cmae-land-section cmae-land-footer-cta">
         <h2 className="cmae-land-h2">Get the desktop app</h2>
         <p className="cmae-land-section-lead">
-          Local-first desktop installers via CDN (v{initialPolicy.latest}). Some
-          builds may be unsigned — see FAQ if your OS warns.
+          Mac .dmg · Windows .exe · Local install
         </p>
         <div className="cmae-land-ctas">
           <a className="cmae-land-cta is-primary" href={macUrl}>

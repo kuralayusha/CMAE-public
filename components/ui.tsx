@@ -2,20 +2,28 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { useLocaleUpper } from "@/components/I18nProvider";
+import { PageHelp } from "@/components/PageHelp";
+import type { AppPageId } from "@/lib/help/pages";
 
 export function PageShell({
   title,
   subtitle,
+  helpPageId,
   children,
 }: {
   title: string;
   subtitle?: string;
+  /** When set, shows Help on the title row (state stays local — no page re-render). */
+  helpPageId?: AppPageId;
   children: ReactNode;
 }) {
   return (
     <main className="cmae-shell">
       <div className="cmae-shell-head">
-        <h1>{title}</h1>
+        <div className="cmae-shell-head-title">
+          <h1>{title}</h1>
+          {helpPageId ? <PageHelp pageId={helpPageId} /> : null}
+        </div>
         {subtitle ? <p>{subtitle}</p> : null}
       </div>
       {children}
@@ -74,7 +82,7 @@ export const inputStyle: CSSProperties = {
   height: 40,
   borderRadius: "var(--radius)",
   border: "1px solid var(--line)",
-  background: "#fff",
+  background: "var(--bg-elevated)",
   fontSize: 14,
   color: "var(--ink)",
   width: "100%",

@@ -44,7 +44,7 @@
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--ink);
   text-align: left;
   cursor: pointer;
@@ -101,7 +101,7 @@
   resize: vertical;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--ink);
   font: inherit;
   font-size: 13px;

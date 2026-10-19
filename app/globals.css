@@ -2,6 +2,7 @@
 
 /* karardex-aligned mono system — Inter, #1a1a1a, thin lines, radius 0 */
 :root {
+  color-scheme: light;
   --bg: #ffffff;
   --bg-subtle: #fafafa;
   --bg-elevated: #ffffff;
@@ -23,6 +24,30 @@
   /* Shared app chrome width (nav + page shells). Onboarding uses --onb-max. */
   --page-max: 1180px;
   --space-page-x: 28px;
+  /* Title / intro column — help button aligns to this right edge */
+  --cmae-head-max: 560px;
+  /* Brand mark: black plate + white G (inverted in dark) */
+  --brand-mark-bg: #000000;
+  --brand-mark-fg: #ffffff;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f0f0f;
+  --bg-subtle: #161616;
+  --bg-elevated: #1a1a1a;
+  --ink: #f0f0f0;
+  --ink-muted: #a3a3a3;
+  --ink-faint: #737373;
+  --line: #2a2a2a;
+  --line-strong: #3a3a3a;
+  --accent: #f0f0f0;
+  --accent-soft: #222222;
+  --warn: #a3a3a3;
+  --danger: #f0f0f0;
+  --ok: #f0f0f0;
+  --brand-mark-bg: #ffffff;
+  --brand-mark-fg: #000000;
 }
 
 @theme inline {
@@ -65,7 +90,7 @@ select {
 
 ::selection {
   background: var(--ink);
-  color: #fff;
+  color: var(--bg);
 }
 
 /* —— Top nav —— */
@@ -78,6 +103,7 @@ select {
 }
 
 .cmae-nav-inner {
+  position: relative;
   width: 100%;
   max-width: var(--page-max);
   margin: 0 auto;
@@ -85,39 +111,82 @@ select {
   height: var(--nav-h);
   display: flex;
   align-items: center;
-  gap: 32px;
 }
 
 .cmae-nav-brand {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-  line-height: 1;
+  line-height: 0;
   text-decoration: none;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.cmae-nav-brand-mark {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
 }
 
 .cmae-nav-links {
+  /* True horizontal center of the nav bar (not “leftover space after brand”) */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
-  flex: 1 1 auto;
+}
+
+/*
+ * Active indicator:
+ * 1) thin bar slides along the bottom of the label
+ * 2) after settle, grows upward into a plate behind the label
+ * 3) active text flips to --bg (invert on --ink plate; theme-safe)
+ */
+.cmae-nav-indicator {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 0;
+  height: 2px;
+  background: var(--ink);
+  pointer-events: none;
+  will-change: transform, width, height;
+  opacity: 0;
+  transform: translate3d(0, 0, 0);
+  transform-origin: bottom center;
+  transition: none;
+}
+
+.cmae-nav-indicator.is-ready {
+  opacity: 1;
+  transition:
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.14s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cmae-nav-indicator.is-filled {
+  height: 100%;
 }
 
 .cmae-nav-link {
+  position: relative;
+  z-index: 1;
   padding: 8px 10px;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--ink-muted);
   border-radius: var(--radius);
-  transition: color 0.12s ease;
+  transition: color 0.22s ease;
 }
 
 .cmae-nav-link:hover {
@@ -126,7 +195,20 @@ select {
 
 .cmae-nav-link.is-active {
   color: var(--ink);
-  font-weight: 500;
+}
+
+/* Invert label once the plate covers it (--bg on --ink = light↔dark flip) */
+.cmae-nav-links.is-filled .cmae-nav-link.is-active {
+  color: var(--bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmae-nav-indicator.is-ready {
+    transition: none;
+  }
+  .cmae-nav-link {
+    transition: none;
+  }
 }
 
 .cmae-nav.is-locked {
@@ -139,29 +221,60 @@ select {
   cursor: not-allowed;
 }
 
-.cmae-nav-help {
-  flex: 0 0 auto;
+.cmae-nav-actions {
+  position: relative;
+  z-index: 1;
   margin-left: auto;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: #fff;
-  color: var(--ink-muted);
-  font-family: var(--font-body), sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  transition: color 0.12s ease, border-color 0.12s ease;
 }
 
-.cmae-nav-help:hover {
-  color: var(--ink);
-  border-color: var(--ink-muted);
+/* Same footprint as .cmae-tracker-icon-btn */
+.cmae-theme-toggle {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.cmae-theme-toggle > svg {
+  display: block !important;
+  width: 20px !important;
+  height: 20px !important;
+  flex: none !important;
+}
+
+/* Title + help on one row inside the 560px head column */
+.cmae-shell-head-title,
+.cmae-page-head-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.cmae-shell-head-title h1,
+.cmae-page-head-title h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+/* Extends .cmae-btn.cmae-btn-ghost — must not shrink/wrap in the title row */
+.cmae-page-help {
+  flex: none;
+  flex-shrink: 0;
+  width: max-content;
+  max-width: none;
+  min-width: max-content;
+  height: 32px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .cmae-help-backdrop {
@@ -182,7 +295,7 @@ select {
   max-height: min(80vh, 560px);
   overflow: auto;
   margin: auto;
-  background: #fff;
+  background: var(--bg-elevated);
   border: 1px solid var(--line);
   border-radius: calc(var(--radius) + 2px);
   padding: 28px 28px 24px;
@@ -247,7 +360,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #fafafa;
+  background: var(--bg-subtle);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
@@ -277,7 +390,7 @@ select {
 
 .cmae-shell-head {
   margin-bottom: 36px;
-  max-width: 560px;
+  max-width: var(--cmae-head-max);
 }
 
 .cmae-shell-head h1 {
@@ -322,13 +435,14 @@ select {
 
 .cmae-btn-primary {
   background: var(--ink);
-  color: #fff;
+  color: var(--bg);
   border: 1px solid var(--ink);
 }
 
 .cmae-btn-primary:hover:not(:disabled) {
-  background: #000;
-  border-color: #000;
+  background: var(--ink);
+  border-color: var(--ink);
+  opacity: 0.88;
 }
 
 .cmae-btn-ghost {
@@ -342,14 +456,14 @@ select {
 }
 
 .cmae-btn-danger {
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--ink);
   border: 1px solid var(--ink);
 }
 
 .cmae-btn-danger:hover:not(:disabled) {
   background: var(--ink);
-  color: #fff;
+  color: var(--bg);
 }
 
 /* —— Fields —— */
@@ -379,7 +493,7 @@ select {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 0;
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--ink);
   font-size: 14px;
   letter-spacing: -0.01em;
@@ -700,7 +814,7 @@ select.cmae-input {
 /* —— Research: fixed right history rail —— */
 .cmae-research {
   --hist-w: 260px;
-  --hist-surface: #ffffff;
+  --hist-surface: var(--bg-elevated);
   min-height: 100vh;
 }
 
@@ -819,23 +933,23 @@ select.cmae-input {
 
 .cmae-hist button.cmae-hist-row.is-selected {
   background: var(--ink);
-  color: #fff;
+  color: var(--bg);
   border-right-color: var(--ink);
 }
 
 .cmae-hist button.cmae-hist-row.is-selected .cmae-hist-name {
-  color: #fff;
+  color: var(--bg);
 }
 
 .cmae-hist button.cmae-hist-row.is-selected .cmae-hist-badge {
-  color: #fff;
+  color: var(--bg);
   border-color: #525252;
 }
 
 .cmae-hist button.cmae-hist-row.is-selected .cmae-hist-badge.tone-done {
-  background: #fff;
+  background: var(--bg);
   color: var(--ink);
-  border-color: #fff;
+  border-color: var(--bg);
 }
 
 .cmae-hist button.cmae-hist-row.is-selected .cmae-hist-open {
@@ -843,14 +957,14 @@ select.cmae-input {
 }
 
 .cmae-hist button.cmae-hist-row.is-selected .cmae-hist-dot {
-  background: #fff;
-  border-color: #fff;
+  background: var(--bg);
+  border-color: var(--bg);
 }
 
 .cmae-hist button.cmae-hist-row.is-selected .cmae-hist-dot.tone-cancel,
 .cmae-hist button.cmae-hist-row.is-selected .cmae-hist-dot.tone-err {
   background: transparent;
-  border-color: #fff;
+  border-color: var(--bg);
 }
 
 .cmae-hist-dot {
@@ -938,7 +1052,7 @@ select.cmae-input {
 }
 
 .cmae-hist-badge.tone-done {
-  color: #fff;
+  color: var(--bg);
   background: var(--ink);
   border-color: var(--ink);
 }
@@ -989,7 +1103,7 @@ select.cmae-input {
 
 .cmae-page-head {
   margin: 0 0 36px;
-  max-width: 560px;
+  max-width: var(--cmae-head-max);
 }
 
 .cmae-page-head h1 {
@@ -1277,7 +1391,7 @@ body:has(.term-live-page) {
 
 .term-modal {
   width: min(420px, 100%);
-  background: #fff;
+  background: var(--bg-elevated);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 24px;
@@ -1332,7 +1446,7 @@ body:has(.term-live-page) {
 .term-modal-btn-danger {
   background: var(--ink);
   border-color: var(--ink);
-  color: #fff;
+  color: var(--bg);
 }
 
 .term-title {
@@ -1602,7 +1716,7 @@ body:has(.term-live-page) {
   right: 0;
   z-index: 51;
   border-bottom: 1px solid var(--line-strong);
-  background: #fff;
+  background: var(--bg);
 }
 
 .cmae-tracker-selbar-inner {
@@ -1726,7 +1840,7 @@ a.cmae-btn {
   gap: 14px;
   padding: 18px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--bg-elevated);
   box-shadow: 0 18px 40px rgba(20, 18, 14, 0.18);
 }
 
@@ -1889,7 +2003,7 @@ a.cmae-btn {
 }
 
 .cmae-tracker-row.is-selected {
-  background: #f7f7f7;
+  background: var(--bg-subtle);
 }
 
 .cmae-tracker-row.is-inactive {
@@ -1971,7 +2085,7 @@ a.cmae-btn {
   padding: 8px 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
-  background: #fff;
+  background: var(--bg-elevated);
   color: var(--ink);
   font-size: 12.5px;
   line-height: 1.4;
@@ -2130,7 +2244,7 @@ a.cmae-btn {
   padding: 0 3px;
   border-radius: 999px;
   background: var(--ink);
-  color: #fff;
+  color: var(--bg);
   font-size: 9px;
   font-weight: 650;
   line-height: 14px;

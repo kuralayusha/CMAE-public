@@ -1,10 +1,65 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useT } from "@/components/I18nProvider";
 import { type AppPageId, helpSeenKey } from "@/lib/help/pages";
 
+/** Help control on the page title row — uses shared button styles so layout can’t collapse. */
+export function PageHelpButton({ onClick }: { onClick: () => void }) {
+  const t = useT();
+  return (
+    <button
+      type="button"
+      className="cmae-btn cmae-btn-ghost cmae-page-help"
+      onClick={onClick}
+      aria-label={t("nav.helpAria")}
+      title={t("nav.helpTitle")}
+    >
+      {t("nav.helpLabel")}
+    </button>
+  );
+}
+
+/**
+ * Self-contained help (button + modal). Keeps open-state local so clicking Help
+ * does not re-render heavy page siblings (TrackerList, FolderBrowser, …).
+ */
+export function PageHelp({ pageId }: { pageId: AppPageId }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(helpSeenKey(pageId))) {
+        setOpen(true);
+      }
+    } catch {
+      /* private mode */
+    }
+  }, [pageId]);
+
+  const close = useCallback(() => {
+    try {
+      localStorage.setItem(helpSeenKey(pageId), "1");
+    } catch {
+      /* ignore */
+    }
+    setOpen(false);
+  }, [pageId]);
+
+  const reopen = useCallback(() => {
+    setOpen(true);
+  }, []);
+
+  return (
+    <>
+      <PageHelpButton onClick={reopen} />
+      <PageHelpModal pageId={pageId} open={open} onClose={close} />
+    </>
+  );
+}
+
+/** @deprecated Prefer <PageHelp pageId=… /> so open-state stays local. */
 export function usePageHelp(pageId: AppPageId) {
   const [open, setOpen] = useState(false);
 
@@ -18,18 +73,18 @@ export function usePageHelp(pageId: AppPageId) {
     }
   }, [pageId]);
 
-  function close() {
+  const close = useCallback(() => {
     try {
       localStorage.setItem(helpSeenKey(pageId), "1");
     } catch {
       /* ignore */
     }
     setOpen(false);
-  }
+  }, [pageId]);
 
-  function reopen() {
+  const reopen = useCallback(() => {
     setOpen(true);
-  }
+  }, []);
 
   return { open, close, reopen };
 }
@@ -44,11 +99,6 @@ export function PageHelpModal({
   onClose: () => void;
 }) {
   const t = useT();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -64,7 +114,8 @@ export function PageHelpModal({
     };
   }, [open, onClose]);
 
-  if (!open || !mounted) return null;
+  if (!open) return null;
+  if (typeof document === "undefined") return null;
 
   const bodies = [0, 1]
     .map((i) => t(`help.${pageId}.helpBody${i}`))

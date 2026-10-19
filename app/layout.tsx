@@ -41,6 +41,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang={initialCode.slice(0, 2) || "en"} className="h-full">
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem("cmae.theme");var dark=t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.setAttribute("data-theme","dark")}catch(e){}`,
+          }}
+        />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"

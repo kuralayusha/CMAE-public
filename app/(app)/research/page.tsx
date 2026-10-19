@@ -6,9 +6,8 @@ import {
   type ResearchHistoryJob,
 } from "@/components/ResearchHistory";
 import { useT } from "@/components/I18nProvider";
-import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
+import { PageHelp } from "@/components/PageHelp";
 import { Terminal } from "@/components/Terminal";
-import { TopNav } from "@/components/TopNav";
 import { Button } from "@/components/ui";
 
 type JobCard = ResearchHistoryJob;
@@ -17,7 +16,6 @@ const LIVE = new Set(["queued", "running", "error"]);
 
 export default function ResearchPage() {
   const t = useT();
-  const help = usePageHelp("research");
   const [urls, setUrls] = useState("");
   const [history, setHistory] = useState<JobCard[]>([]);
   const [catalog, setCatalog] = useState<Record<string, JobCard>>({});
@@ -122,8 +120,6 @@ export default function ResearchPage() {
 
   return (
     <div className="cmae-research">
-      <TopNav active="research" onHelp={help.reopen} />
-
       <div className="cmae-research-body">
         <ResearchHistory
           items={history}
@@ -136,7 +132,10 @@ export default function ResearchPage() {
         <main className="cmae-main">
           <div className="cmae-main-inner">
             <header className="cmae-page-head">
-              <h1>{t("help.research.title")}</h1>
+              <div className="cmae-page-head-title">
+                <h1>{t("help.research.title")}</h1>
+                <PageHelp pageId="research" />
+              </div>
               <p>{t("help.research.subtitle")}</p>
             </header>
 
@@ -203,11 +202,6 @@ export default function ResearchPage() {
         </main>
       </div>
 
-      <PageHelpModal
-        pageId="research"
-        open={help.open}
-        onClose={help.close}
-      />
     </div>
   );
 }

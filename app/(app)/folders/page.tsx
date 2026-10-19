@@ -3,8 +3,6 @@
 import { Suspense, useEffect, useState } from "react";
 import { FolderBrowser } from "@/components/FolderBrowser";
 import { useT } from "@/components/I18nProvider";
-import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
-import { TopNav } from "@/components/TopNav";
 import { PageShell } from "@/components/ui";
 import {
   detectFileManagerKind,
@@ -19,7 +17,6 @@ function fileManagerLabelKey(kind: FileManagerKind): string {
 
 export default function FoldersPage() {
   const t = useT();
-  const help = usePageHelp("folders");
   const [fmKind, setFmKind] = useState<FileManagerKind>("files");
 
   useEffect(() => {
@@ -27,27 +24,20 @@ export default function FoldersPage() {
   }, []);
 
   return (
-    <>
-      <TopNav active="folders" onHelp={help.reopen} />
-      <PageShell
-        title={t("help.folders.title")}
-        subtitle={t("help.folders.subtitle", {
-          fileManager: t(fileManagerLabelKey(fmKind)),
-        })}
+    <PageShell
+      title={t("help.folders.title")}
+      subtitle={t("help.folders.subtitle", {
+        fileManager: t(fileManagerLabelKey(fmKind)),
+      })}
+      helpPageId="folders"
+    >
+      <Suspense
+        fallback={
+          <p className="cmae-fb-loading">{t("common.loading")}</p>
+        }
       >
-        <Suspense
-          fallback={
-            <p className="cmae-fb-loading">{t("common.loading")}</p>
-          }
-        >
-          <FolderBrowser />
-        </Suspense>
-      </PageShell>
-      <PageHelpModal
-        pageId="folders"
-        open={help.open}
-        onClose={help.close}
-      />
-    </>
+        <FolderBrowser />
+      </Suspense>
+    </PageShell>
   );
 }
