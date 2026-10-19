@@ -1,14 +1,14 @@
 {
-  "latest": "0.1.1",
-  "minSupported": "0.1.0",
+  "latest": "0.1.2",
+  "minSupported": "0.1.2",
   "force": false,
   "cdnBase": "https://github.com/kuralayusha/cmae-releases/releases/download",
   "releaseUrl": "https://github.com/kuralayusha/cmae-releases/releases/latest",
   "updateFeedUrl": "https://github.com/kuralayusha/cmae-releases/releases/latest",
   "releasesRepo": "kuralayusha/cmae-releases",
   "downloads": {
-    "darwin-arm64": "https://github.com/kuralayusha/cmae-releases/releases/download/v0.1.1/CMAE-0.1.1-mac-arm64.dmg",
-    "win32-x64": "https://github.com/kuralayusha/cmae-releases/releases/download/v0.1.1/CMAE-0.1.1-win-x64.exe"
+    "darwin-arm64": "https://github.com/kuralayusha/cmae-releases/releases/download/v0.1.2/CMAE-0.1.2-mac-arm64.dmg",
+    "win32-x64": "https://github.com/kuralayusha/cmae-releases/releases/download/v0.1.2/CMAE-0.1.2-win-x64.exe"
   },
-  "notes": "Dark mode + theme toggle; update test from 0.1.0"
+  "notes": "Update gate UX, settings version label, force lock polish"
 }

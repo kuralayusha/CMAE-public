@@ -11,15 +11,27 @@ import {
 import { BrandMark } from "@/components/BrandMark";
 import { useI18n } from "@/components/I18nProvider";
 import type { VersionStatus } from "@/lib/version/policy";
+import {
+  formatVersionLabel,
+  formatVersionTag,
+} from "@/lib/version/semver";
 import "./version-gate.css";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FOCUS_MIN_GAP_MS = 60 * 60 * 1000;
-const SOFT_DISMISS_KEY = "cmae.version.softDismissed";
 
 type StatusPayload = VersionStatus & {
   error?: string;
 };
+
+type UpdaterPhase =
+  | "checking"
+  | "available"
+  | "none"
+  | "downloading"
+  | "downloaded"
+  | "error"
+  | string;
 
 function desktopPlatform(): { platform: string; arch: string } {
   if (typeof window === "undefined") {
@@ -29,7 +41,6 @@ function desktopPlatform(): { platform: string; arch: string } {
   if (d?.platform && d?.arch) {
     return { platform: d.platform, arch: d.arch };
   }
-  // Browser / web: no desktop lock
   return { platform: "web", arch: "web" };
 }
 
@@ -57,38 +68,19 @@ async function fetchStatus(signal?: AbortSignal): Promise<StatusPayload> {
   return data;
 }
 
-function softDismissedFor(latest: string): boolean {
-  try {
-    return sessionStorage.getItem(SOFT_DISMISS_KEY) === latest;
-  } catch {
-    return false;
-  }
-}
-
-function setSoftDismissed(latest: string) {
-  try {
-    sessionStorage.setItem(SOFT_DISMISS_KEY, latest);
-  } catch {
-    /* ignore */
-  }
-}
-
 export function VersionGate({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<StatusPayload | null>(null);
-  const [updaterPhase, setUpdaterPhase] = useState<string | null>(null);
-  const [softHidden, setSoftHidden] = useState(false);
+  const [updaterPhase, setUpdaterPhase] = useState<UpdaterPhase | null>(null);
+  /** Sticky once electron-updater finishes — survives later check/available events. */
+  const [updateReady, setUpdateReady] = useState(false);
+  const updateReadyRef = useRef(false);
   const lastCheckRef = useRef(0);
   const busyRef = useRef(false);
 
   const applyStatus = useEffectEvent((next: StatusPayload) => {
     setStatus(next);
     lastCheckRef.current = Date.now();
-    if (next.softUpdate && softDismissedFor(next.latest)) {
-      setSoftHidden(true);
-    } else {
-      setSoftHidden(false);
-    }
   });
 
   const runCheck = useCallback(async (signal?: AbortSignal) => {
@@ -122,13 +114,22 @@ export function VersionGate({ children }: { children: ReactNode }) {
     window.addEventListener("focus", onFocus);
 
     const unsub = window.cmaeDesktop?.onUpdateEvent?.((ev) => {
-      setUpdaterPhase(ev.phase);
-      if (ev.phase === "downloaded" || ev.phase === "available") {
+      const phase = ev.phase;
+      if (phase === "downloaded") {
+        updateReadyRef.current = true;
+        setUpdateReady(true);
+        setUpdaterPhase("downloaded");
+        void runCheck();
+        return;
+      }
+      // Don't clobber "ready" when a later check emits checking/available again
+      if (updateReadyRef.current) return;
+      setUpdaterPhase(phase);
+      if (phase === "available") {
         void runCheck();
       }
     });
 
-    // Kick electron-updater quietly (packaged only)
     void window.cmaeDesktop?.checkForUpdates?.().catch(() => undefined);
 
     return () => {
@@ -175,24 +176,36 @@ export function VersionGate({ children }: { children: ReactNode }) {
 
   const showForce = Boolean(status?.forceLock);
   const showSoft =
-    Boolean(status?.softUpdate) && !showForce && !softHidden && isDesktopRuntime();
+    Boolean(status?.softUpdate) && !showForce && isDesktopRuntime();
+
+  const versionArgs = {
+    current: formatVersionTag(status?.current ?? ""),
+    latest: formatVersionLabel(status?.latest ?? ""),
+  };
+
+  const softBody =
+    updateReady || updaterPhase === "downloaded"
+      ? t("versionGate.softReady", versionArgs)
+      : updaterPhase === "downloading" || updaterPhase === "available"
+        ? t("versionGate.softDownloading", versionArgs)
+        : t("versionGate.softLead", versionArgs);
+
+  const forceBody =
+    updateReady || updaterPhase === "downloaded"
+      ? t("versionGate.forceReady", versionArgs)
+      : updaterPhase === "error"
+        ? t("versionGate.forceError", versionArgs)
+        : updaterPhase === "downloading" || updaterPhase === "available"
+          ? t("versionGate.forceDownloading", versionArgs)
+          : t("versionGate.forceLead", versionArgs);
 
   return (
     <>
       {showSoft && status ? (
         <div className="cmae-version-banner" role="status">
-          <p>
-            {t("versionGate.softLead", {
-              current: status.current,
-              latest: status.latest,
-            })}
-            {updaterPhase === "downloading"
-              ? ` ${t("versionGate.downloading")}`
-              : null}
-            {updaterPhase === "downloaded" ? ` ${t("versionGate.ready")}` : null}
-          </p>
-          <div className="cmae-version-banner-actions">
-            {updaterPhase === "downloaded" ? (
+          <p>{softBody}</p>
+          {updateReady ? (
+            <div className="cmae-version-banner-actions">
               <button
                 type="button"
                 className="is-primary"
@@ -200,25 +213,8 @@ export function VersionGate({ children }: { children: ReactNode }) {
               >
                 {t("versionGate.installNow")}
               </button>
-            ) : (
-              <button
-                type="button"
-                className="is-primary"
-                onClick={() => void openDownload()}
-              >
-                {t("versionGate.download")}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setSoftDismissed(status.latest);
-                setSoftHidden(true);
-              }}
-            >
-              {t("versionGate.dismiss")}
-            </button>
-          </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -237,15 +233,7 @@ export function VersionGate({ children }: { children: ReactNode }) {
               {t("versionGate.brand")}
             </div>
             <h1 id="cmae-version-lock-title">{t("versionGate.title")}</h1>
-            <p>
-              {t("versionGate.lead", {
-                current: status.current,
-                latest: status.latest,
-              })}
-            </p>
-            <p className="cmae-version-lock-meta">
-              {status.current} → {status.latest}
-            </p>
+            <p>{forceBody}</p>
             {status.notes ? (
               <>
                 <p className="cmae-version-lock-meta">
@@ -254,14 +242,8 @@ export function VersionGate({ children }: { children: ReactNode }) {
                 <pre className="cmae-version-lock-notes">{status.notes}</pre>
               </>
             ) : null}
-            {updaterPhase === "downloading" ? (
-              <p>{t("versionGate.downloading")}</p>
-            ) : null}
-            {updaterPhase === "downloaded" ? (
-              <p>{t("versionGate.ready")}</p>
-            ) : null}
             <div className="cmae-version-lock-actions">
-              {updaterPhase === "downloaded" ? (
+              {updateReady ? (
                 <button
                   type="button"
                   className="cmae-version-lock-btn"
@@ -269,22 +251,16 @@ export function VersionGate({ children }: { children: ReactNode }) {
                 >
                   {t("versionGate.installNow")}
                 </button>
-              ) : (
+              ) : null}
+              {updaterPhase === "error" ? (
                 <button
                   type="button"
                   className="cmae-version-lock-btn"
                   onClick={() => void openDownload()}
                 >
-                  {t("versionGate.download")}
+                  {t("versionGate.openRelease")}
                 </button>
-              )}
-              <button
-                type="button"
-                className="cmae-version-lock-btn is-secondary"
-                onClick={() => void openDownload()}
-              >
-                {t("versionGate.openRelease")}
-              </button>
+              ) : null}
             </div>
           </div>
         </div>

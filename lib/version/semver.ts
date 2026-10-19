@@ -10,6 +10,24 @@ function parse(v: string): [number, number, number] {
   return [parts[0] || 0, parts[1] || 0, parts[2] || 0];
 }
 
+/** Strip leading `v` for compare / package.json / policy. */
+export function normalizeSemver(v: string): string {
+  return String(v || "")
+    .trim()
+    .replace(/^v/i, "");
+}
+
+/** UI next to “Version …” — no prefix: `0.1.1`. */
+export function formatVersionLabel(v: string): string {
+  return normalizeSemver(v) || "0.0.0";
+}
+
+/** UI for “You’re on …” — with prefix: `v0.1.0`. */
+export function formatVersionTag(v: string): string {
+  const n = normalizeSemver(v);
+  return n ? `v${n}` : "v0.0.0";
+}
+
 /** Negative if a < b, 0 if equal, positive if a > b. */
 export function compareSemver(a: string, b: string): number {
   const pa = parse(a);

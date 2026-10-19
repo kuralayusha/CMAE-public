@@ -52,15 +52,21 @@ function initAutoUpdater(onEvent) {
   if (!updater) return;
 
   updater.on("checking-for-update", () => {
+    if (updateDownloaded) return;
     emit?.({ phase: "checking" });
   });
   updater.on("update-available", (info) => {
+    if (updateDownloaded) {
+      emit?.({ phase: "downloaded", info });
+      return;
+    }
     emit?.({ phase: "available", info });
   });
   updater.on("update-not-available", (info) => {
     emit?.({ phase: "none", info });
   });
   updater.on("download-progress", (info) => {
+    if (updateDownloaded) return;
     emit?.({ phase: "downloading", info });
   });
   updater.on("update-downloaded", (info) => {

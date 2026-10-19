@@ -6,6 +6,7 @@ import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import { Button, Field, PageShell } from "@/components/ui";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
+import { formatVersionLabel } from "@/lib/version/semver";
 
 type WorkType = "fulltime" | "parttime" | "contracted";
 
@@ -99,6 +100,7 @@ export default function SettingsPage() {
   const [wipeOpen, setWipeOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   /** When set, full-screen locale prep locks the UI until pack is ready. */
   const [localePrep, setLocalePrep] = useState<{
     next: string;
@@ -108,6 +110,25 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cmaeDesktop?.isDesktop));
+    void (async () => {
+      try {
+        if (window.cmaeDesktop?.getVersion) {
+          setAppVersion(await window.cmaeDesktop.getVersion());
+          return;
+        }
+        const res = await fetch("/api/version?platform=web&arch=web", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          current?: string;
+          status?: { current?: string };
+        };
+        setAppVersion(data.current || data.status?.current || null);
+      } catch {
+        /* ignore */
+      }
+    })();
   }, []);
 
   async function loadCvs() {
@@ -715,6 +736,14 @@ export default function SettingsPage() {
               </>
             ) : null}
           </SettingsAcc>
+
+          {appVersion ? (
+            <p className="cmae-settings-version">
+              {t("settings.appVersion", {
+                version: formatVersionLabel(appVersion),
+              })}
+            </p>
+          ) : null}
         </form>
       </PageShell>
 
