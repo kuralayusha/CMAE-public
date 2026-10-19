@@ -263,6 +263,7 @@ export function isNonJobMail(mail: {
     mail.subject,
     mail.bodyPreview || mail.snippet || "",
   );
+  const from = (mail.fromAddr || "").toLowerCase();
 
   if (
     /daily newsletter|\bnewsletter\b|view in browser|unsubscribe|e-posta listesinden çık/.test(
@@ -283,6 +284,27 @@ export function isNonJobMail(mail: {
   const fromPersonal = personal.test(mail.fromAddr);
   const toPersonal = personal.test(mail.toAddr);
   if (fromPersonal && toPersonal && !jobish) return true;
+
+  // Consumer / marketplace platforms — never a hiring thread unless body is jobish
+  if (
+    !jobish &&
+    /@(preply|duolingo|spotify|netflix|paypal|ebay|booking|airbnb|uber|deliveroo|shopify|stripe|github|gitlab|notion|slack|zoom|udemy|coursera)\./i.test(
+      from,
+    )
+  ) {
+    return true;
+  }
+
+  // Google/Apple account security & product noise (careers/recruiting still jobish)
+  if (
+    !jobish &&
+    /@(google\.com|apple\.com|accounts\.google\.com)/i.test(from) &&
+    /security|verification|verify|2-step|two.?step|sign-?in|new device|alert|account|password|recovery|login|otp|code/.test(
+      `${sub} ${blob}`,
+    )
+  ) {
+    return true;
+  }
 
   return false;
 }

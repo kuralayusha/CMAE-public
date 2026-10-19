@@ -16,6 +16,10 @@ import {
   classifyMailSignals,
   flagsFromIntent,
 } from "./agents/mail-signals";
+import {
+  routeIncrementalMails,
+  type ExistingItemBrief,
+} from "./agents/incremental-route";
 import { throwIfSyncCanceled } from "./cancel";
 import {
   isMeaningfulIntent,
@@ -25,7 +29,6 @@ import {
 import type { MailBrief } from "./match";
 import {
   emailDomain,
-  normalizeCompanyKey,
   parseEmailAddr,
 } from "./identity";
 import { collapseInactiveActiveTwins } from "./inactive";
@@ -33,7 +36,7 @@ import {
   parsePendingGmailDraft,
   shouldClearPendingGmailDraft,
 } from "./pending-draft";
-import { normalizeMailText } from "./signals";
+import { isNonJobMail, normalizeMailText } from "./signals";
 import { resolveStatus } from "./status";
 import type { SyncProgressFn } from "./types";
 /** Above this, fall back to full rebuild (too many to patch safely). */
@@ -117,54 +120,39 @@ function toBrief(m: typeof mailMessages.$inferSelect): MailBrief {
   };
 }
 
-function findItemIdForMail(
+/** Same Gmail thread already linked → safe auto-attach (no AI). */
+function findItemIdByThread(
   mail: typeof mailMessages.$inferSelect,
-  userEmail: string,
 ): number | null {
+  if (!mail.threadId) return null;
   const db = getDb();
+  const sameThread = db
+    .select({ id: mailMessages.id })
+    .from(mailMessages)
+    .where(eq(mailMessages.threadId, mail.threadId))
+    .all()
+    .map((r) => r.id)
+    .filter((id) => id !== mail.id);
+  if (!sameThread.length) return null;
+  const link = db
+    .select()
+    .from(trackerItemMails)
+    .where(inArray(trackerItemMails.mailId, sameThread))
+    .get();
+  return link?.itemId ?? null;
+}
 
-  if (mail.threadId) {
-    const sameThread = db
-      .select({ id: mailMessages.id })
-      .from(mailMessages)
-      .where(eq(mailMessages.threadId, mail.threadId))
-      .all()
-      .map((r) => r.id)
-      .filter((id) => id !== mail.id);
-    if (sameThread.length) {
-      const link = db
-        .select()
-        .from(trackerItemMails)
-        .where(inArray(trackerItemMails.mailId, sameThread))
-        .get();
-      if (link) return link.itemId;
-    }
-  }
-
-  const domain = counterpartyDomain(mail, userEmail);
+function existingItemBriefs(): ExistingItemBrief[] {
+  const db = getDb();
   const items = db.select().from(trackerItems).all();
-  // Prefer inactive twins first so paused apps don't sprout a second active row.
-  const ordered = [
-    ...items.filter((i) => i.status === "inactive"),
-    ...items.filter((i) => i.status !== "inactive"),
-  ];
-
-  if (domain) {
-    for (const item of ordered) {
-      if (item.primaryTo) {
-        const pd = emailDomain(parseEmailAddr(item.primaryTo));
-        if (pd === domain) return item.id;
-      }
-      const companyKey = normalizeCompanyKey(item.company);
-      if (companyKey && companyKey === normalizeCompanyKey(domain.split(".")[0] || "")) {
-        return item.id;
-      }
-      const links = db
-        .select()
-        .from(trackerItemMails)
-        .where(eq(trackerItemMails.itemId, item.id))
-        .all();
-      if (!links.length) continue;
+  return items.map((item) => {
+    const links = db
+      .select()
+      .from(trackerItemMails)
+      .where(eq(trackerItemMails.itemId, item.id))
+      .all();
+    let lastSubject: string | null = null;
+    if (links.length) {
       const linked = db
         .select()
         .from(mailMessages)
@@ -174,21 +162,19 @@ function findItemIdForMail(
             links.map((l) => l.mailId),
           ),
         )
-        .all();
-      for (const lm of linked) {
-        if (counterpartyDomain(lm, userEmail) === domain) return item.id;
-        if (emailDomain(parseEmailAddr(lm.fromAddr)) === domain) return item.id;
-        if (
-          lm.toAddr
-            .split(",")
-            .some((p) => emailDomain(parseEmailAddr(p)) === domain)
-        ) {
-          return item.id;
-        }
-      }
+        .all()
+        .sort((a, b) => a.dateIso.localeCompare(b.dateIso));
+      lastSubject = linked.at(-1)?.subject ?? null;
     }
-  }
-  return null;
+    return {
+      id: item.id,
+      company: item.company,
+      position: item.position,
+      status: item.status,
+      primaryTo: item.primaryTo,
+      lastSubject,
+    };
+  });
 }
 
 function refreshItemStatus(
@@ -416,13 +402,16 @@ function linkMail(itemId: number, mail: typeof mailMessages.$inferSelect): boole
 function createItemForMail(
   mail: typeof mailMessages.$inferSelect,
   userEmail: string,
+  opts?: { company?: string | null; position?: string | null },
 ): number {
   const db = getDb();
   const domain = counterpartyDomain(mail, userEmail);
-  const company = domain
-    ? companyFromDomain(domain)
-    : mail.subject.replace(/^(re|aw|wg|fwd):\s*/i, "").slice(0, 80) ||
-      t("tracker.unknownCompany");
+  const company =
+    (opts?.company || "").trim() ||
+    (domain ? companyFromDomain(domain) : "") ||
+    mail.subject.replace(/^(re|aw|wg|fwd):\s*/i, "").slice(0, 80) ||
+    t("tracker.unknownCompany");
+  const position = (opts?.position || "").trim() || null;
   const primaryTo =
     mail.folder === "SENT"
       ? mail.toAddr.split(",")[0]?.trim() || null
@@ -432,7 +421,7 @@ function createItemForMail(
     .insert(trackerItems)
     .values({
       company,
-      position: null,
+      position,
       status: "in_progress",
       sentiment: null,
       waitingOn: mail.folder === "SENT" ? "them" : "us",
@@ -445,7 +434,7 @@ function createItemForMail(
       researchJobId: null,
       primaryTo,
       notesJson: JSON.stringify({
-        notes: "incremental create",
+        notes: "incremental create (AI)",
         lastMailIntent: "unknown",
       }),
       hasFollowUpDraft: 0,
@@ -459,6 +448,12 @@ function createItemForMail(
   if (!inserted) throw new Error(t("tracker.error.createItemFailed"));
   linkMail(inserted.id, mail);
   return inserted.id;
+}
+
+function folderLabel(folder: string): string {
+  if (folder === "INBOX") return t("mail.folder.inbox");
+  if (folder === "SENT") return t("mail.folder.sent");
+  return folder;
 }
 
 /**
@@ -511,11 +506,18 @@ export async function patchTrackerWithNewMails(
   let created = 0;
   let skipped = 0;
   const touched = new Set<number>();
+  /** Unmatched INBOX mails that need AI job/group routing */
+  const needsRoute: (typeof mailMessages.$inferSelect)[] = [];
 
   for (const mail of newMails) {
     throwIfSyncCanceled(signal);
+    const brief = toBrief(mail);
     const intent = mailIntents.get(mail.id)?.intent;
-    if (intent === "non_job") {
+    const noise =
+      intent === "non_job" ||
+      (mail.folder === "INBOX" && isNonJobMail(brief));
+
+    if (noise) {
       skipped += 1;
       log?.(
         "system",
@@ -536,31 +538,27 @@ export async function patchTrackerWithNewMails(
       continue;
     }
 
-    const itemId = findItemIdForMail(mail, userEmail);
-    if (itemId) {
-      if (linkMail(itemId, mail)) attached += 1;
-      touched.add(itemId);
+    // Same thread already tracked — safe without AI
+    const threadItemId = findItemIdByThread(mail);
+    if (threadItemId) {
+      if (linkMail(threadItemId, mail)) attached += 1;
+      touched.add(threadItemId);
       const item = db
         .select()
         .from(trackerItems)
-        .where(eq(trackerItems.id, itemId))
+        .where(eq(trackerItems.id, threadItemId))
         .get();
       log?.(
         "ok",
         t("sync.incrementalAttached", {
-          company: item?.company || `#${itemId}`,
-          folder:
-            mail.folder === "INBOX"
-              ? t("mail.folder.inbox")
-              : mail.folder === "SENT"
-                ? t("mail.folder.sent")
-                : mail.folder,
+          company: item?.company || `#${threadItemId}`,
+          folder: folderLabel(mail.folder),
         }),
       );
       continue;
     }
 
-    // Unmatched SENT without a thread/domain hit — skip creating orphans
+    // Unmatched SENT — never invent a row from outbound alone
     if (mail.folder === "SENT") {
       skipped += 1;
       log?.(
@@ -572,20 +570,76 @@ export async function patchTrackerWithNewMails(
       continue;
     }
 
-    const newId = createItemForMail(mail, userEmail);
-    created += 1;
-    touched.add(newId);
-    const item = db
-      .select()
-      .from(trackerItems)
-      .where(eq(trackerItems.id, newId))
-      .get();
-    log?.(
-      "ok",
-      t("sync.incrementalCreated", {
-        company: item?.company || `#${newId}`,
-      }),
+    needsRoute.push(mail);
+  }
+
+  if (needsRoute.length) {
+    throwIfSyncCanceled(signal);
+    const decisions = await routeIncrementalMails(
+      needsRoute.map(toBrief),
+      existingItemBriefs(),
+      { onProgress: log, signal },
     );
+    throwIfSyncCanceled(signal);
+
+    for (const mail of needsRoute) {
+      throwIfSyncCanceled(signal);
+      const decision = decisions.get(mail.id);
+      const action = decision?.action ?? "skip";
+
+      if (action === "attach" && decision?.itemId != null) {
+        const itemId = decision.itemId;
+        const item = db
+          .select()
+          .from(trackerItems)
+          .where(eq(trackerItems.id, itemId))
+          .get();
+        if (!item) {
+          skipped += 1;
+          log?.(
+            "system",
+            t("sync.incrementalSkippedNoise", {
+              subject: mail.subject.slice(0, 60) || t("mail.noSubject"),
+            }),
+          );
+          continue;
+        }
+        if (linkMail(itemId, mail)) attached += 1;
+        touched.add(itemId);
+        log?.(
+          "ok",
+          t("sync.incrementalAttached", {
+            company: item.company,
+            folder: folderLabel(mail.folder),
+          }),
+        );
+        continue;
+      }
+
+      if (action === "create" && decision?.company) {
+        const newId = createItemForMail(mail, userEmail, {
+          company: decision.company,
+          position: decision.position,
+        });
+        created += 1;
+        touched.add(newId);
+        log?.(
+          "ok",
+          t("sync.incrementalCreated", {
+            company: decision.company,
+          }),
+        );
+        continue;
+      }
+
+      skipped += 1;
+      log?.(
+        "system",
+        t("sync.incrementalSkippedNoise", {
+          subject: mail.subject.slice(0, 60) || t("mail.noSubject"),
+        }),
+      );
+    }
   }
 
   for (const itemId of touched) {

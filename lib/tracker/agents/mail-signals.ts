@@ -45,8 +45,8 @@ Pick exactly ONE intent per mail:
 - rejection — soft or hard rejection / not moving forward / position filled / no suitable role.
 - click_action — WE must click a REQUIRED link/button (verify email, GDPR consent button, activate account that expires). Not optional "view status".
 - optional_portal — thank-you plus optional candidate portal / "you may view status" / create account ad — treat like ACK, not click_action.
-- non_job — newsletter, marketing, personal chatter unrelated to a job application.
-- unknown — cannot tell.
+- non_job — NOT a job application: newsletters, marketing, personal chatter, account security/OTP alerts (Google, Apple, banks), tutoring/marketplace products (Preply, etc.), shopping, social, shipping, subscriptions. When unsure and there is no hiring/recruiting/application signal → non_job.
+- unknown — cannot tell (prefer non_job over inventing a job thread).
 
 Also set waitingUntil as YYYY-MM-DD when intent=ooo and a return date is stated (any date format → ISO date). Else null.
 
