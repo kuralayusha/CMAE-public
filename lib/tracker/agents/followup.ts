@@ -3,6 +3,7 @@ import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { mailMessages, trackerItemMails, trackerItems } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/t";
 import {
   formatPreferencesForApplication,
   formatPreferencesForReply,
@@ -29,6 +30,13 @@ import {
   parseSubjectBody,
 } from "../parse-mail-md";
 import { replySubject, resolveThreadReplyTarget } from "../reply-thread";
+import {
+  formatUserNotesBlock,
+  getVariantDef,
+  resolveVariant,
+  type DraftPrepareKind,
+  type DraftVariantId,
+} from "../draft-variants";
 import type { DraftKind } from "../types";
 
 const MAIL_FIELD_RULES = `
@@ -54,38 +62,12 @@ Line 3+ = the email body only.
 ${EMAIL_SIGNATURE_PROMPT_RULES}
 `.trim();
 
-/** Craft guide — short, low-pressure in-thread follow-up after no reply. */
-const FOLLOW_UP_CRAFT_GUIDE = `
-FOLLOW-UP CRAFT (follow closely — even shorter than the first application mail):
-
-LENGTH & STRUCTURE
-- Ideal: 50–80 words. Hard cap ~100. Must feel shorter than the original application.
-- 2–3 short sentences; a single short paragraph is fine.
-- Easy to answer in seconds — no long explanations.
-
-THREADING (subject)
-- This is an in-thread REPLY. SUBJECT must continue the prior thread with Re: …
-- Prefer the thread anchor subject (e.g. "Re: Spontane Başvuru – …"). Do not invent a new subject that breaks context.
-- The system may normalize Re:; still write a proper reply subject, never a brand-new cold subject.
-
-BODY STRUCTURE (in this order)
-1) Greeting: Use the real name if known. Otherwise a natural generic greeting for the language ("Sayın İlgili" / "Dear Hiring Team"). Never invent a name.
-2) Soft reminder (1 sentence): Briefly mention the earlier application to this company — no accusation.
-3) Empathy / tone: Acknowledge they may be busy ("yoğunluğunuzu biliyorum" / equivalent). Never "you didn't reply" / "did you see my email?" / "still waiting".
-4) Optional new value (1 sentence, only if grounded in CV/notes/research): a new win, certificate, project, or a concrete company news/project note. If none is known, SKIP — do not invent.
-5) Low-pressure ask (1 sentence): e.g. open to a short chat, or happy to be considered if a fitting role opens.
-6) Mention CV is attached again (so they need not dig in the thread).
-7) Thank them and close warmly ("Teşekkürler…" / "Thanks…" / language-appropriate), then exactly one closing line per SIGNATURE RULES (system appends the real signature).
-
-TONE
-- Kind, light, professional — not stiff, not pleading, not passive-aggressive.
-- Do NOT copy-paste the first mail. Do NOT restate the whole CV.
-- Do NOT complain, guilt-trip, or apply pressure across channels in the text.
-
-LANGUAGE
-- Match the thread language when clear; otherwise preferred language.
-- Spelling must be flawless; company name exact.
-`.trim();
+export type PrepareDraftOptions = {
+  variant?: string | null;
+  userNote?: string | null;
+  /** Optional timeline kinds for default variant when none provided. */
+  eventKinds?: string[];
+};
 
 function readOptional(folder: string, name: string): string {
   const full = path.join(folder, name);
@@ -181,21 +163,35 @@ async function recentMailsForItem(itemId: number) {
 export async function prepareDraftForItem(
   itemId: number,
   kind: Exclude<DraftKind, "application">,
-): Promise<{ fileName: string; subject: string; workspaceFolder: string }> {
+  options: PrepareDraftOptions = {},
+): Promise<{
+  fileName: string;
+  subject: string;
+  workspaceFolder: string;
+  variant: DraftVariantId;
+}> {
   const db = getDb();
   const item = db
     .select()
     .from(trackerItems)
     .where(eq(trackerItems.id, itemId))
     .get();
-  if (!item) throw new Error("Tracker item not found");
+  if (!item) throw new Error(t("tracker.error.notFound"));
   assertItemActiveForDrafts(itemId);
 
   if (kind === "follow_up" && item.status !== "follow_up_due") {
-    throw new Error(
-      "Follow-up is currently locked — wait 7 days after the last follow-up (or follow-up day has not arrived yet)",
-    );
+    throw new Error(t("tracker.error.followUpLocked"));
   }
+
+  const prepareKind = kind as DraftPrepareKind;
+  if (options.variant && !getVariantDef(prepareKind, options.variant)) {
+    throw new Error(t("tracker.error.invalidVariant"));
+  }
+
+  const variantDef = resolveVariant(prepareKind, options.variant, {
+    followUpCount: item.followUpCount || 0,
+    eventKinds: options.eventKinds,
+  });
 
   const folder = await ensureWorkspaceFolder(item);
   const settings = getSettingsRow();
@@ -215,27 +211,26 @@ export async function prepareDraftForItem(
   const summaryNotes =
     readOptional(folder, "summary.md") || readOptional(folder, "ozet.md");
 
-  let intent: string;
   let fileName: string;
   let translatedFileName: string;
-  let craftExtra = "";
   if (kind === "follow_up") {
     const n = Math.max(1, (item.followUpCount || 0) + 1);
     fileName = `follow_up_${n}.md`;
     translatedFileName = `follow_up_${n}_translated.md`;
-    intent = `Write follow-up email #${n} after no reply. Follow FOLLOW-UP CRAFT strictly. In-thread REPLY — keep context with Re: subject. Shorter than the first mail; polite, low-pressure, easy to answer.`;
-    craftExtra = `\n${FOLLOW_UP_CRAFT_GUIDE}\n`;
   } else if (kind === "thanks") {
     fileName = "thanks.md";
     translatedFileName = "thanks_translated.md";
-    intent =
-      "Write a short thank-you email after a rejection. Gracious, leave door open, no bitterness. In-thread reply to the rejection mail.";
   } else {
     fileName = "reply.md";
     translatedFileName = "reply_translated.md";
-    intent =
-      "Write a reply to their latest inbound message. Be professional and specific to their ask (interview scheduling, questions, offer discussion, salary/notice/work-type questions, etc.). If they ask about salary, notice, start date, or employment type, answer from Candidate preferences below — never invent figures.";
   }
+
+  const intent =
+    kind === "follow_up"
+      ? `${variantDef.intent} This is follow-up email #${Math.max(1, (item.followUpCount || 0) + 1)}.`
+      : variantDef.intent;
+  const craftExtra = `\n${variantDef.craftGuide}\n`;
+  const userNotesBlock = formatUserNotesBlock(options.userNote || "");
 
   const prefs = getJobPreferences();
   const prefsBlock =
@@ -253,10 +248,11 @@ Position: ${item.position || "unknown"}
 Reply-To address (latest SENT/INBOX counterpart): ${replyTo}
 Thread anchor subject: ${thread?.anchorSubject || "(none)"}
 Thread anchor folder: ${thread?.anchorFolder || "(none)"}
+Variant: ${variantDef.id}
 
 Candidate preferences:
 ${prefsBlock}
-
+${userNotesBlock}
 Task: ${intent}
 SUBJECT must continue the thread (Re: …) using the anchor subject when possible — never start a new cold thread.
 
@@ -280,7 +276,7 @@ SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, t
   const { text, language: sendLanguage } = extractSendLanguage(rawText);
   const parsed = parseSubjectBody(text);
   if (!parsed) {
-    throw new Error("Agent could not produce SUBJECT/BODY");
+    throw new Error(t("tracker.error.agentSubjectBody"));
   }
 
   const subjectThreaded = replySubject(
@@ -350,5 +346,10 @@ ${toWrite}
       .where(eq(trackerItems.id, itemId))
       .get()?.workspaceFolder || path.basename(folder);
 
-  return { fileName, subject: subjectOut, workspaceFolder };
+  return {
+    fileName,
+    subject: subjectOut,
+    workspaceFolder,
+    variant: variantDef.id,
+  };
 }

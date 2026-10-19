@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useT } from "@/components/I18nProvider";
+import { useIntlLocale, useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui";
 import "./tracker-detail.css";
 
@@ -55,12 +55,12 @@ type TimelineData = {
   updatedAt: string | null;
 };
 
-function formatDay(iso: string | null): string {
+function formatDay(iso: string | null, locale: string): string {
   if (!iso) return "—";
   const d = iso.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return iso;
   try {
-    return new Date(`${d}T12:00:00`).toLocaleDateString(undefined, {
+    return new Date(`${d}T12:00:00`).toLocaleDateString(locale, {
       day: "numeric",
       month: "short",
       year: "numeric",
@@ -70,9 +70,9 @@ function formatDay(iso: string | null): string {
   }
 }
 
-function formatMailWhen(iso: string): string {
+function formatMailWhen(iso: string, locale: string): string {
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString(locale, {
       day: "numeric",
       month: "short",
       hour: "2-digit",
@@ -94,6 +94,7 @@ function mailFolderLabel(
 
 export function TrackerDetail({ itemId }: { itemId: number }) {
   const t = useT();
+  const locale = useIntlLocale();
   const router = useRouter();
   const [item, setItem] = useState<DetailItem | null>(null);
   const [mails, setMails] = useState<DetailMail[]>([]);
@@ -297,7 +298,7 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
                         <time className="cmae-td-event-date">
                           {ev.kind === "unknown_start" && !ev.at
                             ? t("tracker.detailPage.unknownDate")
-                            : formatDay(ev.at)}
+                            : formatDay(ev.at, locale)}
                         </time>
                         {ev.confidence === "low" ? (
                           <span className="cmae-td-event-conf">
@@ -323,7 +324,7 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
                                 rel="noopener noreferrer"
                               >
                                 <span className="cmae-td-child-mail-when">
-                                  {formatMailWhen(m.dateIso)}
+                                  {formatMailWhen(m.dateIso, locale)}
                                 </span>
                                 <span
                                   className="cmae-td-child-mail-from"

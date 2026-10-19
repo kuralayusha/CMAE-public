@@ -32,6 +32,10 @@ import {
   samePrimaryEmail,
 } from "./identity";
 import { collapseInactiveActiveTwins } from "./inactive";
+import {
+  parsePendingGmailDraft,
+  shouldClearPendingGmailDraft,
+} from "./pending-draft";
 
 function countFollowUps(
   mails: { folder: string; subject: string; bodyText: string }[],
@@ -315,12 +319,20 @@ export async function rebuildTrackerItems(opts?: {
     let nextFollowUpAt = stayInactive ? null : resolved.nextFollowUpAt;
     let ignored = stayInactive ? 0 : resolved.ignored ? 1 : 0;
 
-    // Keep post-follow-up cooldown if draft was created before SENT sync
+    const oldPending = parsePendingGmailDraft(old?.notesJson ?? null);
+    const pendingCleared = shouldClearPendingGmailDraft(
+      oldPending,
+      lastOutboundAt,
+    );
+
+    // Legacy: keep post-follow-up cooldown only when no pending Gmail draft
+    // (Gmail Drafts alone must not push the row into in_progress).
     const oldCooldown = old?.nextFollowUpAt
       ? Date.parse(old.nextFollowUpAt)
       : NaN;
     if (
       !stayInactive &&
+      !oldPending &&
       Number.isFinite(oldCooldown) &&
       oldCooldown > Date.now() &&
       status === "follow_up_due"
@@ -339,11 +351,19 @@ export async function rebuildTrackerItems(opts?: {
       isClickAction: g.isClickAction || lastFlags.isClickAction,
       lastMailIntent: lastIntent,
     };
-    if (stayInactive && old?.notesJson) {
+    if (old?.notesJson) {
       try {
         const prevNotes = JSON.parse(old.notesJson) as Record<string, unknown>;
-        if (prevNotes.statusBeforeInactive) {
+        if (stayInactive && prevNotes.statusBeforeInactive) {
           notesObj.statusBeforeInactive = prevNotes.statusBeforeInactive;
+        }
+        if (
+          !stayInactive &&
+          oldPending &&
+          !pendingCleared &&
+          prevNotes.pendingGmailDraft
+        ) {
+          notesObj.pendingGmailDraft = prevNotes.pendingGmailDraft;
         }
       } catch {
         /* ignore */

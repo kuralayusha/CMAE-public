@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { prepareDraftForItem } from "@/lib/tracker/agents/followup";
+import {
+  getVariantDef,
+  normalizeUserNote,
+  type DraftPrepareKind,
+} from "@/lib/tracker/draft-variants";
 import type { DraftKind } from "@/lib/tracker/types";
 
 export const runtime = "nodejs";
@@ -24,7 +29,12 @@ export async function POST(
         { status: 400 },
       );
     }
-    const body = (await req.json().catch(() => ({}))) as { kind?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      kind?: string;
+      variant?: string;
+      userNote?: string;
+      eventKinds?: string[];
+    };
     const kind = (body.kind || "follow_up") as Exclude<DraftKind, "application">;
     if (!KINDS.includes(kind as (typeof KINDS)[number])) {
       return NextResponse.json(
@@ -32,7 +42,22 @@ export async function POST(
         { status: 400 },
       );
     }
-    const result = await prepareDraftForItem(id, kind);
+    const prepareKind = kind as DraftPrepareKind;
+    if (body.variant && !getVariantDef(prepareKind, body.variant)) {
+      return NextResponse.json(
+        { error: t("tracker.error.invalidVariant") },
+        { status: 400 },
+      );
+    }
+    const userNote = normalizeUserNote(body.userNote);
+    const eventKinds = Array.isArray(body.eventKinds)
+      ? body.eventKinds.filter((k): k is string => typeof k === "string")
+      : undefined;
+    const result = await prepareDraftForItem(id, kind, {
+      variant: body.variant,
+      userNote,
+      eventKinds,
+    });
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

@@ -6,17 +6,25 @@ import {
 } from "@/lib/cv/library";
 import { getDb } from "@/lib/db/client";
 import { trackerItems } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/t";
 import { getGmailCredentials, getSettingsRow } from "@/lib/settings/service";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
-import { appendDraft } from "./imap";
+import {
+  appendDraft,
+  draftExistsBySubject,
+  gmailDraftsFolderUrl,
+} from "./imap";
 import { assertItemActiveForDrafts } from "./inactive";
 import {
   findEmailDraftInFolder,
   findNamedDraft,
   type ParsedMailDraft,
 } from "./parse-mail-md";
+import {
+  parsePendingGmailDraft,
+  withPendingGmailDraft,
+} from "./pending-draft";
 import { replySubject, resolveThreadReplyTarget } from "./reply-thread";
-import { FOLLOW_UP_REPEAT_COOLDOWN_DAYS } from "./status";
 import type { DraftKind } from "./types";
 
 function folderPathForItem(item: {
@@ -44,9 +52,7 @@ export function resolveDraftContent(
 } {
   const folder = folderPathForItem(item);
   if (!folder) {
-    throw new Error(
-      "This row has no workspace folder — research output is required",
-    );
+    throw new Error(t("tracker.error.noWorkspaceFolder"));
   }
 
   let draft: ParsedMailDraft | null = null;
@@ -72,8 +78,8 @@ export function resolveDraftContent(
   if (!draft) {
     throw new Error(
       kind === "application"
-        ? "email_original.md draft not found"
-        : `${kind} draft is not ready yet — use the prepare button first`,
+        ? t("tracker.error.draftMissingOriginal")
+        : t("tracker.error.draftNotReady", { kind }),
     );
   }
 
@@ -93,7 +99,7 @@ export function resolveDraftContent(
 
   const to = item.primaryTo;
   if (!to) {
-    throw new Error("No recipient email address (primaryTo / thread)");
+    throw new Error(t("tracker.error.noRecipient"));
   }
 
   return { ...draft, to, inReplyTo: null, references: null };
@@ -102,16 +108,19 @@ export function resolveDraftContent(
 export async function createGmailDraftForItem(
   itemId: number,
   kind: DraftKind,
+  opts?: { ensure?: boolean },
 ): Promise<{
   gmailUrl: string;
   subject: string;
   to: string;
   attachedCv?: string | null;
   cvWarning?: string | null;
+  /** true when an existing Drafts message was reused (ensure mode) */
+  reused?: boolean;
 }> {
   const creds = getGmailCredentials();
   if (!creds) {
-    throw new Error("Gmail credentials are missing");
+    throw new Error(t("tracker.error.gmailCredentialsMissing"));
   }
 
   const db = getDb();
@@ -120,13 +129,17 @@ export async function createGmailDraftForItem(
     .from(trackerItems)
     .where(eq(trackerItems.id, itemId))
     .get();
-  if (!item) throw new Error("Tracker item not found");
+  if (!item) throw new Error(t("tracker.error.notFound"));
   assertItemActiveForDrafts(itemId);
 
-  if (kind === "follow_up" && item.status !== "follow_up_due") {
-    throw new Error(
-      "Follow-up is currently locked — wait 7 days after the last follow-up (or follow-up day has not arrived yet)",
-    );
+  const pending = parsePendingGmailDraft(item.notesJson);
+  // Pending reopen may run ensure while still on follow_up_due / rejected / needs_reply
+  if (
+    kind === "follow_up" &&
+    item.status !== "follow_up_due" &&
+    !(opts?.ensure && pending?.kind === "follow_up")
+  ) {
+    throw new Error(t("tracker.error.followUpLocked"));
   }
 
   const settings = getSettingsRow();
@@ -141,6 +154,39 @@ export async function createGmailDraftForItem(
     kind,
     settings?.preferredLanguage || "en",
   );
+
+  const draftsUrl = gmailDraftsFolderUrl(creds.address);
+
+  if (opts?.ensure) {
+    const exists = await draftExistsBySubject(
+      creds.address,
+      creds.appPassword,
+      content.subject,
+    );
+    if (exists) {
+      if (kind === "follow_up" || kind === "thanks" || kind === "reply") {
+        db.update(trackerItems)
+          .set({
+            notesJson: withPendingGmailDraft(item.notesJson, {
+              kind,
+              at: pending?.at || new Date().toISOString(),
+              subject: content.subject,
+              draftsUrl,
+            }),
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(trackerItems.id, itemId))
+          .run();
+      }
+      return {
+        gmailUrl: draftsUrl,
+        subject: content.subject,
+        to: content.to,
+        reused: true,
+      };
+    }
+    // Missing in Drafts — fall through and recreate from workspace .md
+  }
 
   let attachedCv: string | null = null;
   let cvWarning: string | null = null;
@@ -180,21 +226,21 @@ export async function createGmailDraftForItem(
     attachments,
   });
 
+  // Gmail Drafts ≠ sent: keep status / followUpCount until SENT sync.
   const patch: Partial<typeof trackerItems.$inferInsert> = {
     updatedAt: new Date().toISOString(),
   };
-  if (kind === "follow_up") {
-    const next = new Date();
-    next.setDate(next.getDate() + FOLLOW_UP_REPEAT_COOLDOWN_DAYS);
-    patch.followUpCount = item.followUpCount + 1;
-    patch.hasFollowUpDraft = 0;
-    // Block follow-up actions until cooldown; sync will refine from SENT date.
-    patch.status = "in_progress";
-    patch.waitingOn = "them";
-    patch.nextFollowUpAt = next.toISOString();
+  if (kind === "follow_up" || kind === "thanks" || kind === "reply") {
+    patch.notesJson = withPendingGmailDraft(item.notesJson, {
+      kind,
+      at: new Date().toISOString(),
+      subject: content.subject,
+      draftsUrl: result.draftsUrl,
+    });
+    if (kind === "follow_up") patch.hasFollowUpDraft = 0;
+    if (kind === "thanks") patch.hasThanksDraft = 0;
+    if (kind === "reply") patch.hasReplyDraft = 0;
   }
-  if (kind === "thanks") patch.hasThanksDraft = 0;
-  if (kind === "reply") patch.hasReplyDraft = 0;
 
   db.update(trackerItems).set(patch).where(eq(trackerItems.id, itemId)).run();
 
@@ -204,5 +250,6 @@ export async function createGmailDraftForItem(
     to: content.to,
     attachedCv,
     cvWarning,
+    reused: false,
   };
 }

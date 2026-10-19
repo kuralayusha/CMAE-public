@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { localeUpper } from "@/lib/i18n/case";
+import { intlLocale } from "@/lib/i18n/intl-locale";
 import { tFromPacks, type TVars } from "@/lib/i18n/lookup";
 import { APP_LANGUAGE, type LocalePack } from "@/lib/i18n/types";
 
@@ -122,4 +123,10 @@ export function useT() {
 export function useLocaleUpper() {
   const { code } = useI18n();
   return useCallback((text: string) => localeUpper(text, code), [code]);
+}
+
+/** BCP-47 tag for Intl date/time — follows CMAE preferred language. */
+export function useIntlLocale() {
+  const { code } = useI18n();
+  return intlLocale(code);
 }

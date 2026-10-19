@@ -29,6 +29,10 @@ import {
   parseEmailAddr,
 } from "./identity";
 import { collapseInactiveActiveTwins } from "./inactive";
+import {
+  parsePendingGmailDraft,
+  shouldClearPendingGmailDraft,
+} from "./pending-draft";
 import { normalizeMailText } from "./signals";
 import { resolveStatus } from "./status";
 import type { SyncProgressFn } from "./types";
@@ -325,7 +329,10 @@ function refreshItemStatus(
     isRejected: lastFlags.isRejected || meaningfulIntent === "rejection",
   });
 
-  // Keep post-follow-up cooldown
+  const pending = parsePendingGmailDraft(item.notesJson);
+  const pendingCleared = shouldClearPendingGmailDraft(pending, lastOutboundAt);
+
+  // Legacy cooldown only when not waiting on user to send a Gmail draft
   let status = resolved.status;
   let waitingOn = resolved.waitingOn;
   let nextFollowUpAt = resolved.nextFollowUpAt;
@@ -333,6 +340,7 @@ function refreshItemStatus(
     ? Date.parse(item.nextFollowUpAt)
     : NaN;
   if (
+    !pending &&
     Number.isFinite(oldCooldown) &&
     oldCooldown > Date.now() &&
     status === "follow_up_due"
@@ -360,6 +368,9 @@ function refreshItemStatus(
     isClickAction: lastFlags.isClickAction,
     lastMailIntent: lastIntent,
   };
+  if (pendingCleared) {
+    delete notesObj.pendingGmailDraft;
+  }
 
   db.update(trackerItems)
     .set({

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { useIntlLocale, useLocaleUpper, useT } from "@/components/I18nProvider";
 import { derivePlain } from "@/lib/research/plain";
 import type { JobStatus, TermKind, TermLine } from "@/lib/research/types";
 
@@ -47,6 +47,7 @@ export function Terminal({
 }: Props) {
   const t = useT();
   const upper = useLocaleUpper();
+  const locale = useIntlLocale();
   const [lines, setLines] = useState<TermLine[]>([]);
   const [status, setStatus] = useState<JobStatus>("queued");
   const [folderName, setFolderName] = useState(
@@ -108,7 +109,7 @@ export function Terminal({
         id: line.id,
         kind: line.kind,
         color: KIND_COLOR[line.kind],
-        stamp: formatStamp(line.at),
+        stamp: formatStamp(line.at, locale),
         text: line.text,
         agentHint: null as string | null,
         agent: line.agent ?? guessAgentFromText(line.text),
@@ -128,7 +129,12 @@ export function Terminal({
     for (const line of lines) {
       const plain =
         line.plain ||
-        derivePlain({ kind: line.kind, text: line.text, agent: line.agent });
+        derivePlain({
+          kind: line.kind,
+          text: line.text,
+          agent: line.agent,
+          t,
+        });
       if (!plain) continue;
       if (plain === lastPlain) continue;
       lastPlain = plain;
@@ -144,14 +150,14 @@ export function Terminal({
             : simpleKind === "ok"
               ? KIND_COLOR.ok
               : KIND_COLOR.think,
-        stamp: formatStamp(line.at),
+        stamp: formatStamp(line.at, locale),
         text: body,
         agentHint,
         agent: line.agent ?? guessAgentFromText(line.text),
       });
     }
     return out;
-  }, [lines, logMode]);
+  }, [lines, logMode, locale, t]);
 
   useEffect(() => {
     if (collapsed || !stuckBottom || !scroller.current) return;
@@ -174,7 +180,7 @@ export function Terminal({
     try {
       const res = await fetch(`/api/research/${jobId}/cancel`, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Cancel failed");
+      if (!res.ok) throw new Error(data.error || t("terminal.cancelFailed"));
       if (data.folderName) setFolderName(data.folderName);
       setStatus("canceled");
       setConfirmOpen(false);
@@ -395,8 +401,8 @@ export function Terminal({
   );
 }
 
-function formatStamp(at: number) {
-  return new Date(at).toLocaleTimeString(undefined, {
+function formatStamp(at: number, locale: string) {
+  return new Date(at).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

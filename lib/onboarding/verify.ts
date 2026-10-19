@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { decryptOptional } from "@/lib/crypto/encryption";
 import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/t";
 import { getAgentCwd } from "@/lib/paths";
 import {
   getGmailCredentials,
@@ -53,7 +54,7 @@ export async function verifyGmailImap(): Promise<VerifyCheck> {
   if (!creds) {
     return {
       ok: false,
-      error: "Gmail address or App Password is missing",
+      error: t("onboarding.verify.gmailMissing"),
     };
   }
 
@@ -92,7 +93,7 @@ export async function verifyGmailImap(): Promise<VerifyCheck> {
 export async function verifyCursorApiKey(): Promise<VerifyCheck> {
   const apiKey = resolveCursorApiKey();
   if (!apiKey) {
-    return { ok: false, error: "Cursor API key is missing" };
+    return { ok: false, error: t("onboarding.verify.cursorMissing") };
   }
 
   try {
@@ -108,7 +109,9 @@ export async function verifyCursorApiKey(): Promise<VerifyCheck> {
     if (result.status === "error" || !result.result) {
       return {
         ok: false,
-        error: `Cursor API did not respond (status=${result.status ?? "unknown"})`,
+        error: t("onboarding.verify.cursorNoResponse", {
+          status: result.status ?? "unknown",
+        }),
       };
     }
     persistEnvCursorKeyIfNeeded();
@@ -136,13 +139,13 @@ export async function verifyOnboardingConnections(): Promise<OnboardingVerifyRes
 function humanizeImapError(msg: string): string {
   const m = msg.toLowerCase();
   if (m.includes("invalid credentials") || m.includes("authentication failed")) {
-    return "Gmail login rejected — check the address and App Password";
+    return t("onboarding.verify.gmailRejected");
   }
   if (m.includes("application-specific password")) {
-    return "App Password required — create an app password in your Google account";
+    return t("onboarding.verify.gmailAppPasswordRequired");
   }
   if (m.includes("timeout") || m.includes("timed out")) {
-    return "Timed out connecting to Gmail — try again";
+    return t("onboarding.verify.gmailTimeout");
   }
   return msg.slice(0, 200);
 }
@@ -155,10 +158,10 @@ function humanizeCursorError(msg: string): string {
     m.includes("invalid") ||
     m.includes("api key")
   ) {
-    return "Cursor API key is invalid or unauthorized — get a new key from the dashboard";
+    return t("onboarding.verify.cursorInvalid");
   }
   if (m.includes("timeout") || m.includes("timed out")) {
-    return "Cursor API timed out — try again";
+    return t("onboarding.verify.cursorTimeout");
   }
   return msg.slice(0, 200);
 }

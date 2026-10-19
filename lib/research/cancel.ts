@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import { emitLine, getJob, setJobStatus } from "./events";
 import {
   folderStatusSuffix,
@@ -59,7 +60,7 @@ export async function cancelJob(jobId: string): Promise<{
 
   setJobStatus(jobId, "canceled", {
     folderName,
-    error: "Canceled by user",
+    error: t("research.error.canceledByUser"),
   });
   emitLine(jobId, "system", `[conductor] stopped · folder → ${folderName}`);
 

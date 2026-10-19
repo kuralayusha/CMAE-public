@@ -6,6 +6,7 @@ import {
   INCREMENTAL_PATCH_MAX,
   patchTrackerWithNewMails,
 } from "./incremental";
+import { reconcilePendingAgainstLiveDrafts } from "./pending-draft";
 import { rebuildTrackerItems } from "./rebuild";
 import { syncMailsFromGmail, type SyncMode } from "./sync";
 import type { SyncProgressFn } from "./types";
@@ -80,6 +81,9 @@ export async function runTrackerSync(opts?: {
   }
 
   throwIfSyncCanceled(signal);
+  // Drop pending clock/banner if user deleted the draft in Gmail
+  await reconcilePendingAgainstLiveDrafts({ force: true });
+
   log?.(
     "ok",
     t("sync.complete", { mails: upserted, rows: itemCount }),

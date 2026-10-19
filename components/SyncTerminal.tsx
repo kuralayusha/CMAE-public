@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { useIntlLocale, useLocaleUpper, useT } from "@/components/I18nProvider";
 import type { SyncLogKind, SyncLogLine } from "@/lib/tracker/types";
 
 type SyncTermStatus = "running" | "done" | "error" | "canceled";
@@ -24,6 +24,7 @@ const KIND_COLOR: Record<SyncLogKind, string> = {
 export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
   const t = useT();
   const upper = useLocaleUpper();
+  const locale = useIntlLocale();
   const [stuckBottom, setStuckBottom] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
@@ -120,7 +121,7 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
               className={`term-line term-line-simple term-kind-${line.kind}`}
               style={{ color: KIND_COLOR[line.kind] }}
             >
-              <span className="term-stamp">{formatStamp(line.at)}</span>
+              <span className="term-stamp">{formatStamp(line.at, locale)}</span>
               <span className="term-line-main">{line.text}</span>
             </div>
           ))}
@@ -135,8 +136,8 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
   );
 }
 
-function formatStamp(at: number) {
-  return new Date(at).toLocaleTimeString(undefined, {
+function formatStamp(at: number, locale: string) {
+  return new Date(at).toLocaleTimeString(locale, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

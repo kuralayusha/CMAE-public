@@ -73,6 +73,13 @@ export type TrackerItemRow = {
   createdAt: string;
 };
 
+export type PendingGmailDraftInfo = {
+  kind: Exclude<DraftKind, "application">;
+  at: string;
+  subject: string;
+  draftsUrl?: string;
+};
+
 export type TrackerListItem = TrackerItemRow & {
   lastActivityAt: string | null;
   statusLabel: string;
@@ -80,6 +87,11 @@ export type TrackerListItem = TrackerItemRow & {
   gmailUrls: string[];
   /** OOO / dated wait — when they said they'd be back (YYYY-MM-DD) */
   waitingUntil: string | null;
+  /**
+   * Gmail Drafts created in CMAE but not yet seen as SENT.
+   * Status stays put until sync finds the outbound.
+   */
+  pendingGmailDraft: PendingGmailDraftInfo | null;
 };
 
 export type TrackerSection = {

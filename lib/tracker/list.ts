@@ -5,18 +5,26 @@ import {
   trackerItemMails,
   trackerItems,
 } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
 import { buildGmailThreadUrls } from "./gmail-links";
+import {
+  parsePendingGmailDraft,
+  reconcileDraftFlagsForRow,
+} from "./pending-draft";
 import { getSyncState } from "./sync";
 import {
   STATUS_ORDER,
-  STATUS_TITLES,
   type TrackerListItem,
   type TrackerSection,
   type TrackerSentiment,
   type TrackerStatus,
   type WaitingOn,
 } from "./types";
+
+function statusTitle(status: TrackerStatus): string {
+  return t(`tracker.section.${status}`);
+}
 
 function parseWaitingUntil(notesJson: string | null): string | null {
   if (!notesJson) return null;
@@ -31,6 +39,11 @@ function parseWaitingUntil(notesJson: string | null): string | null {
 function mapRow(
   row: typeof trackerItems.$inferSelect,
   gmailUrls: string[],
+  flags: {
+    hasFollowUpDraft: boolean;
+    hasThanksDraft: boolean;
+    hasReplyDraft: boolean;
+  },
 ): TrackerListItem {
   const status = row.status as TrackerStatus;
   const lastActivityAt =
@@ -55,15 +68,16 @@ function mapRow(
     researchJobId: row.researchJobId,
     primaryTo: row.primaryTo,
     notesJson: row.notesJson,
-    hasFollowUpDraft: Boolean(row.hasFollowUpDraft),
-    hasThanksDraft: Boolean(row.hasThanksDraft),
-    hasReplyDraft: Boolean(row.hasReplyDraft),
+    hasFollowUpDraft: flags.hasFollowUpDraft,
+    hasThanksDraft: flags.hasThanksDraft,
+    hasReplyDraft: flags.hasReplyDraft,
     updatedAt: row.updatedAt,
     createdAt: row.createdAt,
     lastActivityAt,
-    statusLabel: STATUS_TITLES[status] || status,
+    statusLabel: statusTitle(status),
     gmailUrls,
     waitingUntil: parseWaitingUntil(row.notesJson),
+    pendingGmailDraft: parsePendingGmailDraft(row.notesJson),
   };
 }
 
@@ -135,7 +149,10 @@ export function listTrackerSections(): {
     .select()
     .from(trackerItems)
     .all()
-    .map((row) => mapRow(row, urlsMap.get(row.id) || []));
+    .map((row) => {
+      const flags = reconcileDraftFlagsForRow(row);
+      return mapRow(row, urlsMap.get(row.id) || [], flags);
+    });
   const byStatus = new Map<TrackerStatus, TrackerListItem[]>();
   for (const s of STATUS_ORDER) byStatus.set(s, []);
   for (const row of rows) {
@@ -150,7 +167,7 @@ export function listTrackerSections(): {
     if (!items.length) continue;
     sections.push({
       status,
-      title: STATUS_TITLES[status],
+      title: statusTitle(status),
       items,
     });
   }

@@ -83,6 +83,13 @@
     "cvTagsHint": "e.g. marketing, frontend",
     "uploadPdf": "Upload PDF"
   },
+  "cvDropzone": {
+    "title": "Drop your CV here",
+    "hint": "or click to choose a PDF. CMAE reads the text to personalize emails and attaches the file to drafts.",
+    "dragging": "Release to upload",
+    "busy": "Uploading…",
+    "aria": "Upload CV PDF — drop a file here or click to browse"
+  },
   "onboarding": {
     "languageTitle": "Choose your language",
     "languageLead": "This sets the language for the CMAE interface and for translated copies of your emails. Application emails to companies still follow each company’s language.",
@@ -131,7 +138,7 @@
     "jobTitle": "Your job preferences",
     "jobWhy": "Work type and notice period can appear in application and follow-up text. Salary is only mentioned in replies when the employer asks; CMAE never adds it on its own.",
     "cvTitle": "Upload your CV",
-    "cvWhy": "CMAE reads the text to personalize emails, and attaches the PDF to application and follow-up drafts in Gmail. At least one CV is required — you can add languages and labels later in Settings.",
+    "cvWhy": "At least one PDF is required to finish setup. CMAE uses it to personalize emails and attaches it to application and follow-up drafts in Gmail. You can add more languages and labels later in Settings.",
     "cvEmpty": "No CV yet.",
     "bootTitle": "Checking your setup…",
     "bootLead": "CMAE is confirming your Gmail connection and Cursor key. If something is wrong, you will go back to that step to fix it.",
@@ -154,7 +161,29 @@
     "bootCursorOk": "Cursor key confirmed",
     "bootCursorFail": "Cursor key check failed",
     "bootUnlockOk": "Tracker and Research are ready",
-    "stepLabel": "Step {current} / {total}"
+    "stepLabel": "Step {current} / {total}",
+    "verify": {
+      "gmailMissing": "Gmail address or App Password is missing",
+      "gmailRejected": "Gmail login rejected — check the address and App Password",
+      "gmailAppPasswordRequired": "App Password required — create an app password in your Google account",
+      "gmailTimeout": "Timed out connecting to Gmail — try again",
+      "cursorMissing": "Cursor API key is missing",
+      "cursorNoResponse": "Cursor API did not respond (status={status})",
+      "cursorInvalid": "Cursor API key is invalid or unauthorized — get a new key from the dashboard",
+      "cursorTimeout": "Cursor API timed out — try again"
+    },
+    "error": {
+      "saveFailed": "Save failed",
+      "gapsMissing": "Missing: {fields}",
+      "setupSaveFailed": "Setup could not be saved",
+      "unlockFailed": "Could not unlock Tracker",
+      "requiredFields": "Required fields are missing",
+      "uploadCv": "Could not upload CV",
+      "deleteCv": "Could not delete CV",
+      "updateLanguage": "Could not update language",
+      "completeFailed": "Could not complete setup",
+      "localeTranslateFailed": "Language pack translation failed"
+    }
   },
   "errors": {
     "cursorKeyMissing": "Cursor API key missing — add it in Settings or set CURSOR_API_KEY",
@@ -287,7 +316,105 @@
       "invalidId": "Invalid application id",
       "invalidKind": "Invalid draft kind",
       "notFound": "Application not found",
-      "createItemFailed": "Failed to create tracker item"
+      "createItemFailed": "Failed to create tracker item",
+      "noWorkspaceFolder": "This row has no workspace folder — research output is required",
+      "draftMissingOriginal": "Application draft (email_original.md) not found",
+      "draftNotReady": "{kind} draft is not ready yet — use the prepare button first",
+      "noRecipient": "No recipient email address",
+      "gmailCredentialsMissing": "Gmail credentials are missing",
+      "followUpLocked": "Follow-up is currently locked — wait after the last follow-up, or until the follow-up day arrives",
+      "agentSubjectBody": "Could not produce SUBJECT/BODY for the draft",
+      "gmailDraftsFolder": "Gmail Drafts folder not found",
+      "bulkIdsRequired": "Select at least one application",
+      "bulkActionInvalid": "Invalid bulk action",
+      "invalidVariant": "Invalid draft option"
+    },
+    "variantNote": {
+      "title": "Add a note (optional)",
+      "titleRecommended": "Add a note",
+      "recommended": "A short note helps the draft match what you mean.",
+      "back": "Back",
+      "prepare": "Prepare draft",
+      "preparing": "Preparing…"
+    },
+    "variantModal": {
+      "titleFollowUp": "Choose follow-up style",
+      "titleThanks": "Choose thank-you style",
+      "titleReply": "Choose reply style",
+      "lead": "Pick how this email should sound. You can add a short note next.",
+      "suggested": "Suggested"
+    },
+    "variant": {
+      "thanks_simple": {
+        "label": "Prepare thank-you",
+        "hint": "Short thanks after a rejection — leave the door open.",
+        "placeholder": "Optional: anything you want to add…"
+      },
+      "thanks_feedback": {
+        "label": "Thank-you + ask for feedback",
+        "hint": "Thanks plus one gentle request for brief feedback.",
+        "placeholder": "Optional: which area you care about feedback on…"
+      },
+      "thanks_future": {
+        "label": "Thank-you + stay in touch",
+        "hint": "Thanks and welcome future fitting roles.",
+        "placeholder": "Optional: role or area you care about…"
+      },
+      "followup_soft": {
+        "label": "Soft reminder",
+        "hint": "Short, low-pressure check-in after silence.",
+        "placeholder": "Optional note…"
+      },
+      "followup_value": {
+        "label": "Reminder + new value",
+        "hint": "Soft follow-up with one real update (from your note).",
+        "placeholder": "e.g. new certificate, project, or company news…"
+      },
+      "followup_closing": {
+        "label": "Closing follow-up",
+        "hint": "Last soft check-in — leave the door open.",
+        "placeholder": "Optional note…"
+      },
+      "reply_answer": {
+        "label": "Answer their questions",
+        "hint": "Reply to what they asked in the latest mail.",
+        "placeholder": "e.g. points you want covered…"
+      },
+      "reply_confirm_interview": {
+        "label": "Confirm interview",
+        "hint": "Accept the invitation and confirm a slot.",
+        "placeholder": "e.g. Feb 25 at 10:00 works for me"
+      },
+      "reply_reschedule": {
+        "label": "Reschedule / new slot",
+        "hint": "Politely ask for another time.",
+        "placeholder": "e.g. free Feb 25 between 9 and 14"
+      },
+      "reply_accept_offer": {
+        "label": "Accept offer",
+        "hint": "Clear acceptance with thanks.",
+        "placeholder": "Optional: start-date preference…"
+      },
+      "reply_decline_offer": {
+        "label": "Decline offer politely",
+        "hint": "Short, professional decline — door open.",
+        "placeholder": "Optional: reason you want to share…"
+      },
+      "reply_negotiate": {
+        "label": "Negotiate terms",
+        "hint": "Discuss salary / conditions from your notes.",
+        "placeholder": "e.g. target salary or remote preference…"
+      },
+      "reply_ask_clarify": {
+        "label": "Ask a clarifying question",
+        "hint": "Turn your note into 1–3 clear questions.",
+        "placeholder": "e.g. is AI use forbidden on the take-home?"
+      },
+      "reply_decline_process": {
+        "label": "Withdraw from process",
+        "hint": "Step back politely from the hiring process.",
+        "placeholder": "Optional: reason…"
+      }
     },
     "sel": {
       "aria": "Selection bar",
@@ -308,7 +435,15 @@
       "prepareReply": "Prepare reply draft",
       "draftReply": "Reply Gmail draft",
       "prepareThanks": "Prepare thanks",
-      "draftThanks": "Thanks Gmail draft"
+      "draftThanks": "Thanks Gmail draft",
+      "pendingSend": "Open in Gmail Drafts — send it yourself, then sync",
+      "pendingRecreating": "Draft missing — recreating from your saved template…"
+    },
+    "pendingDraft": {
+      "banner": "Gmail Drafts still has a CMAE draft for a row. Click the clock to open it, or sync after you send. If you deleted the draft in Gmail, refresh the list — the warning clears automatically.",
+      "cta": "Gmail sync",
+      "syncing": "Syncing…",
+      "popupBlocked": "Browser blocked the new tab — use the clock button on the row to open Gmail Drafts."
     },
     "gmailModal": {
       "title": "Gmail threads",
@@ -327,6 +462,7 @@
       "syncImapSkipped": "Gmail sync skipped",
       "draftWritten": "Draft saved: {file}",
       "gmailDraft": "Saved to Gmail Drafts: {subject}",
+      "gmailDraftPending": "Saved to Gmail Drafts: {subject}. Send from Gmail, then sync Tracker.",
       "attachment": "attachment: {name}"
     },
     "gmailModalLead": "{company} — {count} conversation parts. A normal click opens Gmail in a new tab; to stay here, use {mod}+click.",
@@ -373,7 +509,7 @@
     "localePrepFail": "Language update failed — your previous language is still active.",
     "localePrepBlocked": "Please wait until the language update finishes.",
     "jobWhy": "Work type and notice period can appear in application and follow-up text. Salary is only mentioned in replies when the employer asks.",
-    "cvHint": "Up to {max} PDFs. They attach automatically to application and follow-up drafts based on language and tags.",
+    "cvHint": "Up to {max} PDFs. Drop a file into the area below or click to browse — drafts pick the best match by language and tags.",
     "cvEmpty": "No CVs yet.",
     "cvLimit": "Limit reached ({max}). Delete one to add another.",
     "cvAdded": "CV added: {name}",
@@ -393,7 +529,20 @@
     "uninstallBody": "This removes the app and all of its data on this Mac. Your installer file (.dmg) is left alone so you can install again later. The app will quit immediately.",
     "uninstallConfirm": "Yes, uninstall",
     "uninstallingBtn": "Uninstalling…",
-    "uninstalling": "Uninstalling… the app will close shortly."
+    "uninstalling": "Uninstalling… the app will close shortly.",
+    "error": {
+      "loadFailed": "Could not load settings",
+      "saveFailed": "Save failed",
+      "loadCvs": "Could not load CV list",
+      "uploadCv": "Could not upload CV",
+      "updateCv": "Could not update CV",
+      "deleteCv": "Could not delete CV",
+      "cvPdfRequired": "PDF file required",
+      "cvPdfOnly": "Only PDF files are accepted",
+      "cvNotFound": "CV not found",
+      "cvParseFailed": "Could not extract text from PDF",
+      "cvLimitReached": "At most {max} CVs allowed"
+    }
   },
   "workspaceFiles": {
     "jobLinksTitle": "Open roles and application links",
@@ -438,7 +587,29 @@
     "deleteTitle": "Delete folder",
     "deleteBody": "The folder “{name}” and everything inside it will be permanently deleted. This cannot be undone.",
     "menuRename": "Rename",
-    "menuDelete": "Delete"
+    "menuDelete": "Delete",
+    "error": {
+      "loadListing": "Could not load listing",
+      "readFile": "Could not read file",
+      "rename": "Could not rename",
+      "delete": "Could not delete",
+      "openFileManager": "Could not open {name}",
+      "notVisible": "This folder is not visible in Folders",
+      "fileTooLarge": "File too large (max {max})",
+      "nameExists": "An item with this name already exists",
+      "rootRename": "The workspace root cannot be renamed",
+      "rootDelete": "The workspace root cannot be deleted",
+      "invalidPath": "Invalid path",
+      "invalidName": "Invalid name",
+      "invalidFolder": "Invalid folder",
+      "pathNotFound": "Path not found",
+      "folderNotFound": "Folder not found",
+      "fileNotFound": "File not found",
+      "filePathRequired": "File path required",
+      "notAFolder": "Path is not a folder",
+      "notAFile": "Path is not a file",
+      "assignIndexFailed": "Could not assign workspace folder index"
+    }
   },
   "terminal": {
     "simple": "Simple",
@@ -459,6 +630,7 @@
     "confirmCancel": "Yes, cancel",
     "cancelTitle": "Cancel this research?",
     "cancelBody": "Research will stop and this company folder will be marked as canceled.",
+    "cancelFailed": "Cancel failed",
     "status": {
       "queued": "queued",
       "running": "running",
@@ -528,6 +700,7 @@
     "hardSyncNote": "Full sync: messages older than 30 days were kept; duplicates were not rewritten",
     "imapCanceled": "Gmail sync canceled",
     "imapError": "Gmail sync error: {msg}",
+    "safetyMailDrop": "Sync safety error: mail count dropped ({before} → {after})",
     "hardModeIntro": "Full sync · last {days} days (older messages already saved are kept)",
     "incrementalIntro": "Quick sync · new mail since last sync (or last {days} days if needed)",
     "sinceNote": "since {date} · older saved messages are not removed",
@@ -537,6 +710,13 @@
     "readingFolder": "Reading {folder} ({mailbox})…",
     "messageCount": "{folder}: {count} messages…",
     "incrementalUid": "{folder}: checking new messages from {from} (last position {cursor})",
+    "incrementalEmpty": "{folder}: no new mail since position {cursor}",
+    "fetchingOne": "{folder}: downloading {current}/{total} (uid {uid})…",
+    "fetchOneFailed": "{folder}: uid {uid} timed out or failed — {msg}",
+    "fetchBatchFailed": "{folder}: batch download failed — {msg}",
+    "fetchConnectionDead": "{folder}: connection reset at uid {uid} — skipping it; run sync again for the rest",
+    "sentSkippedDeadConnection": "SENT skipped — INBOX download reset the IMAP connection; sync again to catch Sent",
+    "forceResetStuck": "Previous sync looked stuck — resetting and starting fresh",
     "incrementalFallback": "{folder}: quick sync failed — using date window instead ({msg})",
     "windowSync": "{folder}: syncing by date ({why})",
     "hardSyncWindow": "{folder}: full sync by date window",
@@ -590,6 +770,14 @@
     "removeFromPanel": "Remove from panel",
     "historyAria": "Research history",
     "historyEmpty": "No research yet",
-    "historyEmptyHint": "When you start with a new URL, it appears here."
+    "historyEmptyHint": "When you start with a new URL, it appears here.",
+    "error": {
+      "loadJobs": "Could not load research history",
+      "start": "Could not start research",
+      "jobNotFound": "Research job not found",
+      "linksRequired": "Add at least one company or careers URL",
+      "maxLinks": "Maximum {max} links at once",
+      "canceledByUser": "Canceled by user"
+    }
   }
 }

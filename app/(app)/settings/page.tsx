@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CvDropzone } from "@/components/CvDropzone";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import { PageHelpModal, usePageHelp } from "@/components/PageHelp";
@@ -115,7 +116,7 @@ export default function SettingsPage() {
   async function loadCvs() {
     const res = await fetch("/api/settings/cv");
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Could not load CV list");
+    if (!res.ok) throw new Error(data.error || t("settings.error.loadCvs"));
     setCvs(data.cvs || []);
     setCvMax(data.max || 4);
   }
@@ -180,7 +181,7 @@ export default function SettingsPage() {
         body: JSON.stringify({ ...form, jobPreferences: prefs }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
+      if (!res.ok) throw new Error(data.error || t("settings.error.saveFailed"));
       setMeta(data);
       if (data.jobPreferences) setPrefs({ ...DEFAULT_PREFS, ...data.jobPreferences });
       setForm((f) => ({ ...f, gmailAppPassword: "", cursorApiKey: "" }));
@@ -207,7 +208,7 @@ export default function SettingsPage() {
       fd.append("language", form.preferredLanguage || "en");
       const res = await fetch("/api/settings/cv", { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not upload CV");
+      if (!res.ok) throw new Error(data.error || t("settings.error.uploadCv"));
       setCvs(data.cvs || []);
       setStatus(
         t("settings.cvAdded", { name: data.entry?.label || file.name }),
@@ -233,7 +234,7 @@ export default function SettingsPage() {
         body: JSON.stringify(patch),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not update CV");
+      if (!res.ok) throw new Error(data.error || t("settings.error.updateCv"));
       setCvs(data.cvs || []);
       setStatus(t("settings.cvUpdated"));
     } catch (err) {
@@ -252,7 +253,7 @@ export default function SettingsPage() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not delete CV");
+      if (!res.ok) throw new Error(data.error || t("settings.error.deleteCv"));
       setCvs(data.cvs || []);
       setStatus(t("settings.cvDeleted"));
     } catch (err) {
@@ -672,23 +673,14 @@ export default function SettingsPage() {
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="cmae-form-hint">{t("settings.cvEmpty")}</p>
-            )}
+            ) : null}
 
             {cvs.length < cvMax ? (
-              <Field label={t("fields.uploadPdf")}>
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void uploadCv(file);
-                    e.target.value = "";
-                  }}
-                />
-              </Field>
+              <CvDropzone
+                busy={busy}
+                onFile={(file) => void uploadCv(file)}
+                onInvalid={(msg) => setStatus(msg)}
+              />
             ) : (
               <p className="cmae-form-hint">
                 {t("settings.cvLimit", { max: cvMax })}

@@ -5,6 +5,7 @@ import { t } from "@/lib/i18n/t";
 import { getGmailCredentials } from "@/lib/settings/service";
 import { fetchRecentMail, WINDOW_DAYS, type ImapSyncMode } from "./imap";
 import { SyncCanceledError, throwIfSyncCanceled } from "./cancel";
+import { normalizeMailText } from "./signals";
 import type { FetchedMail, SyncProgressFn } from "./types";
 
 export type SyncMode = ImapSyncMode;
@@ -72,9 +73,10 @@ export function upsertMails(mails: FetchedMail[]): UpsertMailsResult {
           ccAddr: m.ccAddr,
           subject: m.subject,
           dateIso: m.dateIso,
-          snippet: m.snippet || existing.snippet,
-          // Do not overwrite with an empty body (keep older/preserved body)
-          bodyText: m.bodyText || existing.bodyText,
+          snippet: normalizeMailText(m.snippet || existing.snippet).slice(0, 240),
+          // Do not overwrite with an empty body (keep older/preserved body).
+          // normalizeMailText repairs stray base64 HTML left by older IMAP parsers.
+          bodyText: normalizeMailText(m.bodyText || existing.bodyText),
           headersHash: m.headersHash ?? existing.headersHash,
         })
         .where(eq(mailMessages.id, existing.id))
@@ -92,8 +94,8 @@ export function upsertMails(mails: FetchedMail[]): UpsertMailsResult {
           ccAddr: m.ccAddr,
           subject: m.subject,
           dateIso: m.dateIso,
-          snippet: m.snippet,
-          bodyText: m.bodyText,
+          snippet: normalizeMailText(m.snippet).slice(0, 240),
+          bodyText: normalizeMailText(m.bodyText),
           headersHash: m.headersHash,
         })
         .returning({ id: mailMessages.id })
@@ -191,7 +193,10 @@ export async function syncMailsFromGmail(opts?: {
 
     if (afterCount < beforeCount) {
       throw new Error(
-        `Sync safety error: mail count dropped (${beforeCount} → ${afterCount})`,
+        t("sync.safetyMailDrop", {
+          before: beforeCount,
+          after: afterCount,
+        }),
       );
     }
 

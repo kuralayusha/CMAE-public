@@ -4,3 +4,4 @@
  */
 export { APP_LANGUAGE, type LocaleMeta, type LocalePack } from "./types";
 export { interpolate, tFromPacks, type TVars } from "./lookup";
+export { intlLocale } from "./intl-locale";

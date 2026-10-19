@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { setItemsActive, setItemsInactive } from "@/lib/tracker/inactive";
 import { listTrackerSections } from "@/lib/tracker/list";
@@ -19,11 +20,14 @@ export async function POST(req: Request) {
       : [];
 
     if (!ids.length) {
-      return NextResponse.json({ error: "ids required" }, { status: 400 });
+      return NextResponse.json(
+        { error: t("tracker.error.bulkIdsRequired") },
+        { status: 400 },
+      );
     }
     if (action !== "inactive" && action !== "active") {
       return NextResponse.json(
-        { error: "action: inactive | active" },
+        { error: t("tracker.error.bulkActionInvalid") },
         { status: 400 },
       );
     }

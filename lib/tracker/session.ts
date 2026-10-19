@@ -2,10 +2,14 @@ import { randomUUID } from "crypto";
 import { EventEmitter } from "events";
 import { t } from "@/lib/i18n/t";
 import { SyncCanceledError } from "./cancel";
+import { killActiveImapChild } from "./imap-child";
 import { listTrackerSections } from "./list";
 import { runTrackerSync } from "./run";
 import type { SyncMode } from "./sync";
 import type { SyncLogKind, SyncLogLine } from "./types";
+
+/** If no progress for this long, treat the session as stuck and allow a new one. */
+const STUCK_SYNC_MS = 45_000;
 
 export type SyncSessionStatus = "running" | "done" | "error" | "canceled";
 
@@ -143,14 +147,33 @@ function finish(
 
 /**
  * Start a new sync, or return the already-running one.
- * Work continues in-process even if the browser disconnects.
+ * Stuck sessions (no log lines for STUCK_SYNC_MS) are force-killed first.
  */
 export function startTrackerSyncSession(opts?: {
   skipImap?: boolean;
   mode?: SyncMode;
 }): SyncSessionPublic {
   const existing = getActiveSyncSession();
-  if (existing) return toPublic(existing);
+  if (existing) {
+    const lastAt = existing.lines.at(-1)?.at ?? existing.createdAt;
+    if (Date.now() - lastAt < STUCK_SYNC_MS) {
+      return toPublic(existing);
+    }
+    // Hung IMAP (often large source / signature image) — kill child + session
+    appendLine(
+      existing,
+      "err",
+      t("sync.forceResetStuck"),
+    );
+    try {
+      existing.cancelRequested = true;
+      existing.abort.abort();
+    } catch {
+      /* ignore */
+    }
+    killActiveImapChild();
+    finish(existing, "canceled");
+  }
 
   const mode: SyncMode = opts?.mode ?? "incremental";
   const abort = new AbortController();
@@ -197,6 +220,7 @@ export function startTrackerSyncSession(opts?: {
         },
       });
     } catch (err) {
+      killActiveImapChild();
       if (
         err instanceof SyncCanceledError ||
         session.cancelRequested ||
@@ -226,7 +250,15 @@ export function cancelTrackerSyncSession(id?: string): SyncSessionPublic | null 
   } catch {
     /* ignore */
   }
+  // Child holds the IMAP socket — SIGKILL unblocks parent immediately
+  killActiveImapChild();
   appendLine(session, "err", t("sync.cancelRequested"));
+  // Ensure UI leaves "running" even if the async task is wedged
+  setTimeout(() => {
+    if (session.status === "running") {
+      finish(session, "canceled");
+    }
+  }, 1500);
   return toPublic(session);
 }
 

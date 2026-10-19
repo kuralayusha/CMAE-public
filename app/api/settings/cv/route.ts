@@ -5,6 +5,7 @@ import {
   listCvs,
   MAX_CV_COUNT,
 } from "@/lib/cv/library";
+import { t } from "@/lib/i18n/t";
 import { updateSettings } from "@/lib/settings/service";
 
 export const runtime = "nodejs";
@@ -32,11 +33,14 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "PDF file required" }, { status: 400 });
+      return NextResponse.json(
+        { error: t("settings.error.cvPdfRequired") },
+        { status: 400 },
+      );
     }
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       return NextResponse.json(
-        { error: "Only PDF files are accepted" },
+        { error: t("settings.error.cvPdfOnly") },
         { status: 400 },
       );
     }

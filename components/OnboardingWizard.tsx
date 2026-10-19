@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
+import { CvDropzone } from "@/components/CvDropzone";
 import { useI18n, useLocaleUpper } from "@/components/I18nProvider";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import { RichText } from "@/components/RichText";
@@ -241,7 +242,7 @@ export function OnboardingWizard() {
       body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || "Save failed");
+    if (!res.ok) throw new Error(data.error || t("onboarding.error.saveFailed"));
     setHasGmailPw(Boolean(data.hasGmailAppPassword) || hasGmailPw);
     setHasCursorKey(Boolean(data.hasCursorApiKey));
     setCursorFromEnv(Boolean(data.cursorApiKeyFromEnv));
@@ -327,7 +328,9 @@ export function OnboardingWizard() {
         const statusData = await statusRes.json();
         const gaps = (statusData.gaps || []) as string[];
         if (gaps.length) {
-          throw new Error(`Missing: ${gaps.join(", ")}`);
+          throw new Error(
+            t("onboarding.error.gapsMissing", { fields: gaps.join(", ") }),
+          );
         }
         setBusy(false);
         setStep(STEPS.length - 1);
@@ -553,14 +556,14 @@ export function OnboardingWizard() {
         throw new Error(
           completeData.error ||
             (completeData.gaps
-              ? `Missing: ${(completeData.gaps as string[]).join(", ")}`
-              : "Could not complete"),
+              ? t("onboarding.error.gapsMissing", {
+                  fields: (completeData.gaps as string[]).join(", "),
+                })
+              : t("onboarding.error.completeFailed")),
         );
       }
       if (!completeData.complete && !completeData.onboardingCompletedAt) {
-        throw new Error(
-          "Setup could not be saved — try Finish setup again",
-        );
+        throw new Error(t("onboarding.error.setupSaveFailed"));
       }
 
       // Reopen SQLite on the sticky app-root so status matches Tracker gate
@@ -574,8 +577,7 @@ export function OnboardingWizard() {
         (!reconcileData.complete && !reconcileData.flagSet)
       ) {
         throw new Error(
-          reconcileData.error ||
-            "Setup finished but CMAE could not unlock Tracker — try Finish setup again",
+          reconcileData.error || t("onboarding.error.unlockFailed"),
         );
       }
 
@@ -605,7 +607,7 @@ export function OnboardingWizard() {
       fd.append("language", form.preferredLanguage || "en");
       const res = await fetch("/api/settings/cv", { method: "POST", body: fd });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not upload CV");
+      if (!res.ok) throw new Error(data.error || t("onboarding.error.uploadCv"));
       setCvs(data.cvs || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -622,7 +624,7 @@ export function OnboardingWizard() {
         method: "DELETE",
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not delete CV");
+      if (!res.ok) throw new Error(data.error || t("onboarding.error.deleteCv"));
       setCvs(data.cvs || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -641,7 +643,8 @@ export function OnboardingWizard() {
         body: JSON.stringify({ language }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not update language");
+      if (!res.ok)
+        throw new Error(data.error || t("onboarding.error.updateLanguage"));
       setCvs(data.cvs || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1180,23 +1183,13 @@ export function OnboardingWizard() {
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="cmae-onb-hint">{t("onboarding.cvEmpty")}</p>
-            )}
+            ) : null}
             {cvs.length < 4 ? (
-              <Field label={t("fields.uploadPdf")}>
-                <input
-                  className="cmae-onb-file"
-                  type="file"
-                  accept="application/pdf"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void uploadCv(file);
-                    e.target.value = "";
-                  }}
-                />
-              </Field>
+              <CvDropzone
+                busy={busy}
+                onFile={(file) => void uploadCv(file)}
+                onInvalid={setError}
+              />
             ) : null}
           </>
         ) : null}

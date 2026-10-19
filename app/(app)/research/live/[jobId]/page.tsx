@@ -2,9 +2,11 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useT } from "@/components/I18nProvider";
 import { Terminal } from "@/components/Terminal";
 
 export default function LiveTerminalPage() {
+  const t = useT();
   const params = useParams<{ jobId: string }>();
   const jobId = params.jobId;
   const [url, setUrl] = useState<string | null>(null);
@@ -17,7 +19,7 @@ export default function LiveTerminalPage() {
       try {
         const res = await fetch(`/api/research/${jobId}`);
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Job not found");
+        if (!res.ok) throw new Error(data.error || t("research.error.jobNotFound"));
         if (!alive) return;
         setUrl(data.url);
         setFolderName(data.folderName);
@@ -28,7 +30,7 @@ export default function LiveTerminalPage() {
     return () => {
       alive = false;
     };
-  }, [jobId]);
+  }, [jobId, t]);
 
   if (error) {
     return (
@@ -42,7 +44,7 @@ export default function LiveTerminalPage() {
     return (
       <div className="term-live-page">
         <p style={{ color: "#737373", fontFamily: "var(--font-mono), monospace", padding: 24 }}>
-          Loading terminal…
+          {t("research.loadingTerminal")}
         </p>
       </div>
     );

@@ -24,7 +24,11 @@ export async function POST(
         { status: 400 },
       );
     }
-    const body = (await req.json().catch(() => ({}))) as { kind?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      kind?: string;
+      /** Reopen pending: reuse Drafts if present, else recreate from .md */
+      ensure?: boolean;
+    };
     const kind = (body.kind || "application") as DraftKind;
     if (!KINDS.includes(kind)) {
       return NextResponse.json(
@@ -32,7 +36,9 @@ export async function POST(
         { status: 400 },
       );
     }
-    const result = await createGmailDraftForItem(id, kind);
+    const result = await createGmailDraftForItem(id, kind, {
+      ensure: Boolean(body.ensure),
+    });
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

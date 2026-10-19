@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { t } from "@/lib/i18n/t";
 import {
   getOnboardingGaps,
   isOnboardingComplete,
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
     if (gaps.length) {
       return NextResponse.json(
         {
-          error: "Required fields are missing",
+          error: t("onboarding.error.requiredFields"),
           gaps,
         },
         { status: 400 },

@@ -23,6 +23,7 @@ import {
   messageIdToGmailUrl,
   threadIdToGmailUrl,
 } from "./gmail-links";
+import { normalizeMailText } from "./signals";
 import type { TrackerStatus } from "./types";
 
 export type LinkedTimelineMail = {
@@ -162,8 +163,8 @@ function toBriefs(mails: LinkedTimelineMail[]): TimelineMailBrief[] {
     toAddr: m.toAddr,
     subject: m.subject,
     dateIso: m.dateIso,
-    snippet: m.snippet,
-    bodyPreview: (m.bodyText || m.snippet || "").slice(0, 800),
+    snippet: normalizeMailText(m.snippet || "").slice(0, 240),
+    bodyPreview: normalizeMailText(m.bodyText || m.snippet || "").slice(0, 800),
   }));
 }
 

@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { t } from "@/lib/i18n/t";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
 
 export const MAX_CV_COUNT = 4;
@@ -179,7 +180,9 @@ export async function addCvFromBuffer(
   ensureDir();
   const entries = syncCvLibrary();
   if (entries.length >= MAX_CV_COUNT) {
-    throw new Error(`At most ${MAX_CV_COUNT} CVs can be stored`);
+    throw new Error(
+      t("settings.error.cvLimitReached", { max: MAX_CV_COUNT }),
+    );
   }
 
   let stem = sanitizeStem(originalName);
@@ -225,7 +228,7 @@ export function updateCvMeta(
 ): CvPublic {
   const entries = syncCvLibrary();
   const idx = entries.findIndex((e) => e.id === id);
-  if (idx < 0) throw new Error("CV not found");
+  if (idx < 0) throw new Error(t("settings.error.cvNotFound"));
 
   let next = entries.map((e) => ({ ...e }));
   const cur = next[idx]!;
@@ -252,7 +255,7 @@ export function updateCvMeta(
 export function deleteCv(id: string): void {
   const entries = syncCvLibrary();
   const entry = entries.find((e) => e.id === id);
-  if (!entry) throw new Error("CV not found");
+  if (!entry) throw new Error(t("settings.error.cvNotFound"));
   const abs = path.join(cvsDir(), entry.fileName);
   if (fs.existsSync(abs)) fs.unlinkSync(abs);
   let next = entries.filter((e) => e.id !== id);

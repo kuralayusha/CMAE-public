@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadEnPack, saveUserPack } from "@/lib/i18n/pack";
 import { getRemoteTranslateUrl, isVercelRuntime } from "@/lib/i18n/remote";
+import { countMissingLeaves, mergeShape } from "@/lib/i18n/shape";
 import { translateLocalePack } from "@/lib/i18n/translate";
 import type { LocalePack } from "@/lib/i18n/types";
 import { updateSettings } from "@/lib/settings/service";
@@ -71,12 +72,34 @@ export async function POST(req: Request) {
           { status: 502 },
         );
       }
-      const meta = saveUserPack(code, pack);
+      const localEn = loadEnPack();
+      // Remote catalog can lag behind this build's en.json. Prefer a local
+      // full translate so new keys are not left as English forever.
+      if (countMissingLeaves(localEn, pack) > 0) {
+        try {
+          const local = await translateLocalePack(targetLanguage, {
+            persist: true,
+          });
+          return NextResponse.json({
+            code: local.code,
+            pack: local.pack,
+            en: localEn,
+            meta: local.meta,
+            skippedLlm: local.skippedLlm,
+            host: "local-after-stale-remote",
+            remoteGaps: countMissingLeaves(localEn, pack),
+          });
+        } catch {
+          /* fall through — save merged pack with English fills */
+        }
+      }
+      const merged = mergeShape(localEn, pack);
+      const meta = saveUserPack(code, merged);
       updateSettings({ preferredLanguage: code });
       return NextResponse.json({
         code,
-        pack,
-        en: remoteData.en || loadEnPack(),
+        pack: merged,
+        en: localEn,
         meta,
         skippedLlm: Boolean(remoteData.skippedLlm),
         host: remoteUrl,

@@ -1,3 +1,125 @@
+@keyframes cmae-tracker-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cmae-tracker-spinner {
+  display: block;
+  animation: cmae-tracker-spin 0.7s linear infinite;
+}
+
+.cmae-tracker-pending-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cmae-tracker-pending-banner p {
+  margin: 0;
+  flex: 1 1 220px;
+}
+
+/* Prepare-draft variant modal (reuses gmail modal shell) */
+
+.cmae-prepare-modal {
+  width: min(440px, 100%);
+}
+
+.cmae-prepare-variant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  max-height: min(52vh, 420px);
+}
+
+.cmae-prepare-variant {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.cmae-prepare-variant:hover {
+  border-color: var(--ink-muted);
+}
+
+.cmae-prepare-variant.is-selected {
+  border-color: var(--ink);
+}
+
+.cmae-prepare-variant-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.cmae-prepare-variant-label {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.cmae-prepare-variant-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-muted);
+  border: 1px solid var(--line);
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+
+.cmae-prepare-variant-hint {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-muted);
+}
+
+.cmae-prepare-note {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cmae-prepare-note-input {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+
+.cmae-prepare-note-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  outline-offset: 1px;
+}
+
+.cmae-prepare-note-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* Tracker toolbar: hard-sync switch + sync control */
 
 .cmae-tracker-sync-controls {

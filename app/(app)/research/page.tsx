@@ -39,7 +39,7 @@ export default function ResearchPage() {
     try {
       const res = await fetch("/api/research");
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not load jobs");
+      if (!res.ok) throw new Error(data.error || t("research.error.loadJobs"));
 
       const active: JobCard[] = data.active || data.jobs || [];
       const hist: JobCard[] = data.history || active;
@@ -59,7 +59,7 @@ export default function ResearchPage() {
     } finally {
       setLoading(false);
     }
-  }, [upsertCatalog]);
+  }, [upsertCatalog, t]);
 
   useEffect(() => {
     void refreshJobs();
@@ -107,7 +107,7 @@ export default function ResearchPage() {
         body: JSON.stringify({ urls }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not start");
+      if (!res.ok) throw new Error(data.error || t("research.error.start"));
       const created: JobCard[] = data.jobs || [];
       upsertCatalog(created);
       setPanelIds((prev) => [...created.map((j) => j.id), ...prev]);

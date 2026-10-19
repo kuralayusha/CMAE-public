@@ -29,7 +29,7 @@ export async function askLlm(
     agent,
     "think",
     label || "Model thinking…",
-    "Evaluating status",
+    t("terminal.plain.evaluating"),
   );
   const apiKey = await resolveApiKey();
   const result = await Agent.prompt(prompt, {

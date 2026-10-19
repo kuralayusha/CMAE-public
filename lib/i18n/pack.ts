@@ -8,6 +8,7 @@ import {
   getLocaleMetaPath,
   getUserPackPath,
 } from "./paths";
+import { countMissingLeaves, mergeShape } from "./shape";
 import type { LocaleMeta, LocalePack } from "./types";
 import { APP_LANGUAGE } from "./types";
 
@@ -46,6 +47,8 @@ export function loadLocaleMeta(): LocaleMeta | null {
 }
 
 export function saveUserPack(code: string, pack: LocalePack): LocaleMeta {
+  // Always align to shipped en.json so remote/stale catalogs cannot drop keys
+  const merged = mergeShape(loadEnPack(), pack);
   const meta: LocaleMeta = {
     code: code.toLowerCase().slice(0, 16) || APP_LANGUAGE,
     updatedAt: new Date().toISOString(),
@@ -53,7 +56,7 @@ export function saveUserPack(code: string, pack: LocalePack): LocaleMeta {
   };
   fs.writeFileSync(
     /*turbopackIgnore: true*/ getUserPackPath(),
-    `${JSON.stringify(pack, null, 2)}\n`,
+    `${JSON.stringify(merged, null, 2)}\n`,
     "utf8",
   );
   fs.writeFileSync(
@@ -80,13 +83,30 @@ export function clearUserPack(): void {
 export function loadActivePack(): { code: string; pack: LocalePack } {
   const meta = loadLocaleMeta();
   const user = loadUserPack();
+  const en = loadEnPack();
   if (user && meta?.code) {
-    return { code: meta.code, pack: user };
+    const pack = mergeShape(en, user);
+    // en.json changed but no missing keys — stamp new hash without LLM
+    const hash = hashEnPack(en);
+    if (
+      meta.enSourceHash !== hash &&
+      countMissingLeaves(en, pack) === 0
+    ) {
+      try {
+        saveUserPack(meta.code, pack);
+      } catch {
+        /* ignore disk errors on read path */
+      }
+    }
+    return { code: meta.code, pack };
   }
   if (user) {
-    return { code: meta?.code || APP_LANGUAGE, pack: user };
+    return {
+      code: meta?.code || APP_LANGUAGE,
+      pack: mergeShape(en, user),
+    };
   }
-  return { code: APP_LANGUAGE, pack: loadEnPack() };
+  return { code: APP_LANGUAGE, pack: en };
 }
 
 export { getNested, lookupString } from "./lookup";

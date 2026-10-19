@@ -10,15 +10,27 @@ import { settings } from "@/lib/db/schema";
 import { getAgentCwd } from "@/lib/paths";
 import { updateSettings } from "@/lib/settings/service";
 import {
-  hashEnPack,
   loadEnPack,
   loadLocaleMeta,
   loadUserPack,
   saveUserPack,
 } from "./pack";
 import { isVercelRuntime } from "./remote";
+import {
+  countMissingLeaves,
+  deepMergePack,
+  mergeShape,
+  pickMissingLeaves,
+} from "./shape";
 import { t } from "./t";
 import { APP_LANGUAGE, type LocaleMeta, type LocalePack } from "./types";
+
+export {
+  mergeShape,
+  countMissingLeaves,
+  pickMissingLeaves,
+  deepMergePack,
+} from "./shape";
 
 async function resolveApiKey(): Promise<string> {
   if (process.env.CURSOR_API_KEY?.trim()) {
@@ -98,29 +110,6 @@ function extractJsonObject(text: string): LocalePack | null {
   return null;
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return Boolean(v) && typeof v === "object" && !Array.isArray(v);
-}
-
-/** Keep source shape; fill missing leaves from English. */
-function mergeShape(en: LocalePack, translated: LocalePack): LocalePack {
-  const out: LocalePack = {};
-  for (const [key, enVal] of Object.entries(en)) {
-    const trVal = translated[key];
-    if (typeof enVal === "string") {
-      out[key] =
-        typeof trVal === "string" && trVal.trim() ? trVal : enVal;
-    } else if (isPlainObject(enVal)) {
-      const child =
-        trVal && typeof trVal === "object" && !Array.isArray(trVal)
-          ? (trVal as LocalePack)
-          : {};
-      out[key] = mergeShape(enVal, child);
-    }
-  }
-  return out;
-}
-
 async function translateSection(
   sectionKey: string,
   section: LocalePack,
@@ -169,6 +158,7 @@ export type TranslateOptions = {
 
 /**
  * Build user locale pack from shipped English JSON.
+ * Incremental: only missing/new leaves go to the LLM; existing translations are kept.
  * When persist=true (default locally), writes data/locales/user.json.
  */
 export async function translateLocalePack(
@@ -186,29 +176,45 @@ export async function translateLocalePack(
     pack = en;
     skippedLlm = true;
   } else {
-    // Need Cursor API for non-English packs
-    await resolveApiKey();
-    const sections = Object.entries(en);
-    const out: LocalePack = {};
-    for (const [sectionKey, sectionVal] of sections) {
-      if (typeof sectionVal === "string") {
-        // Rare top-level string — translate as tiny object
-        const tiny = await translateSection(
-          sectionKey,
-          { value: sectionVal },
-          code,
-        );
-        out[sectionKey] =
-          typeof tiny.value === "string" ? tiny.value : sectionVal;
-      } else {
-        out[sectionKey] = await translateSection(
-          sectionKey,
-          sectionVal,
-          code,
-        );
+    const meta = loadLocaleMeta();
+    const existingRaw = loadUserPack();
+    const sameLang =
+      Boolean(existingRaw) &&
+      Boolean(meta?.code) &&
+      meta!.code.toLowerCase() === code;
+    // Raw prior pack only — do NOT mergeShape(en, …) here or English fillers
+    // would hide new keys from pickMissingLeaves.
+    const prior: LocalePack = sameLang ? existingRaw! : {};
+
+    const missing = pickMissingLeaves(en, prior);
+    const missingCount = countMissingLeaves(en, prior);
+
+    if (missingCount === 0) {
+      // en.json changed (hash) but no new keys — keep translations, refresh hash only
+      pack = mergeShape(en, prior);
+      skippedLlm = true;
+    } else {
+      await resolveApiKey();
+      const out: LocalePack = {};
+      for (const [sectionKey, sectionVal] of Object.entries(missing)) {
+        if (typeof sectionVal === "string") {
+          const tiny = await translateSection(
+            sectionKey,
+            { value: sectionVal },
+            code,
+          );
+          out[sectionKey] =
+            typeof tiny.value === "string" ? tiny.value : sectionVal;
+        } else {
+          out[sectionKey] = await translateSection(
+            sectionKey,
+            sectionVal,
+            code,
+          );
+        }
       }
+      pack = mergeShape(en, deepMergePack(prior, out));
     }
-    pack = mergeShape(en, out);
   }
 
   let meta: LocaleMeta = {
@@ -222,7 +228,11 @@ export async function translateLocalePack(
   return { code, pack, meta, skippedLlm };
 }
 
-/** True when user pack is missing, for another language, or built from an older en.json. */
+/**
+ * True when UI needs a translate pass for preferredLanguage.
+ * Only missing/new leaves (or language switch / no pack) — not every en.json edit.
+ * Hash-only drift is fixed silently in loadActivePack.
+ */
 export function needsLocaleTranslation(preferredLanguage: string): boolean {
   const code =
     preferredLanguage.toLowerCase().trim().slice(0, 16) || APP_LANGUAGE;
@@ -231,9 +241,9 @@ export function needsLocaleTranslation(preferredLanguage: string): boolean {
   }
   const meta = loadLocaleMeta();
   const pack = loadUserPack();
+  const en = loadEnPack();
   if (!pack || !meta?.code) return true;
   if (meta.code.toLowerCase() !== code) return true;
-  // Old packs have no hash — force a fresh translate so mixed EN/TR UI cannot linger
-  if (!meta.enSourceHash) return true;
-  return meta.enSourceHash !== hashEnPack();
+  // New or empty leaves vs shipped English → incremental LLM translate
+  return countMissingLeaves(en, pack) > 0;
 }

@@ -3,24 +3,56 @@
  * Used to override weak AI labels.
  */
 
-/** Decode quoted-printable / soft breaks so regexes match real German text. */
+/** Strip HTML tags/entities when a body was stored as raw markup. */
+function stripHtmlish(html: string): string {
+  if (!/<[a-zA-Z!?][\s\S]*?>/.test(html)) return html;
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#(\d+);/g, (_, n: string) => {
+      const code = Number(n);
+      return Number.isFinite(code) ? String.fromCharCode(code) : "";
+    })
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeBase64Blob(compact: string, sample: string): boolean {
+  if (compact.length < 60) return false;
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact.slice(0, 160))) return false;
+  // Already readable plain text / HTML — leave alone
+  if (/[äöüÄÖÜß]/.test(sample.slice(0, 120))) return false;
+  if (/\b(hallo|hello|dear|sehr|vielen|guten)\b/i.test(sample.slice(0, 160))) {
+    return false;
+  }
+  if (/^<!DOCTYPE\s+html|^<html[\s>]/i.test(sample.trim())) return false;
+  // Classic base64-of-HTML starts with PCFET0N… / PGh0bWw…
+  if (/^(PCFET0N|PGh0bW|PGJvZHk|PHNwYW4)/i.test(compact)) return true;
+  // Mostly base64 alphabet, little punctuation
+  const head = compact.slice(0, 200);
+  const nonB64 = (head.match(/[^A-Za-z0-9+/=]/g) || []).length;
+  return nonB64 === 0;
+}
+
+/** Decode quoted-printable / soft breaks / stray base64 so regexes match real text. */
 export function normalizeMailText(text: string): string {
   let s = (text || "").replace(/\r/g, "");
   s = s.replace(/=\n/g, "");
   s = s.replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) =>
     String.fromCharCode(parseInt(hex, 16)),
   );
-  // Some IMAP bodies arrive as raw base64 without headers
+  // Some IMAP bodies arrive as raw base64 (often truncated mid-stream, unpadded)
   const compact = s.replace(/\s+/g, "");
-  if (
-    compact.length > 60 &&
-    compact.length % 4 === 0 &&
-    /^[A-Za-z0-9+/=]+$/.test(compact.slice(0, 120)) &&
-    !/[äöüÄÖÜß]/.test(s.slice(0, 80)) &&
-    !/\b(hallo|hello|dear|sehr|vielen)\b/i.test(s.slice(0, 120))
-  ) {
+  if (looksLikeBase64Blob(compact, s)) {
     try {
-      const decoded = Buffer.from(compact, "base64").toString("utf8");
+      const padLen = (4 - (compact.length % 4)) % 4;
+      const padded = compact + "=".repeat(padLen);
+      const decoded = Buffer.from(padded, "base64").toString("utf8");
       if (decoded && /[A-Za-zÄÖÜäöüß]{4,}/.test(decoded)) {
         s = decoded;
       }
@@ -28,11 +60,13 @@ export function normalizeMailText(text: string): string {
       /* ignore */
     }
   }
-  return s;
+  return stripHtmlish(s);
 }
 
 function blobOf(subject: string, body: string): string {
-  return normalizeMailText(`${subject}\n${body}`).toLowerCase();
+  // Normalize parts separately — concatenating first breaks base64 body detection
+  // (subject prefix makes the blob fail the base64 alphabet check).
+  return `${normalizeMailText(subject)}\n${normalizeMailText(body)}`.toLowerCase();
 }
 
 export function subjectRoot(subject: string): string {
@@ -194,13 +228,13 @@ export function detectClickAction(
 export function detectRejection(subject: string, body: string): boolean {
   const blob = blobOf(subject, body);
   return (
-    /leider (derzeit )?keine passende|keine passende (stelle|position|einsatz)/.test(
+    /leider (derzeit )?keine passende|leider.{0,100}keine passende|keine passende (stelle|position|einsatz)/.test(
       blob,
     ) ||
     /unfortunately we (have )?(to )?(reject|decline)|we (will|can) not (be )?progress|not (be )?moving forward/.test(
       blob,
     ) ||
-    /absage|nach sorgf[aä]ltiger pr[uü]fung|andere bewerber(innen)? (den vorzug|weiter)/.test(
+    /absage|nach sorgf[aä]ltiger pr[uü]fung|sorgf[aä]ltig(e|er)? gepr[uü]ft|andere bewerber(innen)? (den vorzug|weiter)/.test(
       blob,
     ) ||
     /nicht weiter berücksichtigen|your application was not successful|we have decided not to/.test(

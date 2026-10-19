@@ -9,11 +9,10 @@ import {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
-import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { useIntlLocale, useLocaleUpper, useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui";
 import { parseSubjectBody } from "@/lib/mail/subject-body";
 import {
-  couldNotOpenFileManager,
   detectFileManagerKind,
   type FileManagerKind,
 } from "@/lib/platform/file-manager";
@@ -63,9 +62,9 @@ function formatSize(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDate(ms: number): string {
+function formatDate(ms: number, locale: string): string {
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat(locale, {
       day: "2-digit",
       month: "short",
       year: "numeric",
@@ -122,6 +121,7 @@ function FileGlyph() {
 export function FolderBrowser() {
   const t = useT();
   const upper = useLocaleUpper();
+  const locale = useIntlLocale();
   const router = useRouter();
   const searchParams = useSearchParams();
   const path = searchParams.get("path") || "";
@@ -165,7 +165,7 @@ export function FolderBrowser() {
     try {
       const res = await fetch(`/api/folders?path=${encodeURIComponent(p)}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not load listing");
+      if (!res.ok) throw new Error(data.error || t("folders.error.loadListing"));
       setListing(data);
     } catch (err) {
       setListing(null);
@@ -182,7 +182,7 @@ export function FolderBrowser() {
         `/api/folders?view=file&path=${encodeURIComponent(p)}`,
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not read file");
+      if (!res.ok) throw new Error(data.error || t("folders.error.readFile"));
       setPreview(data);
     } catch (err) {
       setPreview(null);
@@ -285,7 +285,7 @@ export function FolderBrowser() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not rename");
+      if (!res.ok) throw new Error(data.error || t("folders.error.rename"));
       setRenamingPath(null);
       if (filePath === renamingPath || filePath.startsWith(`${renamingPath}/`)) {
         go("");
@@ -315,7 +315,7 @@ export function FolderBrowser() {
         body: JSON.stringify({ action: "delete", path: entry.relativePath }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Could not delete");
+      if (!res.ok) throw new Error(data.error || t("folders.error.delete"));
       setDeleteTarget(null);
       if (
         path === entry.relativePath ||
@@ -345,7 +345,17 @@ export function FolderBrowser() {
       });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || couldNotOpenFileManager(fmKind));
+        throw new Error(
+          data.error ||
+            t("folders.error.openFileManager", {
+              name:
+                fmKind === "finder"
+                  ? t("folders.fileManagerFinder")
+                  : fmKind === "explorer"
+                    ? t("folders.fileManagerExplorer")
+                    : t("folders.fileManagerFiles"),
+            }),
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -525,7 +535,7 @@ export function FolderBrowser() {
                             {entry.kind === "dir" ? "—" : formatSize(entry.size)}
                           </span>
                           <span className="cmae-fb-cell cmae-fb-date">
-                            {formatDate(entry.mtime)}
+                            {formatDate(entry.mtime, locale)}
                           </span>
                         </button>
                       )}
@@ -542,7 +552,7 @@ export function FolderBrowser() {
                 <div className="cmae-fb-preview-title">
                   <strong>{preview.name}</strong>
                   <span>
-                    {formatSize(preview.size)} · {formatDate(preview.mtime)}
+                    {formatSize(preview.size)} · {formatDate(preview.mtime, locale)}
                   </span>
                 </div>
                 <div className="cmae-fb-preview-actions">

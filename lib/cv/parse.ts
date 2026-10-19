@@ -2,6 +2,7 @@ import fs from "fs";
 import { createRequire } from "module";
 import path from "path";
 import { pathToFileURL } from "url";
+import { t } from "@/lib/i18n/t";
 
 /** Resolve modules from the running server cwd (standalone or project root). */
 const requireFromCwd = createRequire(path.join(process.cwd(), "package.json"));
@@ -79,7 +80,7 @@ export async function parseCvPdf(buffer: Buffer): Promise<{ text: string }> {
       .replace(/\n{3,}/g, "\n\n")
       .trim();
     if (!text) {
-      throw new Error("Could not extract text from PDF");
+      throw new Error(t("settings.error.cvParseFailed"));
     }
     return { text };
   } finally {

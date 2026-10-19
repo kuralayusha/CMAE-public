@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { listJobsForUi, parseUrls, startResearchJobs } from "@/lib/research/jobs";
 
@@ -19,10 +20,16 @@ export async function POST(req: Request) {
     const raw = String(body.urls || body.url || "");
     const urls = parseUrls(raw);
     if (!urls.length) {
-      return NextResponse.json({ error: "At least one link is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: t("research.error.linksRequired") },
+        { status: 400 },
+      );
     }
     if (urls.length > 20) {
-      return NextResponse.json({ error: "Maximum 20 links" }, { status: 400 });
+      return NextResponse.json(
+        { error: t("research.error.maxLinks", { max: 20 }) },
+        { status: 400 },
+      );
     }
 
     const jobs = startResearchJobs(urls);

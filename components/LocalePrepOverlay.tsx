@@ -142,7 +142,9 @@ export function LocalePrepOverlay({
       });
       const data = await res.json();
       if (!res.ok) {
-        const errMsg = String(data.error || "Language pack translation failed");
+        const errMsg = String(
+          data.error || t("onboarding.error.localeTranslateFailed"),
+        );
         if (
           allowDeferWithoutKey &&
           /api key/i.test(errMsg) &&

@@ -7,11 +7,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { useIntlLocale, useLocaleUpper, useT } from "@/components/I18nProvider";
 import { RichText } from "@/components/RichText";
 import { SyncTerminal } from "@/components/SyncTerminal";
+import { HoverTip } from "@/components/HoverTip";
 import { TruncateTip } from "@/components/TruncateTip";
 import { Button } from "@/components/ui";
+import {
+  listVariantMeta,
+  pickDefaultVariantId,
+  type DraftPrepareKind,
+  type DraftVariantId,
+  type DraftVariantMeta,
+} from "@/lib/tracker/draft-variants";
 import type { SyncLogLine } from "@/lib/tracker/types";
 import type { TVars } from "@/lib/i18n/lookup";
 import "./tracker-list.css";
@@ -76,6 +84,30 @@ function IconWait() {
   );
 }
 
+function IconSpinner() {
+  return (
+    <svg
+      className="cmae-tracker-spinner"
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      aria-hidden
+    >
+      <circle
+        cx="12"
+        cy="12"
+        r="9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeDasharray="40 20"
+        opacity="0.9"
+      />
+    </svg>
+  );
+}
+
 type SyncTermStatus = "running" | "done" | "error" | "canceled";
 
 type TrackerItem = {
@@ -99,11 +131,54 @@ type TrackerItem = {
   statusLabel: string;
   gmailUrls?: string[];
   waitingUntil?: string | null;
+  pendingGmailDraft?: {
+    kind: "follow_up" | "thanks" | "reply";
+    at: string;
+    subject: string;
+    draftsUrl?: string;
+  } | null;
 };
+
+/** Open tab under the click gesture, then navigate after async work (avoids popup block).
+ * Do not use noopener — we need the Window handle to set location after fetch. */
+function openTabForAsyncUrl(): Window | null {
+  try {
+    return window.open("about:blank", "_blank");
+  } catch {
+    return null;
+  }
+}
+
+function navigateOpenedTab(popup: Window | null, url: string | null | undefined) {
+  if (!url) {
+    popup?.close();
+    return false;
+  }
+  if (popup && !popup.closed) {
+    try {
+      popup.location.href = url;
+      return true;
+    } catch {
+      popup.close();
+    }
+  }
+  return false;
+}
 
 type GmailModalState = {
   company: string;
   urls: string[];
+};
+
+type PrepareModalState = {
+  item: TrackerItem;
+  kind: DraftPrepareKind;
+  step: "pick" | "note";
+  variants: DraftVariantMeta[];
+  selected: DraftVariantId;
+  suggested: DraftVariantId;
+  userNote: string;
+  eventKinds: string[];
 };
 
 type Section = {
@@ -130,11 +205,11 @@ type SyncStreamResult = {
   total?: number;
 };
 
-function formatWhen(iso: string | null): string {
+function formatWhen(iso: string | null, locale: string): string {
   if (!iso) return "—";
   try {
     const d = new Date(iso);
-    return d.toLocaleString("en-US", {
+    return d.toLocaleString(locale, {
       day: "2-digit",
       month: "short",
       hour: "2-digit",
@@ -148,6 +223,7 @@ function formatWhen(iso: string | null): string {
 function statusDetail(
   item: TrackerItem,
   t: (key: string, vars?: TVars) => string,
+  locale: string,
 ): string {
   if (item.status === "needs_reply" && item.sentiment) {
     const key =
@@ -159,7 +235,7 @@ function statusDetail(
   if (item.status === "waiting" && item.waitingUntil) {
     try {
       return new Date(`${item.waitingUntil}T12:00:00`).toLocaleDateString(
-        undefined,
+        locale,
         { day: "2-digit", month: "short" },
       );
     } catch {
@@ -171,7 +247,7 @@ function statusDetail(
     if (Number.isFinite(unlock) && unlock > Date.now()) {
       try {
         return t("tracker.detail.fu", {
-          date: new Date(unlock).toLocaleDateString(undefined, {
+          date: new Date(unlock).toLocaleDateString(locale, {
             day: "2-digit",
             month: "short",
           }),
@@ -195,6 +271,7 @@ function statusDetail(
 export function TrackerList() {
   const t = useT();
   const upper = useLocaleUpper();
+  const locale = useIntlLocale();
   const [sections, setSections] = useState<Section[]>([]);
   const [sync, setSync] = useState<SyncMeta | null>(null);
   const [total, setTotal] = useState(0);
@@ -208,6 +285,9 @@ export function TrackerList() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [gmailModal, setGmailModal] = useState<GmailModalState | null>(null);
+  const [prepareModal, setPrepareModal] = useState<PrepareModalState | null>(
+    null,
+  );
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [syncSessionId, setSyncSessionId] = useState<string | null>(null);
@@ -286,13 +366,72 @@ export function TrackerList() {
   }
 
   useEffect(() => {
-    if (!gmailModal) return;
+    if (!gmailModal && !prepareModal) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setGmailModal(null);
+      if (e.key !== "Escape") return;
+      if (prepareModal) {
+        if (prepareModal.step === "note") {
+          setPrepareModal({ ...prepareModal, step: "pick", userNote: "" });
+        } else {
+          setPrepareModal(null);
+        }
+        return;
+      }
+      setGmailModal(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [gmailModal]);
+  }, [gmailModal, prepareModal]);
+
+  const prepareModalItemId = prepareModal?.item.id ?? null;
+  const prepareModalKind = prepareModal?.kind ?? null;
+  const prepareModalFollowUpCount = prepareModal?.item.followUpCount ?? 0;
+
+  useEffect(() => {
+    if (prepareModalItemId == null || !prepareModalKind) return;
+    let cancelled = false;
+    const itemId = prepareModalItemId;
+    const kind = prepareModalKind;
+    const followUpCount = prepareModalFollowUpCount;
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/tracker/${itemId}/timeline`);
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as {
+          events?: { kind?: string }[];
+        };
+        const eventKinds = (data.events || [])
+          .map((e) => e.kind)
+          .filter((k): k is string => Boolean(k));
+        if (cancelled || !eventKinds.length) return;
+        const suggested = pickDefaultVariantId(kind, {
+          followUpCount,
+          eventKinds,
+        });
+        setPrepareModal((prev) => {
+          if (!prev || prev.item.id !== itemId || prev.kind !== kind) {
+            return prev;
+          }
+          if (prev.step !== "pick") return { ...prev, eventKinds };
+          const nextSelected =
+            prev.selected === prev.suggested ? suggested : prev.selected;
+          return {
+            ...prev,
+            eventKinds,
+            suggested,
+            selected: nextSelected,
+          };
+        });
+      } catch {
+        /* timeline is best-effort for suggestions */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [prepareModalItemId, prepareModalKind, prepareModalFollowUpCount]);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/tracker");
@@ -302,6 +441,27 @@ export function TrackerList() {
     setSync(data.sync || null);
     setTotal(data.total || 0);
   }, []);
+
+  const pendingDraftCount = useMemo(
+    () => allItems.filter((i) => Boolean(i.pendingGmailDraft)).length,
+    [allItems],
+  );
+
+  // Prepare may finish while the user is on another page — refresh flags/buttons.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      void load().catch(() => {
+        /* keep prior list */
+      });
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [load]);
 
   const applySyncPayload = useCallback(
     (data: {
@@ -519,15 +679,44 @@ export function TrackerList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function prepare(item: TrackerItem, kind: "follow_up" | "thanks" | "reply") {
+  function openPrepareModal(item: TrackerItem, kind: DraftPrepareKind) {
+    const variants = listVariantMeta(kind);
+    const suggested = pickDefaultVariantId(kind, {
+      followUpCount: item.followUpCount,
+    });
+    setPrepareModal({
+      item,
+      kind,
+      step: "pick",
+      variants,
+      selected: suggested,
+      suggested,
+      userNote: "",
+      eventKinds: [],
+    });
+  }
+
+  async function prepare(
+    item: TrackerItem,
+    kind: DraftPrepareKind,
+    variant: DraftVariantId,
+    userNote: string,
+    eventKinds: string[],
+  ) {
     const key = `${item.id}:prep:${kind}`;
     setBusyId(key);
     setError(null);
+    setPrepareModal(null);
     try {
       const res = await fetch(`/api/tracker/${item.id}/prepare`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind }),
+        body: JSON.stringify({
+          kind,
+          variant,
+          userNote: userNote.trim() || undefined,
+          eventKinds: eventKinds.length ? eventKinds : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("tracker.error.prepare"));
@@ -547,6 +736,7 @@ export function TrackerList() {
     const key = `${item.id}:draft:${kind}`;
     setBusyId(key);
     setError(null);
+    const popup = openTabForAsyncUrl();
     try {
       const res = await fetch(`/api/tracker/${item.id}/draft`, {
         method: "POST",
@@ -555,19 +745,56 @@ export function TrackerList() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("tracker.error.gmailDraft"));
-      {
-        const bits = [
-          t("tracker.toast.gmailDraft", { subject: data.subject }),
-        ];
-        if (data.attachedCv) {
-          bits.push(t("tracker.toast.attachment", { name: data.attachedCv }));
-        }
-        if (data.cvWarning) bits.push(String(data.cvWarning));
-        setToast(bits.join(" · "));
+      const bits = [
+        kind === "application"
+          ? t("tracker.toast.gmailDraft", { subject: data.subject })
+          : t("tracker.toast.gmailDraftPending", { subject: data.subject }),
+      ];
+      if (data.attachedCv) {
+        bits.push(t("tracker.toast.attachment", { name: data.attachedCv }));
       }
-      if (data.gmailUrl) window.open(data.gmailUrl, "_blank", "noopener,noreferrer");
+      if (data.cvWarning) bits.push(String(data.cvWarning));
+      const opened = navigateOpenedTab(popup, data.gmailUrl);
+      if (!opened && data.gmailUrl) {
+        bits.push(t("tracker.pendingDraft.popupBlocked"));
+      }
+      setToast(bits.join(" · "));
       await load();
     } catch (err) {
+      popup?.close();
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** Pending clock: open Gmail Drafts; recreate from .md if the draft was deleted. */
+  async function openPendingDraft(item: TrackerItem) {
+    const pending = item.pendingGmailDraft;
+    if (!pending) return;
+    const key = `${item.id}:draft:${pending.kind}`;
+    setBusyId(key);
+    setError(null);
+    const popup = openTabForAsyncUrl();
+    try {
+      const res = await fetch(`/api/tracker/${item.id}/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: pending.kind, ensure: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t("tracker.error.gmailDraft"));
+      if (data.reused === false) {
+        setToast(t("tracker.action.pendingRecreating"));
+      }
+      const url = data.gmailUrl || pending.draftsUrl;
+      const opened = navigateOpenedTab(popup, url);
+      if (!opened && url) {
+        setToast(t("tracker.pendingDraft.popupBlocked"));
+      }
+      await load();
+    } catch (err) {
+      popup?.close();
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyId(null);
@@ -580,34 +807,37 @@ export function TrackerList() {
 
     if (urls.length === 1) {
       return (
-        <a
-          className="cmae-btn cmae-btn-ghost cmae-tracker-icon-btn"
-          href={urls[0]}
-          target="_blank"
-          rel="noopener noreferrer"
-          title={t("tracker.action.openGmail")}
-          aria-label={t("tracker.action.openGmail")}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <IconGmail />
-        </a>
+        <HoverTip label={t("tracker.action.openGmail")}>
+          <a
+            className="cmae-btn cmae-btn-ghost cmae-tracker-icon-btn"
+            href={urls[0]}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={t("tracker.action.openGmail")}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <IconGmail />
+          </a>
+        </HoverTip>
       );
     }
 
+    const label = t("tracker.action.openGmailN", { count: urls.length });
     return (
-      <Button
-        type="button"
-        variant="ghost"
-        className="cmae-tracker-icon-btn"
-        title={t("tracker.action.openGmailN", { count: urls.length })}
-        aria-label={t("tracker.action.openGmailN", { count: urls.length })}
-        onClick={(e) => {
-          e.stopPropagation();
-          setGmailModal({ company: item.company, urls });
-        }}
-      >
-        <IconGmail count={urls.length} />
-      </Button>
+      <HoverTip label={label}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="cmae-tracker-icon-btn"
+          aria-label={label}
+          onClick={(e) => {
+            e.stopPropagation();
+            setGmailModal({ company: item.company, urls });
+          }}
+        >
+          <IconGmail count={urls.length} />
+        </Button>
+      </HoverTip>
     );
   }
 
@@ -617,57 +847,100 @@ export function TrackerList() {
     const busy = busyId?.startsWith(`${item.id}:`);
     const spinning = Boolean(busy);
 
-    if (item.status === "ready_to_send") {
+    if (item.pendingGmailDraft) {
+      const label = t("tracker.action.pendingSend");
       return (
-        <Button
-          type="button"
-          className="cmae-tracker-icon-btn"
-          disabled={spinning}
-          title={t("tracker.action.createDraft")}
-          aria-label={t("tracker.action.createDraft")}
-          onClick={(e) => {
-            e.stopPropagation();
-            void draft(item, "application");
-          }}
-        >
-          {busyId === `${item.id}:draft:application` ? "…" : <IconDraft />}
-        </Button>
-      );
-    }
-
-    if (item.status === "follow_up_due") {
-      if (!item.hasFollowUpDraft) {
-        return (
+        <HoverTip label={label}>
           <Button
             type="button"
             variant="ghost"
             className="cmae-tracker-icon-btn"
             disabled={spinning}
-            title={t("tracker.action.prepareFollowUp")}
-            aria-label={t("tracker.action.prepareFollowUp")}
+            aria-label={label}
             onClick={(e) => {
               e.stopPropagation();
-              void prepare(item, "follow_up");
+              void openPendingDraft(item);
             }}
           >
-            {busyId === `${item.id}:prep:follow_up` ? "…" : <IconPrepare />}
+            {busyId === `${item.id}:draft:${item.pendingGmailDraft.kind}` ? (
+              <IconSpinner />
+            ) : (
+              <IconWait />
+            )}
           </Button>
+        </HoverTip>
+      );
+    }
+
+    if (item.status === "ready_to_send") {
+      const label = t("tracker.action.createDraft");
+      return (
+        <HoverTip label={label}>
+          <Button
+            type="button"
+            className="cmae-tracker-icon-btn"
+            disabled={spinning}
+            aria-label={label}
+            onClick={(e) => {
+              e.stopPropagation();
+              void draft(item, "application");
+            }}
+          >
+            {busyId === `${item.id}:draft:application` ? (
+              <IconSpinner />
+            ) : (
+              <IconDraft />
+            )}
+          </Button>
+        </HoverTip>
+      );
+    }
+
+    if (item.status === "follow_up_due") {
+      if (!item.hasFollowUpDraft) {
+        const label = t("tracker.action.prepareFollowUp");
+        return (
+          <HoverTip label={label}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="cmae-tracker-icon-btn"
+              disabled={spinning}
+              aria-label={label}
+              onClick={(e) => {
+                e.stopPropagation();
+                openPrepareModal(item, "follow_up");
+              }}
+            >
+              {busyId === `${item.id}:prep:follow_up` ? (
+                <IconSpinner />
+              ) : (
+                <IconPrepare />
+              )}
+            </Button>
+          </HoverTip>
         );
       }
+      const label = t("tracker.action.draftFollowUp");
       return (
-        <Button
-          type="button"
-          className="cmae-tracker-icon-btn"
-          disabled={spinning}
-          title={t("tracker.action.draftFollowUp")}
-          aria-label={t("tracker.action.draftFollowUp")}
-          onClick={(e) => {
-            e.stopPropagation();
-            void draft(item, "follow_up");
-          }}
-        >
-          {busyId === `${item.id}:draft:follow_up` ? "…" : <IconDraft />}
-        </Button>
+        <HoverTip label={label}>
+          <Button
+            type="button"
+            className="cmae-tracker-icon-btn"
+            disabled={spinning}
+            aria-label={label}
+            onClick={(e) => {
+              e.stopPropagation();
+              void draft(item, "follow_up");
+            }}
+          >
+            {busyId === `${item.id}:draft:follow_up` ? (
+              <IconSpinner />
+            ) : (
+              <IconDraft />
+            )}
+          </Button>
+        </HoverTip>
       );
     }
 
@@ -681,84 +954,110 @@ export function TrackerList() {
       item.status === "waiting"
     ) {
       if (item.status === "waiting") {
+        const label = t("tracker.action.waitingUntil");
         return (
-          <span
-            className="cmae-tracker-icon-btn is-static"
-            title={t("tracker.action.waitingUntil")}
-            aria-label={t("tracker.action.waiting")}
-          >
-            <IconWait />
-          </span>
+          <HoverTip label={label}>
+            <span
+              className="cmae-tracker-icon-btn is-static"
+              aria-label={t("tracker.action.waiting")}
+            >
+              <IconWait />
+            </span>
+          </HoverTip>
         );
       }
       if (!item.hasReplyDraft) {
+        const label = t("tracker.action.prepareReply");
         return (
-          <Button
-            type="button"
-            variant="ghost"
-            className="cmae-tracker-icon-btn"
-            disabled={spinning}
-            title={t("tracker.action.prepareReply")}
-            aria-label={t("tracker.action.prepareReply")}
-            onClick={(e) => {
-              e.stopPropagation();
-              void prepare(item, "reply");
-            }}
-          >
-            {busyId === `${item.id}:prep:reply` ? "…" : <IconPrepare />}
-          </Button>
+          <HoverTip label={label}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="cmae-tracker-icon-btn"
+              disabled={spinning}
+              aria-label={label}
+              onClick={(e) => {
+                e.stopPropagation();
+                openPrepareModal(item, "reply");
+              }}
+            >
+              {busyId === `${item.id}:prep:reply` ? (
+                <IconSpinner />
+              ) : (
+                <IconPrepare />
+              )}
+            </Button>
+          </HoverTip>
         );
       }
+      const label = t("tracker.action.draftReply");
       return (
-        <Button
-          type="button"
-          className="cmae-tracker-icon-btn"
-          disabled={spinning}
-          title={t("tracker.action.draftReply")}
-          aria-label={t("tracker.action.draftReply")}
-          onClick={(e) => {
-            e.stopPropagation();
-            void draft(item, "reply");
-          }}
-        >
-          {busyId === `${item.id}:draft:reply` ? "…" : <IconDraft />}
-        </Button>
+        <HoverTip label={label}>
+          <Button
+            type="button"
+            className="cmae-tracker-icon-btn"
+            disabled={spinning}
+            aria-label={label}
+            onClick={(e) => {
+              e.stopPropagation();
+              void draft(item, "reply");
+            }}
+          >
+            {busyId === `${item.id}:draft:reply` ? (
+              <IconSpinner />
+            ) : (
+              <IconDraft />
+            )}
+          </Button>
+        </HoverTip>
       );
     }
 
     if (item.status === "rejected") {
       if (!item.hasThanksDraft) {
+        const label = t("tracker.action.prepareThanks");
         return (
-          <Button
-            type="button"
-            variant="ghost"
-            className="cmae-tracker-icon-btn"
-            disabled={spinning}
-            title={t("tracker.action.prepareThanks")}
-            aria-label={t("tracker.action.prepareThanks")}
-            onClick={(e) => {
-              e.stopPropagation();
-              void prepare(item, "thanks");
-            }}
-          >
-            {busyId === `${item.id}:prep:thanks` ? "…" : <IconPrepare />}
-          </Button>
+          <HoverTip label={label}>
+            <Button
+              type="button"
+              variant="ghost"
+              className="cmae-tracker-icon-btn"
+              disabled={spinning}
+              aria-label={label}
+              onClick={(e) => {
+                e.stopPropagation();
+                openPrepareModal(item, "thanks");
+              }}
+            >
+              {busyId === `${item.id}:prep:thanks` ? (
+                <IconSpinner />
+              ) : (
+                <IconPrepare />
+              )}
+            </Button>
+          </HoverTip>
         );
       }
+      const label = t("tracker.action.draftThanks");
       return (
-        <Button
-          type="button"
-          className="cmae-tracker-icon-btn"
-          disabled={spinning}
-          title={t("tracker.action.draftThanks")}
-          aria-label={t("tracker.action.draftThanks")}
-          onClick={(e) => {
-            e.stopPropagation();
-            void draft(item, "thanks");
-          }}
-        >
-          {busyId === `${item.id}:draft:thanks` ? "…" : <IconDraft />}
-        </Button>
+        <HoverTip label={label}>
+          <Button
+            type="button"
+            className="cmae-tracker-icon-btn"
+            disabled={spinning}
+            aria-label={label}
+            onClick={(e) => {
+              e.stopPropagation();
+              void draft(item, "thanks");
+            }}
+          >
+            {busyId === `${item.id}:draft:thanks` ? (
+              <IconSpinner />
+            ) : (
+              <IconDraft />
+            )}
+          </Button>
+        </HoverTip>
       );
     }
 
@@ -789,7 +1088,7 @@ export function TrackerList() {
       sectionTitle === sectionKey
         ? item.statusLabel || label
         : sectionTitle;
-    const detail = statusDetail(item, t);
+    const detail = statusDetail(item, t, locale);
     const tip = [statusTitle, detail].filter(Boolean).join(" · ");
     const checked = selectedIds.has(item.id);
     return (
@@ -843,7 +1142,7 @@ export function TrackerList() {
           ) : null}
         </span>
         <span className="cmae-tracker-muted" role="cell">
-          <TruncateTip text={formatWhen(item.lastActivityAt)} />
+          <TruncateTip text={formatWhen(item.lastActivityAt, locale)} />
         </span>
         <span className="cmae-tracker-muted" role="cell">
           <TruncateTip text={item.primaryTo || "—"} />
@@ -935,7 +1234,7 @@ export function TrackerList() {
             <span>
               {t("tracker.metaLastSync")}{" "}
               {sync?.lastSyncAt
-                ? formatWhen(sync.lastSyncAt)
+                ? formatWhen(sync.lastSyncAt, locale)
                 : t("tracker.metaNoneYet")}
             </span>
             {sync?.lastError ? (
@@ -987,7 +1286,7 @@ export function TrackerList() {
                   hardSync ? t("tracker.hardSync") : t("tracker.sync")
                 }
               >
-                {syncing ? "…" : <IconSync />}
+                {syncing ? <IconSpinner /> : <IconSync />}
               </Button>
             </div>
           </div>
@@ -996,6 +1295,20 @@ export function TrackerList() {
 
       {error ? <p className="cmae-tracker-banner is-error">{error}</p> : null}
       {toast ? <p className="cmae-tracker-banner">{toast}</p> : null}
+      {!loading && pendingDraftCount > 0 ? (
+        <div className="cmae-tracker-banner cmae-tracker-pending-banner">
+          <p>{t("tracker.pendingDraft.banner")}</p>
+          <Button
+            type="button"
+            onClick={() => void runSync({ mode: "incremental" })}
+            disabled={syncing}
+          >
+            {syncing
+              ? t("tracker.pendingDraft.syncing")
+              : t("tracker.pendingDraft.cta")}
+          </Button>
+        </div>
+      ) : null}
 
       {gmailModal ? (
         <div
@@ -1058,6 +1371,155 @@ export function TrackerList() {
                 </a>
               ))}
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {prepareModal ? (
+        <div
+          className="cmae-gmail-modal-backdrop"
+          role="presentation"
+          onClick={() => setPrepareModal(null)}
+        >
+          <div
+            className="cmae-gmail-modal cmae-prepare-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cmae-prepare-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="cmae-gmail-modal-head">
+              <div>
+                <h2 id="cmae-prepare-modal-title">
+                  {prepareModal.step === "pick"
+                    ? prepareModal.kind === "follow_up"
+                      ? t("tracker.variantModal.titleFollowUp")
+                      : prepareModal.kind === "thanks"
+                        ? t("tracker.variantModal.titleThanks")
+                        : t("tracker.variantModal.titleReply")
+                    : (() => {
+                        const meta = prepareModal.variants.find(
+                          (v) => v.id === prepareModal.selected,
+                        );
+                        return meta?.noteRecommended
+                          ? t("tracker.variantNote.titleRecommended")
+                          : t("tracker.variantNote.title");
+                      })()}
+                </h2>
+                <p>
+                  {prepareModal.step === "pick"
+                    ? t("tracker.variantModal.lead")
+                    : (() => {
+                        const meta = prepareModal.variants.find(
+                          (v) => v.id === prepareModal.selected,
+                        );
+                        return meta?.noteRecommended
+                          ? t("tracker.variantNote.recommended")
+                          : t(meta?.hintKey || "tracker.variantModal.lead");
+                      })()}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="cmae-gmail-modal-close"
+                onClick={() => setPrepareModal(null)}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+
+            {prepareModal.step === "pick" ? (
+              <div className="cmae-prepare-variant-list">
+                {prepareModal.variants.map((v) => {
+                  const isSelected = prepareModal.selected === v.id;
+                  const isSuggested = prepareModal.suggested === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      className={`cmae-prepare-variant${isSelected ? " is-selected" : ""}`}
+                      onClick={() =>
+                        setPrepareModal({
+                          ...prepareModal,
+                          selected: v.id,
+                          step: "note",
+                          userNote: "",
+                        })
+                      }
+                    >
+                      <span className="cmae-prepare-variant-top">
+                        <span className="cmae-prepare-variant-label">
+                          {t(v.labelKey)}
+                        </span>
+                        {isSuggested ? (
+                          <span className="cmae-prepare-variant-badge">
+                            {t("tracker.variantModal.suggested")}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="cmae-prepare-variant-hint">
+                        {t(v.hintKey)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="cmae-prepare-note">
+                <textarea
+                  className="cmae-prepare-note-input"
+                  rows={5}
+                  value={prepareModal.userNote}
+                  placeholder={t(
+                    prepareModal.variants.find(
+                      (v) => v.id === prepareModal.selected,
+                    )?.placeholderKey || "",
+                  )}
+                  onChange={(e) =>
+                    setPrepareModal({
+                      ...prepareModal,
+                      userNote: e.target.value,
+                    })
+                  }
+                  autoFocus
+                />
+                <div className="cmae-prepare-note-actions">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      setPrepareModal({
+                        ...prepareModal,
+                        step: "pick",
+                        userNote: "",
+                      })
+                    }
+                  >
+                    {t("tracker.variantNote.back")}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={Boolean(
+                      busyId?.startsWith(`${prepareModal.item.id}:prep:`),
+                    )}
+                    onClick={() =>
+                      void prepare(
+                        prepareModal.item,
+                        prepareModal.kind,
+                        prepareModal.selected,
+                        prepareModal.userNote,
+                        prepareModal.eventKinds,
+                      )
+                    }
+                  >
+                    {busyId?.startsWith(`${prepareModal.item.id}:prep:`)
+                      ? t("tracker.variantNote.preparing")
+                      : t("tracker.variantNote.prepare")}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
