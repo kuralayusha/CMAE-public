@@ -811,8 +811,10 @@ export async function fetchRecentMailDirect(
 }
 
 /**
- * IMAP in a forked child — SIGKILL on cancel so Next.js event loop never freezes.
- * Child sets CMAE_IMAP_IN_CHILD=1 and calls fetchRecentMailDirect.
+ * Text-only IMAP fetch (no RFC822 source / attachments).
+ * Runs in-process — a forked child breaks Vercel/Turbopack (`fork` is traced as a
+ * module) and serverless has no durable tsx worker anyway. Hang risk is handled
+ * by bodyStructure + maxBytes text parts + socket kill on timeout/cancel.
  */
 export async function fetchRecentMail(
   address: string,
@@ -824,11 +826,7 @@ export async function fetchRecentMail(
     signal?: AbortSignal;
   },
 ): Promise<FetchRecentMailResult> {
-  if (process.env.CMAE_IMAP_IN_CHILD === "1") {
-    return fetchRecentMailDirect(address, appPassword, windowDays, opts);
-  }
-  const { runImapFetchInChild } = await import("./imap-child");
-  return runImapFetchInChild(address, appPassword, windowDays, opts);
+  return fetchRecentMailDirect(address, appPassword, windowDays, opts);
 }
 
 export type DraftAttachment = {

@@ -445,6 +445,11 @@ export async function listWorkspace(relativePath = ""): Promise<{
     try {
       const s = await fs.stat(full);
       const kind = s.isDirectory() ? "dir" : "file";
+      // Workspace root: only numbered company folders (`1- Acme`), never loose
+      // agent temp files (e.g. mail-tr-temp.json) or other junk.
+      if (!rel) {
+        if (kind !== "dir" || !parseNumberedFolder(name)) continue;
+      }
       const badges = await badgesForEntry(name, kind, full);
       entries.push({
         name,

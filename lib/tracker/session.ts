@@ -2,7 +2,6 @@ import { randomUUID } from "crypto";
 import { EventEmitter } from "events";
 import { t } from "@/lib/i18n/t";
 import { SyncCanceledError } from "./cancel";
-import { killActiveImapChild } from "./imap-child";
 import { listTrackerSections } from "./list";
 import { runTrackerSync } from "./run";
 import type { SyncMode } from "./sync";
@@ -171,7 +170,6 @@ export function startTrackerSyncSession(opts?: {
     } catch {
       /* ignore */
     }
-    killActiveImapChild();
     finish(existing, "canceled");
   }
 
@@ -220,7 +218,6 @@ export function startTrackerSyncSession(opts?: {
         },
       });
     } catch (err) {
-      killActiveImapChild();
       if (
         err instanceof SyncCanceledError ||
         session.cancelRequested ||
@@ -250,8 +247,6 @@ export function cancelTrackerSyncSession(id?: string): SyncSessionPublic | null 
   } catch {
     /* ignore */
   }
-  // Child holds the IMAP socket — SIGKILL unblocks parent immediately
-  killActiveImapChild();
   appendLine(session, "err", t("sync.cancelRequested"));
   // Ensure UI leaves "running" even if the async task is wedged
   setTimeout(() => {
