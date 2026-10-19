@@ -1,5 +1,26 @@
 /* Landing — app-faithful: Inter + IBM Plex Mono, #1a1a1a, hairlines */
 
+/* Always light: ignore OS / app theme (data-theme + prefers-color-scheme). */
+html:has(.cmae-land),
+html:has(.cmae-land)[data-theme="dark"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-subtle: #fafafa;
+  --bg-elevated: #ffffff;
+  --ink: #1a1a1a;
+  --ink-muted: #616161;
+  --ink-faint: #8a8a8a;
+  --line: #e3e3e3;
+  --line-strong: #dddddd;
+  --accent: #1a1a1a;
+  --accent-soft: #f5f5f5;
+  --warn: #616161;
+  --danger: #1a1a1a;
+  --ok: #1a1a1a;
+  --brand-mark-bg: #000000;
+  --brand-mark-fg: #ffffff;
+}
+
 .cmae-land {
   --land-max: 1180px;
   min-height: 100vh;
@@ -10,6 +31,7 @@
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.5s ease, transform 0.5s ease;
+  color-scheme: light;
 }
 
 .cmae-land.is-ready {

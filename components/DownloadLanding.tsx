@@ -88,9 +88,6 @@ export function DownloadLanding({ initialPolicy }: Props) {
             <span>CMAE</span>
           </p>
           <h1 className="cmae-land-title">Cold mail under your control.</h1>
-          <p className="cmae-land-lead">
-            Research. Draft. Gmail sync. You send.
-          </p>
           <div className="cmae-land-ctas">
             <a className="cmae-land-cta is-primary" href={macUrl}>
               Download for Mac
