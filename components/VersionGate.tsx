@@ -10,6 +10,7 @@ import {
 } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { useI18n } from "@/components/I18nProvider";
+import { DEFAULT_I18N_REMOTE_BASE } from "@/lib/i18n/remote";
 import type { VersionStatus } from "@/lib/version/policy";
 import {
   formatVersionLabel,
@@ -19,6 +20,7 @@ import "./version-gate.css";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const FOCUS_MIN_GAP_MS = 60 * 60 * 1000;
+const LANDING_URL = DEFAULT_I18N_REMOTE_BASE;
 
 type StatusPayload = VersionStatus & {
   error?: string;
@@ -68,6 +70,14 @@ async function fetchStatus(signal?: AbortSignal): Promise<StatusPayload> {
   return data;
 }
 
+function isBusyPhase(phase: UpdaterPhase | null): boolean {
+  return (
+    phase === "checking" ||
+    phase === "available" ||
+    phase === "downloading"
+  );
+}
+
 export function VersionGate({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const [status, setStatus] = useState<StatusPayload | null>(null);
@@ -77,6 +87,7 @@ export function VersionGate({ children }: { children: ReactNode }) {
   const updateReadyRef = useRef(false);
   const lastCheckRef = useRef(0);
   const busyRef = useRef(false);
+  const forceDownloadStartedRef = useRef(false);
 
   const applyStatus = useEffectEvent((next: StatusPayload) => {
     setStatus(next);
@@ -94,6 +105,18 @@ export function VersionGate({ children }: { children: ReactNode }) {
       // Network failure: do not lock. Keep previous status if any.
     } finally {
       busyRef.current = false;
+    }
+  }, []);
+
+  const startUpdateDownload = useCallback(async () => {
+    if (updateReadyRef.current) return;
+    setUpdaterPhase((prev) =>
+      prev === "error" || prev == null ? "checking" : prev,
+    );
+    try {
+      await window.cmaeDesktop?.checkForUpdates?.();
+    } catch {
+      setUpdaterPhase("error");
     }
   }, []);
 
@@ -156,14 +179,22 @@ export function VersionGate({ children }: { children: ReactNode }) {
     };
   }, [status?.forceLock]);
 
-  async function openDownload() {
-    const url = status?.downloadUrl || status?.releaseUrl;
-    if (!url) return;
+  // Force lock: start in-app download immediately (no external link).
+  useEffect(() => {
+    if (!status?.forceLock || !isDesktopRuntime()) return;
+    if (updateReady || updateReadyRef.current) return;
+    if (forceDownloadStartedRef.current) return;
+    if (updaterPhase === "error") return;
+    forceDownloadStartedRef.current = true;
+    void startUpdateDownload();
+  }, [status?.forceLock, updateReady, updaterPhase, startUpdateDownload]);
+
+  async function openLanding() {
     if (window.cmaeDesktop?.openExternal) {
-      await window.cmaeDesktop.openExternal(url);
+      await window.cmaeDesktop.openExternal(LANDING_URL);
       return;
     }
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(LANDING_URL, "_blank", "noopener,noreferrer");
   }
 
   async function installNow() {
@@ -171,7 +202,14 @@ export function VersionGate({ children }: { children: ReactNode }) {
       await window.cmaeDesktop.quitAndInstall();
       return;
     }
-    await openDownload();
+    await openLanding();
+  }
+
+  async function retryDownload() {
+    forceDownloadStartedRef.current = true;
+    setUpdateReady(false);
+    updateReadyRef.current = false;
+    await startUpdateDownload();
   }
 
   const showForce = Boolean(status?.forceLock);
@@ -195,9 +233,12 @@ export function VersionGate({ children }: { children: ReactNode }) {
       ? t("versionGate.forceReady", versionArgs)
       : updaterPhase === "error"
         ? t("versionGate.forceError", versionArgs)
-        : updaterPhase === "downloading" || updaterPhase === "available"
+        : isBusyPhase(updaterPhase)
           ? t("versionGate.forceDownloading", versionArgs)
           : t("versionGate.forceLead", versionArgs);
+
+  const forceBusy = showForce && !updateReady && isBusyPhase(updaterPhase);
+  const forceError = showForce && updaterPhase === "error" && !updateReady;
 
   return (
     <>
@@ -234,14 +275,6 @@ export function VersionGate({ children }: { children: ReactNode }) {
             </div>
             <h1 id="cmae-version-lock-title">{t("versionGate.title")}</h1>
             <p>{forceBody}</p>
-            {status.notes ? (
-              <>
-                <p className="cmae-version-lock-meta">
-                  {t("versionGate.notes")}
-                </p>
-                <pre className="cmae-version-lock-notes">{status.notes}</pre>
-              </>
-            ) : null}
             <div className="cmae-version-lock-actions">
               {updateReady ? (
                 <button
@@ -251,12 +284,39 @@ export function VersionGate({ children }: { children: ReactNode }) {
                 >
                   {t("versionGate.installNow")}
                 </button>
-              ) : null}
-              {updaterPhase === "error" ? (
+              ) : forceBusy ? (
+                <button
+                  type="button"
+                  className="cmae-version-lock-btn is-busy"
+                  disabled
+                  aria-busy="true"
+                >
+                  <span className="cmae-version-lock-spinner" aria-hidden />
+                  {t("versionGate.downloading")}
+                </button>
+              ) : forceError ? (
                 <button
                   type="button"
                   className="cmae-version-lock-btn"
-                  onClick={() => void openDownload()}
+                  onClick={() => void retryDownload()}
+                >
+                  {t("versionGate.download")}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="cmae-version-lock-btn"
+                  onClick={() => void startUpdateDownload()}
+                >
+                  {t("versionGate.download")}
+                </button>
+              )}
+              {!updateReady ? (
+                <button
+                  type="button"
+                  className="cmae-version-lock-btn is-secondary"
+                  disabled={forceBusy}
+                  onClick={() => void openLanding()}
                 >
                   {t("versionGate.openRelease")}
                 </button>

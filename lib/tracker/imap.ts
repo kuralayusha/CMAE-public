@@ -12,18 +12,10 @@ import type { FetchedMail, MailFolder, SyncProgressFn } from "./types";
 const GMAIL_HOST = "imap.gmail.com";
 const GMAIL_PORT = 993;
 const WINDOW_DAYS = 30;
-/** Never pull full RFC822 — signature images / PDF attachments hang imapflow. */
-const TEXT_PART_MAX_BYTES = 100_000;
-const FETCH_META_MS = 12_000;
-const FETCH_PART_MS = 15_000;
-const FETCH_ENVELOPE_MS = 10_000;
-
-type StructureNode = {
-  type?: string;
-  part?: string;
-  disposition?: string;
-  childNodes?: StructureNode[];
-};
+const FETCH_META_MS = 20_000;
+/** UIDs per fetchAll round-trip (same idea as the old streaming batch). */
+const FETCH_BATCH_SIZE = 50;
+const FETCH_BATCH_MS = 180_000;
 
 class ImapConnectionDeadError extends Error {
   readonly partialMails: FetchedMail[];
@@ -81,125 +73,26 @@ function decodeQuotedPrintable(input: string): string {
     );
 }
 
-function decodeBase64Body(input: string): string {
-  const compact = input.replace(/\s+/g, "");
-  if (!compact) return "";
-  const padLen = (4 - (compact.length % 4)) % 4;
-  try {
-    return Buffer.from(compact + "=".repeat(padLen), "base64").toString("utf8");
-  } catch {
-    return input;
-  }
-}
-
-/** Decode a MIME part body according to its Content-Transfer-Encoding. */
-function decodeMimePartBody(headers: string, body: string): string {
-  const cte = (
-    headers.match(/Content-Transfer-Encoding:\s*([^\s;]+)/i)?.[1] || ""
-  )
-    .trim()
-    .toLowerCase();
-  if (cte === "base64") return decodeBase64Body(body);
-  if (cte === "quoted-printable" || cte === "7bit" || cte === "8bit" || !cte) {
-    return decodeQuotedPrintable(body);
-  }
-  // unknown — try QP then base64-looking fallback
-  const qp = decodeQuotedPrintable(body);
-  const compact = body.replace(/\s+/g, "");
-  if (
-    /^[A-Za-z0-9+/]+={0,2}$/.test(compact.slice(0, 80)) &&
-    !/[äöüÄÖÜß\s]{8,}/.test(qp.slice(0, 80))
-  ) {
-    return decodeBase64Body(body);
-  }
-  return qp;
-}
-
-function extractMimePart(
-  raw: string,
-  contentType: "text/plain" | "text/html",
-): string | null {
-  // Capture headers of this part + body until next boundary / next Content-Type / end
-  const re = new RegExp(
-    `(Content-Type:\\s*${contentType.replace("/", "\\/")}[^\\n]*\\r?\\n(?:(?!\\r?\\n\\r?\\n)[^\\n]*\\r?\\n)*)\\r?\\n([\\s\\S]*?)(?=\\r?\\n--|\\r?\\nContent-Type:|$)`,
-    "i",
-  );
-  const m = raw.match(re);
-  if (!m?.[2]) return null;
-  return decodeMimePartBody(m[1] || "", m[2]);
-}
-
+/** Same body extract as the original batch sync (aec26ba). */
 function extractBody(source: Buffer | string | null | undefined): string {
   if (!source) return "";
-  const rawFull =
-    typeof source === "string" ? source : source.toString("utf8");
-  const raw = rawFull.length > TEXT_PART_MAX_BYTES
-    ? rawFull.slice(0, TEXT_PART_MAX_BYTES)
-    : rawFull;
-  const plain = extractMimePart(raw, "text/plain");
-  if (plain?.trim()) {
-    return plain.replace(/\s+/g, " ").trim().slice(0, 8000);
-  }
-  const html = extractMimePart(raw, "text/html");
-  if (html?.trim()) {
-    return stripHtml(html).slice(0, 8000);
-  }
-  const headerEnd = raw.search(/\r?\n\r?\n/);
-  const topHeaders =
-    headerEnd >= 0 ? raw.slice(0, headerEnd + 1) : raw.slice(0, 800);
-  const topBody = headerEnd >= 0 ? raw.slice(headerEnd + 1) : raw;
-  const decodeInput = topBody.slice(0, 80_000);
-  const decoded = decodeMimePartBody(
-    topHeaders,
-    decodeInput || raw.slice(0, 80_000),
+  const raw = typeof source === "string" ? source : source.toString("utf8");
+  const plain = raw.match(
+    /Content-Type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--|\r?\nContent-Type:|$)/i,
   );
-  return stripHtml(decoded).slice(0, 8000);
-}
-
-/** Prefer text/plain, else text/html. Skip attachments + image parts (signature CIDs). */
-function findTextPartIds(node: StructureNode | undefined): {
-  plain?: string;
-  html?: string;
-} {
-  const out: { plain?: string; html?: string } = {};
-  const walk = (n: StructureNode | undefined, isRoot: boolean) => {
-    if (!n) return;
-    const disp = (n.disposition || "").toLowerCase();
-    if (disp === "attachment") return;
-    const typ = (n.type || "").toLowerCase();
-    if (typ.startsWith("image/")) return;
-    if (typ === "text/plain") {
-      const id = n.part || (isRoot ? "1" : undefined);
-      if (id && !out.plain) out.plain = id;
-    } else if (typ === "text/html") {
-      const id = n.part || (isRoot ? "1" : undefined);
-      if (id && !out.html) out.html = id;
-    }
-    for (const child of n.childNodes || []) walk(child, false);
-  };
-  walk(node, true);
-  return out;
-}
-
-async function downloadTextPart(
-  client: ImapFlow,
-  uid: number,
-  part: string,
-): Promise<string> {
-  const result = await client.download(String(uid), part, {
-    uid: true,
-    maxBytes: TEXT_PART_MAX_BYTES,
-  });
-  if (!result || !("content" in result) || !result.content) return "";
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of result.content as AsyncIterable<Buffer | Uint8Array>) {
-    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    chunks.push(buf);
-    total += buf.length;
-    if (total >= TEXT_PART_MAX_BYTES) break;
+  if (plain?.[1]) {
+    return decodeQuotedPrintable(plain[1])
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 8000);
   }
-  return Buffer.concat(chunks).toString("utf8");
+  const html = raw.match(
+    /Content-Type:\s*text\/html[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--|\r?\nContent-Type:|$)/i,
+  );
+  if (html?.[1]) {
+    return stripHtml(decodeQuotedPrintable(html[1])).slice(0, 8000);
+  }
+  return stripHtml(decodeQuotedPrintable(raw)).slice(0, 8000);
 }
 
 function headersHash(from: string, to: string, subject: string, dateIso: string): string {
@@ -238,8 +131,8 @@ async function withClient<T>(
     secure: true,
     auth: { user: address, pass: appPassword },
     logger: false,
-    // Stuck FETCH must die — Promise.race alone does not cancel imapflow
-    socketTimeout: 30_000,
+    // Batch source FETCH can sit on large messages — do not kill mid-batch
+    socketTimeout: 300_000,
     greetingTimeout: 15_000,
   });
   const onAbort = () => killClient(client);
@@ -329,60 +222,10 @@ function killClient(client: ImapFlow) {
   }
 }
 
-function yieldEventLoop(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
-}
-
 /**
- * Envelope + bodyStructure only — never RFC822 source.
- * Text via download(part, { maxBytes }) so signature images / PDFs stay on the wire.
- */
-async function fetchOneUid(
-  client: ImapFlow,
-  folder: MailFolder,
-  uid: number,
-  withBody: boolean,
-): Promise<FetchedMail | null> {
-  const msg = await client.fetchOne(
-    String(uid),
-    {
-      uid: true,
-      envelope: true,
-      threadId: true,
-      ...(withBody ? { bodyStructure: true } : {}),
-    },
-    { uid: true },
-  );
-  if (!msg) return null;
-
-  let bodyText = "";
-  if (withBody) {
-    const parts = findTextPartIds(
-      msg.bodyStructure as StructureNode | undefined,
-    );
-    if (parts.plain) {
-      const raw = await withTimeout(
-        downloadTextPart(client, uid, parts.plain),
-        FETCH_PART_MS,
-        `${folder} uid=${uid} text/plain`,
-      );
-      bodyText = raw.replace(/\s+/g, " ").trim();
-    }
-    if (!bodyText && parts.html) {
-      const raw = await withTimeout(
-        downloadTextPart(client, uid, parts.html),
-        FETCH_PART_MS,
-        `${folder} uid=${uid} text/html`,
-      );
-      bodyText = stripHtml(raw);
-    }
-  }
-  return mailFromEnvelope(folder, msg, bodyText);
-}
-
-/**
- * One UID at a time. Timeouts kill the socket (Promise.race cannot cancel imapflow).
- * Never fetch SOURCE — attachments (e.g. signature images) must not be downloaded.
+ * True batch like the original sync: one IMAP FETCH for many UIDs with source.
+ * Uses fetchAll (not download-in-loop) so imapflow does not deadlock.
+ * SEARCH happens first — never FETCH { since } (that hangs on Gmail).
  */
 async function fetchByUidList(
   client: ImapFlow,
@@ -394,49 +237,63 @@ async function fetchByUidList(
   const out: FetchedMail[] = [];
   const sorted = [...new Set(uids)].sort((a, b) => a - b);
   const total = sorted.length;
+  if (!total) return out;
 
-  for (let i = 0; i < sorted.length; i++) {
+  for (let i = 0; i < sorted.length; i += FETCH_BATCH_SIZE) {
     throwIfSyncCanceled(signal);
-    const uid = sorted[i]!;
+    const chunk = sorted.slice(i, i + FETCH_BATCH_SIZE);
+    const doneAfter = Math.min(i + chunk.length, total);
     onProgress?.(
       "think",
-      t("sync.fetchingOne", {
+      t("sync.fetchingBatch", {
         folder,
-        current: i + 1,
+        current: doneAfter,
         total,
-        uid,
       }),
     );
     try {
-      const mail = await withTimeout(
-        fetchOneUid(client, folder, uid, true),
-        FETCH_META_MS + FETCH_PART_MS * 2,
-        `${folder} uid=${uid} text`,
+      const messages = await withTimeout(
+        client.fetchAll(
+          chunk,
+          {
+            uid: true,
+            envelope: true,
+            source: true,
+            threadId: true,
+          },
+          { uid: true },
+        ),
+        FETCH_BATCH_MS,
+        `${folder} batch ${i + 1}-${doneAfter}/${total}`,
       );
-      if (mail) out.push(mail);
-      else {
-        const stub = await withTimeout(
-          fetchOneUid(client, folder, uid, false),
-          FETCH_ENVELOPE_MS,
-          `${folder} uid=${uid} envelope`,
+      for (const msg of messages) {
+        throwIfSyncCanceled(signal);
+        const mail = mailFromEnvelope(
+          folder,
+          msg,
+          extractBody(msg.source || null),
         );
-        if (stub) out.push(stub);
+        if (mail) out.push(mail);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      onProgress?.(
-        "err",
-        t("sync.fetchOneFailed", { folder, uid, msg }),
-      );
+      onProgress?.("err", t("sync.fetchBatchFailed", { folder, msg }));
       killClient(client);
-      throw new ImapConnectionDeadError(uid, msg, out);
+      throw new ImapConnectionDeadError(
+        out.reduce((m, x) => Math.max(m, x.gmailUid || 0), 0) ||
+          chunk[0] ||
+          0,
+        msg,
+        out,
+      );
     }
-    await yieldEventLoop();
   }
   return out;
 }
 
-/** Resolve to UID list, then text-only one-by-one — no batch SOURCE fetch. */
+/**
+ * Resolve → SEARCH UIDs → fetchAll batches with source (original batch shape).
+ */
 async function fetchByRange(
   client: ImapFlow,
   folder: MailFolder,
@@ -455,6 +312,10 @@ async function fetchByRange(
   }
 
   throwIfSyncCanceled(signal);
+  onProgress?.(
+    "think",
+    t("sync.messageCount", { folder, count: "…" }),
+  );
   const found = await withTimeout(
     "since" in range
       ? client.search({ since: range.since }, { uid: true })
@@ -714,8 +575,7 @@ export type FetchRecentMailResult = {
 };
 
 /**
- * In-process IMAP fetch (text parts only). Prefer fetchRecentMail() which runs
- * this in a child process so a stuck socket cannot freeze Next.js.
+ * In-process IMAP fetch (SEARCH → fetchAll batches with source).
  */
 export async function fetchRecentMailDirect(
   address: string,

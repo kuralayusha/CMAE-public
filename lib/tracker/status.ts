@@ -19,6 +19,12 @@ import type {
 /** After a follow-up is sent, block the next one for this many days. */
 export const FOLLOW_UP_REPEAT_COOLDOWN_DAYS = 7;
 
+/**
+ * After a rejection, we are expected to send thanks/feedback.
+ * If we stay silent this many days, auto-close the thread.
+ */
+export const REJECTION_AUTO_CLOSE_DAYS = 7;
+
 export type StatusInput = {
   aiStatus: TrackerStatus | string | null;
   sentiment: TrackerSentiment | string | null;
@@ -57,6 +63,19 @@ function daysBetween(iso: string, now = Date.now()): number {
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return 0;
   return (now - t) / (1000 * 60 * 60 * 24);
+}
+
+/** Rejection + no outbound from us for REJECTION_AUTO_CLOSE_DAYS → closed. */
+function shouldAutoCloseRejected(input: StatusInput): boolean {
+  const anchor = input.lastMeaningfulInboundAt || input.lastInboundAt;
+  if (!anchor) return false;
+  if (
+    input.lastOutboundAt &&
+    Date.parse(input.lastOutboundAt) > Date.parse(anchor)
+  ) {
+    return false;
+  }
+  return daysBetween(anchor) >= REJECTION_AUTO_CLOSE_DAYS;
 }
 
 function asStatus(v: string | null | undefined): TrackerStatus | null {
@@ -169,6 +188,16 @@ export function resolveStatus(input: StatusInput): {
     asStatus(input.aiStatus) === "rejected";
 
   if (rejectionStands && (lastIsReject || input.isRejected)) {
+    if (shouldAutoCloseRejected(input)) {
+      return {
+        status: "closed",
+        sentiment: sentiment || "negative",
+        waitingOn: null,
+        nextFollowUpAt: null,
+        ignored: false,
+        waitingUntil: null,
+      };
+    }
     return {
       status: "rejected",
       sentiment: sentiment || "negative",
@@ -328,6 +357,16 @@ export function resolveStatus(input: StatusInput): {
   }
 
   if (status === "rejected") {
+    if (shouldAutoCloseRejected(input)) {
+      return {
+        status: "closed",
+        sentiment: sentiment || "negative",
+        waitingOn: null,
+        nextFollowUpAt: null,
+        ignored: false,
+        waitingUntil: null,
+      };
+    }
     return {
       status: "rejected",
       sentiment: sentiment || "negative",

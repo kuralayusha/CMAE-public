@@ -83,28 +83,60 @@
 
 .cmae-version-lock-btn {
   appearance: none;
-  border: none;
+  border: 1.5px solid var(--ink, #1a1a1a);
   border-radius: 8px;
   padding: 11px 16px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  /* Theme-safe invert: dark ink plate + bg text (and vice versa in dark mode). */
   background: var(--ink, #1a1a1a);
-  color: #fff;
+  color: var(--bg, #f7f6f3);
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 10px;
 }
 
-.cmae-version-lock-btn:hover {
+.cmae-version-lock-btn:hover:not(:disabled) {
   opacity: 0.9;
+}
+
+.cmae-version-lock-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.cmae-version-lock-btn.is-busy {
+  opacity: 1;
+  cursor: wait;
 }
 
 .cmae-version-lock-btn.is-secondary {
   background: transparent;
   color: var(--ink, #1a1a1a);
-  border: 1.5px solid var(--line, #ccc);
+  border-color: var(--line-strong, #ddd);
+}
+
+.cmae-version-lock-btn.is-secondary:disabled {
+  opacity: 0.4;
+}
+
+@keyframes cmae-version-lock-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cmae-version-lock-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in srgb, var(--bg, #f7f6f3) 35%, transparent);
+  border-top-color: var(--bg, #f7f6f3);
+  border-radius: 50%;
+  animation: cmae-version-lock-spin 0.7s linear infinite;
+  flex-shrink: 0;
 }
 
 .cmae-version-banner {
