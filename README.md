@@ -46,11 +46,22 @@ npm run desktop:build:mac:signed      # imzalı
 npm run desktop:upload:github -- --platform mac
 
 # Windows makinede (imza yok — SmartScreen uyarısı normal):
+# Tek komut: win-x64 build + cmae-releases upload
 npm run desktop:publish:win
-# veya:
+# veya adım adım:
 npm run desktop:build:win
 npm run desktop:upload:github -- --platform win
+# eşdeğer:
+# node scripts/desktop-build-win.mjs
+# node scripts/desktop-build-win.mjs --upload
 ```
+
+**Windows ARM64 host:** Release paketi her zaman **win-x64**. `scripts/desktop-build-win.mjs` sistem Node’u arm64 ise portable Node’u şuraya indirir ve kendini x64 ile yeniden çalıştırır:
+
+`%LOCALAPPDATA%\node-win-x64\node-v22.23.2-win-x64\`  
+(ör. `C:\Users\<you>\AppData\Local\node-win-x64\node-v22.23.2-win-x64\node.exe`)
+
+Sürüm: `CMAE_WIN_NODE_VERSION` veya `CMAE_BUNDLE_NODE_VERSION` (varsayılan `22.23.2`). Önkoşullar: Python + VS Build Tools (MSVC v143; ARM64 host’ta `VC.Tools.ARM64` + x64 toolset), `gh auth login`.
 
 **Mac imza (lokal):** Varsayılan unsigned. `--sign` / `desktop:build:mac:signed` keychain’de **Developer ID Application** arar; `electron-builder.yml`’daki `identity: null`’ı geçici config ile kaldırır (dosyayı kirletmez). Notarize için `.env` / `.env.local` içinde `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` olmalı — yoksa imzalar, notarize atlar.
 
@@ -271,8 +282,11 @@ Native modules (`better-sqlite3`, `@napi-rs/canvas`) must be built on the target
 npm run desktop:dev               # Next + Electron window (uses project .env)
 npm run desktop:build:mac         # macOS — unsigned DMG/ZIP
 npm run desktop:build:mac:signed  # macOS — Developer ID + notarize if APPLE_* set
-npm run desktop:build:win         # Windows only → dist-desktop/*.exe (unsigned)
+npm run desktop:build:win         # Windows → dist-desktop/*-win-x64.exe (unsigned)
+npm run desktop:publish:win       # build + upload → kuralayusha/cmae-releases
 ```
+
+Windows script: [`scripts/desktop-build-win.mjs`](scripts/desktop-build-win.mjs). ARM64 Windows’ta portable x64 Node: `%LOCALAPPDATA%\node-win-x64\node-v22.23.2-win-x64\`.
 
 Packaged builds (DMG/EXE) do **not** inherit your project `.env` or shell secrets
 (`CURSOR_API_KEY`, etc.). Testers always configure Gmail / Cursor in onboarding —
