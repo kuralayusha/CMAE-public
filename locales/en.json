@@ -522,6 +522,7 @@
       "lowConfidence": "uncertain",
       "recipient": "Recipient",
       "showEmails": "Show emails",
+      "goneFromGmail": "Deleted in Gmail",
       "fallbackUnknownStart": "Unknown application start (outside this app)",
       "fallbackEmptyTimeline": "Could not build a timeline from these mails",
       "origin": {
@@ -779,6 +780,10 @@
     "whyUidValidity": "mailbox was reset by Gmail",
     "whyMailboxChanged": "mailbox path changed",
     "whyCursorEmpty": "no previous position",
+    "allMailHiddenFallback": "All Mail is hidden in IMAP — syncing Inbox + Sent. Archived mail may be missing (enable All Mail under Gmail → Labels → Show in IMAP).",
+    "condstoreFailed": "{role}: label delta (CONDSTORE) failed — {msg}",
+    "metaScanStart": "Checking labels and deleted mail…",
+    "metaScanDone": "Meta scan: {gone} gone · {labels} label updates",
     "briefsSummary": "{mails} messages · {searches} research matches…",
     "writingGroups": "Saving {count} application groups…",
     "droppedNoise": "{count} personal or newsletter messages left out of Tracker",

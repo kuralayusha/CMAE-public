@@ -44,6 +44,8 @@ type DetailMail = {
   dateIso: string;
   snippet: string;
   gmailUrl: string;
+  goneAt?: string | null;
+  goneReason?: string | null;
 };
 
 type TimelineEvent = {
@@ -452,7 +454,7 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
                           {childMails.map((m) => (
                             <li key={m.id}>
                               <a
-                                className="cmae-td-child-mail"
+                                className={`cmae-td-child-mail${m.goneAt ? " is-gone" : ""}`}
                                 href={m.gmailUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
@@ -471,6 +473,11 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
                                 <span className="cmae-td-child-mail-folder">
                                   {mailFolderLabel(m.folder, t)}
                                 </span>
+                                {m.goneAt ? (
+                                  <span className="cmae-td-child-mail-gone">
+                                    {t("tracker.detailPage.goneFromGmail")}
+                                  </span>
+                                ) : null}
                               </a>
                             </li>
                           ))}

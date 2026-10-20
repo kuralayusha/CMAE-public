@@ -3,6 +3,9 @@
     "inPanel": "Açık"
   },
   "tracker": {
+    "detailPage": {
+      "goneFromGmail": "Gmail'de silinmiş"
+    },
     "freshness": {
       "neverSynced": "İlk senkronizasyon yapılıyor — son mailler taranıyor. Liste boş değil; hâlâ yükleniyor.",
       "neverSyncedCta": "Şimdi senkronize et",

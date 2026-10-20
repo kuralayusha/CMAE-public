@@ -39,6 +39,9 @@ export type LinkedTimelineMail = {
   snippet: string;
   bodyText: string;
   gmailUrl: string;
+  /** K1: present when missing from Gmail All Mail / window (fact still kept). */
+  goneAt: string | null;
+  goneReason: string | null;
 };
 
 export type TrackerDetailItem = {
@@ -134,6 +137,8 @@ export function loadLinkedMails(itemId: number): LinkedTimelineMail[] {
       snippet: m.snippet,
       bodyText: m.bodyText,
       gmailUrl,
+      goneAt: m.goneAt ?? null,
+      goneReason: m.goneReason ?? null,
     };
   });
 }

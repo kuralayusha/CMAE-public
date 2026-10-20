@@ -1,5 +1,11 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const settings = sqliteTable("settings", {
   id: integer("id").primaryKey().default(1),
@@ -40,6 +46,26 @@ export const mailMessages = sqliteTable(
     headersHash: text("headers_hash"),
     /** pending = needs tracker derivation; done = already applied */
     deriveState: text("derive_state").notNull().default("done"),
+    /** Active Gmail account (lowercase). K2 fence. */
+    accountId: text("account_id"),
+    /** X-GM-MSGID / emailId */
+    gmMsgid: text("gm_msgid"),
+    /** JSON string[] of Gmail labels */
+    labelsJson: text("labels_json"),
+    /** in | out | self — from address vs account */
+    direction: text("direction"),
+    /** Server internal date (canonical sort) */
+    internalDate: text("internal_date"),
+    headerDate: text("header_date"),
+    inReplyTo: text("in_reply_to"),
+    referencesHdr: text("references_hdr"),
+    /** JSON auto flags (autoSubmitted, bulk, listId, bounce) */
+    autoFlags: text("auto_flags"),
+    /** Set when missing from All Mail / window UID set (K1: fact stays) */
+    goneAt: text("gone_at"),
+    goneReason: text("gone_reason"),
+    /** ok | truncated | failed */
+    bodyState: text("body_state").notNull().default("ok"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(datetime('now'))`),
@@ -47,6 +73,37 @@ export const mailMessages = sqliteTable(
   (t) => [uniqueIndex("mail_messages_message_id_uq").on(t.messageId)],
 );
 
+/** Per-account mailbox cursor (All Mail / inbox / sent / drafts). */
+export const mailSources = sqliteTable(
+  "mail_sources",
+  {
+    accountId: text("account_id").notNull(),
+    role: text("role").notNull(), // all | inbox | sent | drafts
+    mailboxPath: text("mailbox_path").notNull(),
+    uidValidity: text("uid_validity").notNull(),
+    lastUid: integer("last_uid").notNull().default(0),
+    highestModseq: text("highest_modseq"),
+    lastMetaScanAt: text("last_meta_scan_at"),
+    lastSuccessAt: text("last_success_at"),
+    lastErrorKind: text("last_error_kind"),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.role] })],
+);
+
+export const mailFetchFailures = sqliteTable(
+  "mail_fetch_failures",
+  {
+    accountId: text("account_id").notNull(),
+    role: text("role").notNull(),
+    uid: integer("uid").notNull(),
+    attempts: integer("attempts").notNull().default(1),
+    lastError: text("last_error"),
+    firstAt: text("first_at").notNull(),
+    lastAt: text("last_at").notNull(),
+    abandoned: integer("abandoned").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.role, t.uid] })],
+);
 export const trackerItems = sqliteTable("tracker_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   company: text("company").notNull(),

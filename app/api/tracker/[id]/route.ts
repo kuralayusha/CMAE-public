@@ -55,6 +55,8 @@ export async function GET(
       dateIso: m.dateIso,
       snippet: m.snippet,
       gmailUrl: m.gmailUrl,
+      goneAt: m.goneAt,
+      goneReason: m.goneReason,
     })),
     gmailUrls,
   });

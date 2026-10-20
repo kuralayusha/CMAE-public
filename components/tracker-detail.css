@@ -379,6 +379,18 @@
   text-align: right;
 }
 
+.cmae-td-child-mail.is-gone {
+  opacity: 0.72;
+}
+
+.cmae-td-child-mail-gone {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--ink-faint);
+  font-style: italic;
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 640px) {
   .cmae-td-child-mail {
     grid-template-columns: 1fr;
