@@ -106,6 +106,45 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+/** Prefer imapflow's responseText / executedCommand over bare "Command failed". */
+function formatImapError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const e = err as Error & {
+    responseStatus?: string;
+    responseText?: string;
+    executedCommand?: string;
+  };
+  const bits: string[] = [e.message];
+  if (e.responseStatus) bits.push(e.responseStatus);
+  if (e.responseText) bits.push(e.responseText);
+  if (e.executedCommand) {
+    const cmd =
+      e.executedCommand.length > 180
+        ? `${e.executedCommand.slice(0, 180)}…`
+        : e.executedCommand;
+    bits.push(cmd);
+  }
+  return bits.join(" — ");
+}
+
+/** One preferred MIME part (or TEXT) — never union parts across heterogeneous UIDs. */
+function preferredBodyPartKeys(plan: {
+  plain: string | null;
+  html: string | null;
+}): string[] {
+  if (plan.plain) return [plan.plain];
+  if (plan.html) return [plan.html];
+  return ["TEXT"];
+}
+
+function bodyPartsQueryForKeys(keys: string[]) {
+  return keys.map((key) => ({
+    key,
+    start: 0,
+    maxLength: BODY_MAX_BYTES,
+  }));
+}
+
 function labelsToArray(labels: Set<string> | string[] | null | undefined): string[] {
   if (!labels) return [];
   if (Array.isArray(labels)) return labels.map(String);
@@ -346,58 +385,84 @@ async function fetchUidBatch(
       );
       meta = [...messages] as MetaMsg[];
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = formatImapError(err);
       onProgress?.("err", t("sync.fetchBatchFailed", { folder: role, msg }));
       for (const uid of chunk) failures.push({ uid, error: msg });
       killClient(client);
       throw err;
     }
 
-    // Resolve text part ids, then bodyParts fetch (no source:true).
-    const partKeys = new Set<string>();
-    const partPlan = new Map<number, { plain: string | null; html: string | null }>();
+    // Resolve per-message text part ids, then bodyParts fetch (no source:true).
+    // Critical: do NOT union MIME part keys across the batch + always-TEXT.
+    // Gmail rejects FETCH when the set asks for sections that some UIDs lack
+    // → bare "Command failed" (NO/BAD). Group by identical preferred key instead.
+    const partPlan = new Map<
+      number,
+      { plain: string | null; html: string | null }
+    >();
+    const groups = new Map<string, number[]>();
     for (const m of meta) {
       const parts = findTextPartIds(m.bodyStructure);
       partPlan.set(m.uid, parts);
-      if (parts.plain) partKeys.add(parts.plain);
-      if (parts.html) partKeys.add(parts.html);
+      const keys = preferredBodyPartKeys(parts);
+      const sig = keys.join("\0");
+      const list = groups.get(sig);
+      if (list) list.push(m.uid);
+      else groups.set(sig, [m.uid]);
     }
-    // Always request TEXT as a capped fallback for simple messages.
-    partKeys.add("TEXT");
 
-    const bodyPartsQuery = [...partKeys].map((key) => ({
-      key,
-      start: 0,
-      maxLength: BODY_MAX_BYTES,
-    }));
+    const bodies = new Map<number, Map<string, Buffer>>();
+    for (const [sig, groupUids] of groups) {
+      throwIfSyncCanceled(signal);
+      const keys = sig.split("\0").filter(Boolean);
+      const query = bodyPartsQueryForKeys(keys);
+      const fetchBodies = async (uids: number[]) => {
+        const bodyMsgs = await withTimeout(
+          client.fetchAll(
+            uids,
+            { uid: true, bodyParts: query },
+            { uid: true },
+          ),
+          FETCH_BATCH_MS,
+          `${role} body ${uids[0]}…${uids[uids.length - 1]}`,
+        );
+        for (const bm of bodyMsgs) {
+          if (typeof bm.uid === "number" && bm.bodyParts) {
+            bodies.set(bm.uid, bm.bodyParts);
+          }
+        }
+      };
 
-    let bodies = new Map<number, Map<string, Buffer>>();
-    try {
-      const bodyMsgs = await withTimeout(
-        client.fetchAll(
-          chunk,
-          {
-            uid: true,
-            bodyParts: bodyPartsQuery,
-          },
-          { uid: true },
-        ),
-        FETCH_BATCH_MS,
-        `${role} body ${i + 1}-${doneAfter}`,
-      );
-      for (const bm of bodyMsgs) {
-        if (typeof bm.uid === "number" && bm.bodyParts) {
-          bodies.set(bm.uid, bm.bodyParts);
+      try {
+        await fetchBodies(groupUids);
+      } catch (err) {
+        const msg = formatImapError(err);
+        onProgress?.(
+          "err",
+          t("sync.fetchBatchFailed", { folder: role, msg }),
+        );
+        // Retry per-UID so one poison section does not wipe the whole group.
+        for (const uid of groupUids) {
+          throwIfSyncCanceled(signal);
+          if (!client.usable) {
+            failures.push({ uid, error: msg });
+            continue;
+          }
+          try {
+            await fetchBodies([uid]);
+          } catch (uidErr) {
+            const uidMsg = formatImapError(uidErr);
+            failures.push({ uid, error: uidMsg });
+            onProgress?.(
+              "err",
+              t("sync.fetchBatchFailed", {
+                folder: role,
+                msg: `uid ${uid}: ${uidMsg}`,
+              }),
+            );
+          }
         }
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      onProgress?.("err", t("sync.fetchBatchFailed", { folder: role, msg }));
-      // Meta succeeded — mark body failures per UID but still store header-only mails.
-      for (const m of meta) {
-        failures.push({ uid: m.uid, error: msg });
-      }
-      bodies = new Map();
     }
 
     const got = new Set<number>();

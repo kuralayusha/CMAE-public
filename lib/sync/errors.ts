@@ -66,7 +66,12 @@ export function classifySyncError(err: unknown): {
   ) {
     return { kind: "disk", message };
   }
-  if (lower.includes("sqlite_busy") || lower.includes("database is locked")) {
+  if (
+    lower.includes("sqlite_busy") ||
+    lower.includes("database is locked") ||
+    lower.includes("database connection is not open") ||
+    lower.includes("sqlite handle missing")
+  ) {
     return { kind: "db", message };
   }
   if (lower.includes("stuck") || lower.includes("phase budget")) {

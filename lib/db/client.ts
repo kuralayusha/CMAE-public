@@ -22,6 +22,8 @@ export function getDb() {
     return dbInstance;
   }
   // Path flip or closed handle — drop stale drizzle wrapper before reopen.
+  // Callers must not cache the returned drizzle instance across awaits; a
+  // concurrent closeDb()/wipe can invalidate it while IMAP sync is in flight.
   if (dbInstance || sqlite) closeDb();
 
   sqlite = new Database(dbPath);
@@ -39,6 +41,11 @@ export function getDb() {
 /** Live better-sqlite3 handle (same connection as getDb). For sync transactions. */
 export function getSqlite(): Database.Database {
   getDb();
+  if (!sqlite?.open) {
+    // Rare race: closed between getDb reopen and read — try once more.
+    closeDb();
+    getDb();
+  }
   if (!sqlite?.open) throw new Error("SQLite handle missing");
   return sqlite;
 }

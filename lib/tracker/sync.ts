@@ -703,8 +703,10 @@ export async function syncMailsFromGmail(opts?: {
       opts?.source ||
       new GmailImapSource(creds!.address, creds!.appPassword);
 
-    const db = getDb();
-    const beforeRows = db
+    // Always call getDb() fresh — never hold a drizzle handle across IMAP awaits.
+    // Onboarding reconcile / path flip can closeDb() mid-sync; a stale wrapper
+    // then throws better-sqlite3 "The database connection is not open".
+    const beforeRows = getDb()
       .select({ id: mailMessages.id, dateIso: mailMessages.dateIso })
       .from(mailMessages)
       .all();
@@ -722,7 +724,7 @@ export async function syncMailsFromGmail(opts?: {
 
     throwIfSyncCanceled(signal);
 
-    const afterRows = db
+    const afterRows = getDb()
       .select({ id: mailMessages.id, dateIso: mailMessages.dateIso })
       .from(mailMessages)
       .all();
