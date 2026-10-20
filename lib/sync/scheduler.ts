@@ -196,6 +196,10 @@ export function start(): void {
     // Ensure DB/migrations are ready before recovering jobs.
     getSqlite();
     recoverInterruptedJobs();
+    void import("@/lib/tracker/account-switch").then((m) => {
+      m.completeOrphanAccountWipe();
+      m.pruneAccountSwitchBackups();
+    });
   } catch (err) {
     console.error("[sync-scheduler] recover failed", err);
   }

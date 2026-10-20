@@ -110,8 +110,9 @@ export type TrackerListItem = TrackerItemRow & {
   recipientOptions: RecipientCandidateInfo[];
   /** AI recommended address from contact.md (may differ from primaryTo). */
   recommendedTo: string | null;
+  /** Optimistic concurrency token for user-column mutations. */
+  userVersion: number;
 };
-
 export type TrackerSection = {
   status: TrackerStatus;
   title: string;

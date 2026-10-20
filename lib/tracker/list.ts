@@ -111,6 +111,7 @@ function mapRow(
     })(),
     recipientOptions: recipients.candidates,
     recommendedTo: recipients.recommended,
+    userVersion: row.userVersion || 1,
   };
 }
 

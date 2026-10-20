@@ -1,68 +1,69 @@
-import { eq } from "drizzle-orm";
-import { getDb } from "@/lib/db/client";
-import { bumpTrackerRevision } from "@/lib/db/revision";
-import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
+import { getTrackerRevision } from "@/lib/db/revision";
 import {
   loadRecipientsForItem,
   withSelectedRecipient,
 } from "./recipients";
+import { withItemTx } from "./item-tx";
 
 const EMAIL_RE = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 export function setTrackerItemRecipient(
   itemId: number,
   emailRaw: string,
+  opts?: { expectUserVersion?: number },
 ): {
   id: number;
   primaryTo: string;
   recommendedTo: string | null;
   recipientOptions: ReturnType<typeof loadRecipientsForItem>["candidates"];
+  userVersion: number;
+  rev: number;
 } {
   const email = emailRaw.trim();
   if (!EMAIL_RE.test(email)) {
     throw new Error(t("tracker.error.invalidRecipient"));
   }
 
-  const db = getDb();
-  const item = db
-    .select()
-    .from(trackerItems)
-    .where(eq(trackerItems.id, itemId))
-    .get();
-  if (!item) throw new Error(t("tracker.error.notFound"));
+  const txResult = withItemTx(
+    itemId,
+    { expectUserVersion: opts?.expectUserVersion, source: "mutation" },
+    (_sqlite, item) => {
+      const recipients = loadRecipientsForItem(item);
+      if (recipients.candidates.length > 1) {
+        const hit = recipients.candidates.find(
+          (c) => c.email.toLowerCase() === email.toLowerCase(),
+        );
+        if (!hit) {
+          throw new Error(t("tracker.error.recipientNotInCandidates"));
+        }
+      }
 
-  const recipients = loadRecipientsForItem(item);
-  if (recipients.candidates.length > 1) {
-    const hit = recipients.candidates.find(
-      (c) => c.email.toLowerCase() === email.toLowerCase(),
-    );
-    if (!hit) {
-      throw new Error(t("tracker.error.recipientNotInCandidates"));
-    }
-  }
+      const canonical =
+        recipients.candidates.find(
+          (c) => c.email.toLowerCase() === email.toLowerCase(),
+        )?.email || email;
 
-  const canonical =
-    recipients.candidates.find(
-      (c) => c.email.toLowerCase() === email.toLowerCase(),
-    )?.email || email;
-
-  db.update(trackerItems)
-    .set({
-      primaryTo: canonical,
-      selectedRecipient: canonical,
-      userVersion: (item.userVersion || 1) + 1,
-      notesJson: withSelectedRecipient(item.notesJson, canonical),
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(trackerItems.id, itemId))
-    .run();
-  bumpTrackerRevision("mutation", "upsert", [itemId]);
+      return {
+        patch: {
+          primaryTo: canonical,
+          selectedRecipient: canonical,
+          notesJson: withSelectedRecipient(item.notesJson, canonical),
+        },
+        result: {
+          canonical,
+          recipients,
+        },
+      };
+    },
+  );
 
   return {
     id: itemId,
-    primaryTo: canonical,
-    recommendedTo: recipients.recommended,
-    recipientOptions: recipients.candidates,
+    primaryTo: txResult.result.canonical,
+    recommendedTo: txResult.result.recipients.recommended,
+    recipientOptions: txResult.result.recipients.candidates,
+    userVersion: txResult.userVersion,
+    rev: txResult.rev || getTrackerRevision(),
   };
 }

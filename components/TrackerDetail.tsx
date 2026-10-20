@@ -30,8 +30,16 @@ type DetailItem = {
   lastOutboundAt: string | null;
   lastInboundAt: string | null;
   updatedAt: string;
+  userVersion?: number;
   recipientOptions?: RecipientOption[];
   recommendedTo?: string | null;
+};
+
+type GoneState = {
+  reason: "merged" | "deleted";
+  mergedIntoId?: number | null;
+  deletedReason?: string | null;
+  message: string;
 };
 
 type DetailMail = {
@@ -136,6 +144,8 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
   const [mails, setMails] = useState<DetailMail[]>([]);
   const [timeline, setTimeline] = useState<TimelineData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [gone, setGone] = useState<GoneState | null>(null);
+  const [mergeNotice, setMergeNotice] = useState<string | null>(null);
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [loadingItem, setLoadingItem] = useState(true);
   const [loadingTimeline, setLoadingTimeline] = useState(true);
@@ -154,9 +164,39 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
     try {
       const res = await fetch(`/api/tracker/${itemId}`);
       const data = await res.json();
+      if (res.status === 410) {
+        if (data.reason === "merged" && data.mergedIntoId) {
+          setMergeNotice(
+            t("tracker.detailPage.mergedRedirect", { id: data.mergedIntoId }),
+          );
+          router.replace(`/tracker/${data.mergedIntoId}`);
+          return;
+        }
+        setGone({
+          reason: data.reason === "merged" ? "merged" : "deleted",
+          mergedIntoId: data.mergedIntoId,
+          deletedReason: data.deletedReason,
+          message:
+            data.reason === "merged"
+              ? t("tracker.detailPage.mergedGone")
+              : t("tracker.detailPage.deletedReason", {
+                  reason:
+                    data.deletedReason === "folder_deleted"
+                      ? t("tracker.detailPage.reasonFolderDeleted")
+                      : data.deletedReason === "orphan"
+                        ? t("tracker.detailPage.reasonOrphan")
+                        : data.deletedReason ||
+                          t("tracker.detailPage.reasonUnknown"),
+                }),
+        });
+        setItem(null);
+        setMails([]);
+        return;
+      }
       if (!res.ok) {
         throw new Error(data.error || t("tracker.detailPage.notFound"));
       }
+      setGone(null);
       setItem(data.item as DetailItem);
       setMails((data.mails || []) as DetailMail[]);
     } catch (err) {
@@ -166,7 +206,7 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
     } finally {
       setLoadingItem(false);
     }
-  }, [itemId, t]);
+  }, [itemId, t, router]);
 
   const loadTimeline = useCallback(
     async (refresh = false) => {
@@ -198,7 +238,32 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
     void loadItem();
   }, [loadItem]);
 
-  useTrackerItemEvents(itemId, loadItem);
+  useTrackerItemEvents(itemId, (ev) => {
+    if (ev.type === "merged" && ev.fromId === itemId && ev.intoId) {
+      setMergeNotice(
+        t("tracker.detailPage.mergedRedirect", { id: ev.intoId }),
+      );
+      router.replace(`/tracker/${ev.intoId}`);
+      return;
+    }
+    if (ev.type === "deleted" && ev.itemId === itemId) {
+      setGone({
+        reason: "deleted",
+        deletedReason: ev.reason,
+        message: t("tracker.detailPage.deletedReason", {
+          reason:
+            ev.reason === "folder_deleted"
+              ? t("tracker.detailPage.reasonFolderDeleted")
+              : ev.reason === "orphan"
+                ? t("tracker.detailPage.reasonOrphan")
+                : ev.reason || t("tracker.detailPage.reasonUnknown"),
+        }),
+      });
+      setItem(null);
+      return;
+    }
+    void loadItem();
+  });
 
   useEffect(() => {
     if (!item) return;
@@ -215,20 +280,32 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
       const res = await fetch(`/api/tracker/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ primaryTo: email }),
+        body: JSON.stringify({
+          primaryTo: email,
+          expectUserVersion: item.userVersion,
+        }),
       });
       const data = (await res.json()) as {
         error?: string;
+        code?: string;
+        current?: number;
         primaryTo?: string;
+        userVersion?: number;
         recipientOptions?: RecipientOption[];
         recommendedTo?: string | null;
       };
+      if (res.status === 409 && data.code === "USER_VERSION_CONFLICT") {
+        setLoadError(t("tracker.error.versionConflict"));
+        await loadItem();
+        return;
+      }
       if (!res.ok) throw new Error(data.error || t("tracker.error.loadList"));
       setItem((prev) =>
         prev
           ? {
               ...prev,
               primaryTo: data.primaryTo || email,
+              userVersion: data.userVersion ?? prev.userVersion,
               recipientOptions: data.recipientOptions ?? prev.recipientOptions,
               recommendedTo:
                 data.recommendedTo !== undefined
@@ -244,10 +321,33 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
     }
   }
 
-  if (loadingItem) {
+  if (loadingItem && !gone) {
     return (
       <div className="cmae-td">
         <p className="cmae-td-muted">{t("tracker.detailPage.loading")}</p>
+      </div>
+    );
+  }
+
+  if (gone) {
+    return (
+      <div className="cmae-td">
+        {mergeNotice ? (
+          <p className="cmae-td-muted">{mergeNotice}</p>
+        ) : null}
+        <p className="cmae-td-error">{gone.message}</p>
+        {gone.mergedIntoId ? (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => router.push(`/tracker/${gone.mergedIntoId}`)}
+          >
+            {t("tracker.detailPage.openMerged")}
+          </Button>
+        ) : null}
+        <Button type="button" variant="ghost" onClick={() => router.push("/tracker")}>
+          {t("tracker.detailPage.back")}
+        </Button>
       </div>
     );
   }

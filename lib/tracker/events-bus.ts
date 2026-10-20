@@ -13,6 +13,7 @@ export type TrackerEvent =
       rev: number;
       serverNow: string;
       freshness: TrackerFreshness;
+      itemOps?: { itemId: number; op: string }[];
     }
   | {
       type: "changed";
@@ -31,6 +32,12 @@ export type TrackerEvent =
       rev: number;
       itemId: number;
       reason: string;
+    }
+  | {
+      type: "merge_proposal";
+      rev: number;
+      proposalId: string;
+      itemIds: number[];
     }
   | {
       type: "job";
@@ -237,10 +244,25 @@ export function backfillTrackerEvents(lastEventId: number): TrackerEvent[] {
 }
 
 export function trackerHelloEvent(): Extract<TrackerEvent, { type: "hello" }> {
+  let itemOps: { itemId: number; op: string }[] = [];
+  try {
+    // Lazy require avoids circular import: item-ops → revision → events-bus
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require("./item-ops") as {
+      listActiveItemOps: () => { itemId: number; op: string }[];
+    };
+    itemOps = mod.listActiveItemOps().map((o) => ({
+      itemId: o.itemId,
+      op: o.op,
+    }));
+  } catch {
+    itemOps = [];
+  }
   return {
     type: "hello",
     rev: readRevision(),
     serverNow: new Date().toISOString(),
     freshness: computeTrackerFreshness(),
+    itemOps,
   };
 }

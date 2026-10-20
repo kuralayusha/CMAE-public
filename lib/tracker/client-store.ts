@@ -18,6 +18,11 @@ export type TrackerFreshnessClient = {
   messageParams?: Record<string, string | number>;
 };
 
+export type TrackerItemOpClient = {
+  itemId: number;
+  op: string;
+};
+
 export type TrackerStoreSnapshot = {
   rev: number;
   etag: string | null;
@@ -29,16 +34,20 @@ export type TrackerStoreSnapshot = {
   serverNow: string | null;
   validUntil: string | null;
   freshness: TrackerFreshnessClient | null;
+  itemOps: TrackerItemOpClient[];
 };
 
-type TrackerClientEvent = {
+export type TrackerClientEvent = {
   type?: string;
   rev?: number;
   itemIds?: number[] | "all";
   itemId?: number;
   fromId?: number;
   intoId?: number;
+  reason?: string;
+  proposalId?: string;
   freshness?: TrackerFreshnessClient;
+  itemOps?: TrackerItemOpClient[];
 };
 
 const empty: TrackerStoreSnapshot = {
@@ -52,7 +61,16 @@ const empty: TrackerStoreSnapshot = {
   serverNow: null,
   validUntil: null,
   freshness: null,
+  itemOps: [],
 };
+
+type OptimisticEntry = {
+  mutationId: string;
+  itemId: number;
+  /** Previous field values for rollback */
+  previous: Record<string, unknown>;
+};
+const optimistic = new Map<string, OptimisticEntry>();
 
 let snapshot: TrackerStoreSnapshot = empty;
 const listeners = new Set<() => void>();
@@ -97,6 +115,7 @@ export function applyTrackerListPayload(data: {
   serverNow?: string | null;
   validUntil?: string | null;
   freshness?: TrackerFreshnessClient | null;
+  itemOps?: TrackerItemOpClient[];
 }): boolean {
   if (typeof data.rev === "number" && data.rev < snapshot.rev) {
     return false;
@@ -116,8 +135,69 @@ export function applyTrackerListPayload(data: {
       data.validUntil !== undefined ? data.validUntil : snapshot.validUntil,
     freshness:
       data.freshness !== undefined ? data.freshness : snapshot.freshness,
+    itemOps: data.itemOps !== undefined ? data.itemOps : snapshot.itemOps,
   });
   return true;
+}
+
+type SectionLike = { items: Record<string, unknown>[] };
+
+function mapSectionsItems(
+  sections: unknown[],
+  mapItem: (item: Record<string, unknown>) => Record<string, unknown>,
+): unknown[] {
+  return (sections as SectionLike[]).map((sec) => ({
+    ...sec,
+    items: (sec.items || []).map((it) => mapItem({ ...it })),
+  }));
+}
+
+/**
+ * Apply optimistic user-column patch; returns mutationId for confirm/rollback.
+ */
+export function applyOptimisticItemPatch(
+  itemId: number,
+  patch: Record<string, unknown>,
+): string {
+  const mutationId = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const previous: Record<string, unknown> = {};
+  const nextSections = mapSectionsItems(snapshot.sections, (it) => {
+    if (it.id !== itemId) return it;
+    for (const key of Object.keys(patch)) {
+      previous[key] = it[key];
+    }
+    return { ...it, ...patch };
+  });
+  optimistic.set(mutationId, { mutationId, itemId, previous });
+  setSnapshot({
+    ...snapshot,
+    sections: nextSections,
+    error: null,
+  });
+  return mutationId;
+}
+
+export function confirmOptimisticMutation(
+  mutationId: string,
+  serverPatch?: Record<string, unknown>,
+): void {
+  const entry = optimistic.get(mutationId);
+  optimistic.delete(mutationId);
+  if (!entry || !serverPatch) return;
+  const nextSections = mapSectionsItems(snapshot.sections, (it) =>
+    it.id === entry.itemId ? { ...it, ...serverPatch } : it,
+  );
+  setSnapshot({ ...snapshot, sections: nextSections });
+}
+
+export function rollbackOptimisticMutation(mutationId: string): void {
+  const entry = optimistic.get(mutationId);
+  if (!entry) return;
+  optimistic.delete(mutationId);
+  const nextSections = mapSectionsItems(snapshot.sections, (it) =>
+    it.id === entry.itemId ? { ...it, ...entry.previous } : it,
+  );
+  setSnapshot({ ...snapshot, sections: nextSections });
 }
 
 function nudgeServer(body: Record<string, unknown>): void {
@@ -167,6 +247,7 @@ export async function refreshTrackerList(opts?: {
         serverNow?: string;
         validUntil?: string;
         freshness?: TrackerFreshnessClient | null;
+        itemOps?: TrackerItemOpClient[];
       };
       if (seq !== fetchSeq) return;
 
@@ -193,6 +274,7 @@ export async function refreshTrackerList(opts?: {
         serverNow: data.serverNow ?? null,
         validUntil: data.validUntil ?? null,
         freshness: data.freshness ?? snapshot.freshness,
+        itemOps: data.itemOps ?? snapshot.itemOps,
       });
     } catch (err) {
       if (seq !== fetchSeq) return;
@@ -235,8 +317,12 @@ function dispatchClientEvent(data: TrackerClientEvent) {
   }
 
   if (data.type === "hello" && typeof data.rev === "number") {
-    if (data.freshness) {
-      setSnapshot({ ...snapshot, freshness: data.freshness });
+    if (data.freshness || data.itemOps) {
+      setSnapshot({
+        ...snapshot,
+        freshness: data.freshness ?? snapshot.freshness,
+        itemOps: data.itemOps ?? snapshot.itemOps,
+      });
     }
     if (data.rev > snapshot.rev) {
       void refreshTrackerList({ force: true });
@@ -359,16 +445,19 @@ export function useTrackerListSync(opts?: { enabled?: boolean }) {
   return snap;
 }
 
-/** Detail page: reload when this item (or global) changes. */
+export type TrackerItemEventHandler = (ev: TrackerClientEvent) => void;
+
+/** Detail page: reload / redirect when this item (or global) changes. */
 export function useTrackerItemEvents(
   itemId: number,
-  onRelevant: () => void,
+  onRelevant: TrackerItemEventHandler | (() => void),
 ): void {
   useEffect(() => {
     const release = retainTrackerEvents();
     const unsub = subscribeTrackerClientEvents((data) => {
+      const call = () => (onRelevant as TrackerItemEventHandler)(data);
       if (data.type === "reset" || data.type === "refresh") {
-        onRelevant();
+        call();
         return;
       }
       if (data.type === "changed") {
@@ -377,7 +466,7 @@ export function useTrackerItemEvents(
           !data.itemIds ||
           data.itemIds.includes(itemId)
         ) {
-          onRelevant();
+          call();
         }
         return;
       }
@@ -385,18 +474,25 @@ export function useTrackerItemEvents(
         data.type === "research_merged" &&
         (data.itemId == null || data.itemId === itemId)
       ) {
-        onRelevant();
+        call();
         return;
       }
       if (
         data.type === "merged" &&
         (data.fromId === itemId || data.intoId === itemId)
       ) {
-        onRelevant();
+        call();
         return;
       }
       if (data.type === "deleted" && data.itemId === itemId) {
-        onRelevant();
+        call();
+      }
+      if (
+        data.type === "merge_proposal" &&
+        Array.isArray(data.itemIds) &&
+        data.itemIds.includes(itemId)
+      ) {
+        call();
       }
     });
     return () => {

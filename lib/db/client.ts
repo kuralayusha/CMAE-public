@@ -98,6 +98,7 @@ export function wipeDatabaseContents() {
     "mail_intents",
     "merge_proposals",
     "item_lineage",
+    "item_ops",
     "mail_sources",
     "mail_fetch_failures",
     "gmail_drafts",

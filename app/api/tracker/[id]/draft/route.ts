@@ -6,6 +6,11 @@ import {
   endDraftOperation,
 } from "@/lib/tracker/draft-inflight";
 import { createGmailDraftForItem } from "@/lib/tracker/drafts";
+import {
+  draftOpKey,
+  ItemOpBusyError,
+  withItemOp,
+} from "@/lib/tracker/item-ops";
 import type { DraftKind } from "@/lib/tracker/types";
 
 export const runtime = "nodejs";
@@ -42,14 +47,28 @@ export async function POST(
     }
     beginDraftOperation();
     try {
-      const result = await createGmailDraftForItem(id, kind, {
-        ensure: Boolean(body.ensure),
-      });
+      const result = await withItemOp(id, draftOpKey(kind), () =>
+        createGmailDraftForItem(id, kind, {
+          ensure: Boolean(body.ensure),
+        }),
+      );
       return NextResponse.json(result);
     } finally {
       endDraftOperation();
     }
   } catch (err) {
+    if (err instanceof ItemOpBusyError) {
+      return NextResponse.json(
+        {
+          error: err.message,
+          code: err.code,
+          itemId: err.itemId,
+          op: err.op,
+          expiresAt: err.expiresAt,
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 },

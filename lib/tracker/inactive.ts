@@ -1,17 +1,17 @@
 /**
  * Bulk inactive / active for tracker rows.
- * Faz 4: user_state overlay; status comes from effective() on read.
+ * Faz 6: single transaction via withItemsTx; user_state only (facts untouched).
  * Auto twin collapse disabled (K3) — see suggestTwinMerges.
  */
 
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
-import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
+import { getSettingsRow } from "@/lib/settings/service";
 import { suggestTwinMerges } from "./derive/merge-suggestions";
 import { effective, factsFromItemRow } from "./derive/effective";
-import { getSettingsRow } from "@/lib/settings/service";
+import { withItemsTx, type UserColumnPatch } from "./item-tx";
 
 function isInactiveRow(row: {
   userState: string | null;
@@ -20,82 +20,53 @@ function isInactiveRow(row: {
   return row.userState === "inactive" || row.status === "inactive";
 }
 
-export function setItemsInactive(ids: number[]): { updated: number } {
+export function setItemsInactive(ids: number[]): { updated: number; rev: number } {
   const uniq = [...new Set(ids.filter((n) => Number.isFinite(n)))];
-  if (!uniq.length) return { updated: 0 };
+  if (!uniq.length) return { updated: 0, rev: 0 };
 
-  const db = getDb();
-  const rows = db
-    .select()
-    .from(trackerItems)
-    .where(inArray(trackerItems.id, uniq))
-    .all();
-
-  let updated = 0;
-  const now = new Date().toISOString();
-  const touched: number[] = [];
-  for (const row of rows) {
-    if (isInactiveRow(row)) continue;
-    db.update(trackerItems)
-      .set({
+  const { rev, touched } = withItemsTx(uniq, { source: "mutation" }, (_sqlite, rows) => {
+    const patches = new Map<number, UserColumnPatch>();
+    for (const [id, row] of rows) {
+      if (isInactiveRow(row)) continue;
+      patches.set(id, {
         userState: "inactive",
-        userVersion: (row.userVersion || 1) + 1,
         status: "inactive",
-        updatedAt: now,
-      })
-      .where(eq(trackerItems.id, row.id))
-      .run();
-    touched.push(row.id);
-    updated += 1;
-  }
-  if (updated) {
-    bumpTrackerRevision("mutation", "upsert", touched);
-  }
-  return { updated };
+      });
+    }
+    return { patches };
+  });
+
+  return { updated: touched.length, rev };
 }
 
-export function setItemsActive(ids: number[]): { updated: number } {
+export function setItemsActive(ids: number[]): { updated: number; rev: number } {
   const uniq = [...new Set(ids.filter((n) => Number.isFinite(n)))];
-  if (!uniq.length) return { updated: 0 };
-
-  const db = getDb();
-  const rows = db
-    .select()
-    .from(trackerItems)
-    .where(inArray(trackerItems.id, uniq))
-    .all();
+  if (!uniq.length) return { updated: 0, rev: 0 };
 
   const followUpDays = getSettingsRow()?.followUpDays ?? 5;
-  let updated = 0;
-  const now = new Date().toISOString();
-  const touched: number[] = [];
-  for (const row of rows) {
-    if (!isInactiveRow(row)) continue;
-    const facts = factsFromItemRow(row);
-    const resolved = effective({
-      facts,
-      userState: "active",
-      followUpDays,
-    });
-    db.update(trackerItems)
-      .set({
+
+  const { rev, touched } = withItemsTx(uniq, { source: "mutation" }, (_sqlite, rows) => {
+    const patches = new Map<number, UserColumnPatch>();
+    for (const [id, row] of rows) {
+      if (!isInactiveRow(row)) continue;
+      const facts = factsFromItemRow(row);
+      const resolved = effective({
+        facts,
         userState: "active",
-        userVersion: (row.userVersion || 1) + 1,
+        followUpDays,
+      });
+      patches.set(id, {
+        userState: "active",
         status: resolved.status,
         waitingOn: resolved.waitingOn,
         nextFollowUpAt: resolved.nextFollowUpAt,
         ignored: resolved.ignored ? 1 : 0,
-        updatedAt: now,
-      })
-      .where(eq(trackerItems.id, row.id))
-      .run();
-    touched.push(row.id);
-    updated += 1;
-  }
-  if (updated) {
-    bumpTrackerRevision("mutation", "upsert", touched);
-  }
-  return { updated };
+      });
+    }
+    return { patches };
+  });
+
+  return { updated: touched.length, rev };
 }
 
 export function assertItemActiveForDrafts(itemId: number): void {
@@ -103,11 +74,15 @@ export function assertItemActiveForDrafts(itemId: number): void {
     .select({
       status: trackerItems.status,
       userState: trackerItems.userState,
+      deletedAt: trackerItems.deletedAt,
     })
     .from(trackerItems)
     .where(eq(trackerItems.id, itemId))
     .get();
-  if (row && isInactiveRow(row)) {
+  if (!row || row.deletedAt) {
+    throw new Error(t("tracker.error.notFound"));
+  }
+  if (isInactiveRow(row)) {
     throw new Error(t("tracker.error.inactive"));
   }
 }

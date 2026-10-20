@@ -23,8 +23,11 @@ import {
   type DraftVariantMeta,
 } from "@/lib/tracker/draft-variants";
 import {
+  applyOptimisticItemPatch,
   applyTrackerListPayload,
+  confirmOptimisticMutation,
   refreshTrackerList,
+  rollbackOptimisticMutation,
   useTrackerListSync,
 } from "@/lib/tracker/client-store";
 import type { SyncLogLine } from "@/lib/tracker/types";
@@ -199,6 +202,7 @@ type TrackerItem = {
   } | null;
   recipientOptions?: RecipientOption[];
   recommendedTo?: string | null;
+  userVersion?: number;
 };
 
 /** Open tab under the click gesture, then navigate after async work (avoids popup block).
@@ -410,12 +414,90 @@ export function TrackerList() {
   const [syncSessionId, setSyncSessionId] = useState<string | null>(null);
   const [hardSync, setHardSync] = useState(false);
   const [actionsMenuId, setActionsMenuId] = useState<number | null>(null);
+  const [mergeProposals, setMergeProposals] = useState<
+    {
+      id: string;
+      winnerId: number;
+      loserId: number;
+      conflicts: { field: string; winner: string | null; loser: string | null }[];
+      winner: { id: number; company: string; primaryTo: string | null; userState: string };
+      loser: { id: number; company: string; primaryTo: string | null; userState: string };
+    }[]
+  >([]);
+  const [mergeBusyId, setMergeBusyId] = useState<string | null>(null);
+  const [mergeChoices, setMergeChoices] = useState<
+    Record<string, Record<string, string | null>>
+  >({});
   const syncEsRef = useRef<EventSource | null>(null);
   const syncShowToastRef = useRef(false);
 
   useEffect(() => {
     if (store.error) setError(store.error);
   }, [store.error]);
+
+  const loadMergeProposals = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tracker/merge-proposals");
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        proposals?: typeof mergeProposals;
+      };
+      const list = data.proposals || [];
+      setMergeProposals(list);
+      setMergeChoices((prev) => {
+        const next = { ...prev };
+        for (const p of list) {
+          if (!next[p.id]) {
+            const defaults: Record<string, string | null> = {};
+            for (const c of p.conflicts) {
+              defaults[c.field] = c.winner;
+            }
+            next[p.id] = defaults;
+          }
+        }
+        return next;
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    void loadMergeProposals();
+  }, [loading, store.rev, loadMergeProposals]);
+
+  async function respondMerge(
+    proposalId: string,
+    decision: "accept" | "reject",
+  ) {
+    setMergeBusyId(proposalId);
+    setError(null);
+    try {
+      const res = await fetch("/api/tracker/merge-proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: proposalId,
+          decision,
+          choices: mergeChoices[proposalId] || {},
+        }),
+      });
+      const data = (await res.json()) as { error?: string; ok?: boolean };
+      if (!res.ok) throw new Error(data.error || t("tracker.error.mergeFailed"));
+      setToast(
+        decision === "accept"
+          ? t("tracker.merge.accepted")
+          : t("tracker.merge.rejected"),
+      );
+      await loadMergeProposals();
+      await refreshTrackerList({ force: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMergeBusyId(null);
+    }
+  }
 
   useEffect(() => {
     if (!toast) return;
@@ -801,60 +883,54 @@ export function TrackerList() {
     });
   }
 
-  function patchItemRecipient(
-    itemId: number,
-    primaryTo: string,
-    recipientOptions?: RecipientOption[],
-    recommendedTo?: string | null,
-  ) {
-    const nextSections = sections.map((sec) => ({
-      ...sec,
-      items: sec.items.map((it) =>
-        it.id === itemId
-          ? {
-              ...it,
-              primaryTo,
-              ...(recipientOptions ? { recipientOptions } : {}),
-              ...(recommendedTo !== undefined ? { recommendedTo } : {}),
-            }
-          : it,
-      ),
-    }));
-    applyTrackerListPayload({
-      sections: nextSections,
-      sync,
-      total,
-      rev: store.rev,
-    });
-  }
-
   async function changeRecipient(item: TrackerItem, email: string) {
     if (!email || email === item.primaryTo) return;
     const key = `${item.id}:recipient`;
     addBusyKey(key);
     setError(null);
+    const mutationId = applyOptimisticItemPatch(item.id, { primaryTo: email });
     try {
       const res = await fetch(`/api/tracker/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ primaryTo: email }),
+        body: JSON.stringify({
+          primaryTo: email,
+          expectUserVersion: item.userVersion,
+        }),
       });
       const data = (await res.json()) as {
         error?: string;
+        code?: string;
+        current?: number;
         primaryTo?: string;
+        userVersion?: number;
         recipientOptions?: RecipientOption[];
         recommendedTo?: string | null;
       };
-      if (!res.ok) throw new Error(data.error || t("tracker.error.loadList"));
+      if (res.status === 409 && data.code === "USER_VERSION_CONFLICT") {
+        rollbackOptimisticMutation(mutationId);
+        setError(t("tracker.error.versionConflict"));
+        await refreshTrackerList({ force: true });
+        return;
+      }
+      if (!res.ok) {
+        rollbackOptimisticMutation(mutationId);
+        throw new Error(data.error || t("tracker.error.loadList"));
+      }
       const next = data.primaryTo || email;
-      patchItemRecipient(
-        item.id,
-        next,
-        data.recipientOptions,
-        data.recommendedTo,
-      );
+      confirmOptimisticMutation(mutationId, {
+        primaryTo: next,
+        userVersion: data.userVersion,
+        ...(data.recipientOptions
+          ? { recipientOptions: data.recipientOptions }
+          : {}),
+        ...(data.recommendedTo !== undefined
+          ? { recommendedTo: data.recommendedTo }
+          : {}),
+      });
       setToast(t("tracker.recipient.saved", { email: next }));
     } catch (err) {
+      rollbackOptimisticMutation(mutationId);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       removeBusyKey(key);
@@ -1616,6 +1692,72 @@ export function TrackerList() {
           </Button>
         </div>
       ) : null}
+      {!loading && mergeProposals.length > 0
+        ? mergeProposals.map((p) => (
+            <div
+              key={p.id}
+              className="cmae-tracker-banner cmae-tracker-freshness is-warn"
+            >
+              <div style={{ flex: 1 }}>
+                <p>
+                  {t("tracker.merge.prompt", {
+                    a: p.winner.company,
+                    b: p.loser.company,
+                  })}
+                </p>
+                {p.conflicts.map((c) => (
+                  <label
+                    key={c.field}
+                    style={{
+                      display: "block",
+                      marginTop: 6,
+                      fontSize: "0.9em",
+                    }}
+                  >
+                    {c.field === "user_state"
+                      ? t("tracker.merge.fieldUserState")
+                      : t("tracker.merge.fieldRecipient")}
+                    {": "}
+                    <select
+                      value={mergeChoices[p.id]?.[c.field] ?? c.winner ?? ""}
+                      onChange={(e) =>
+                        setMergeChoices((prev) => ({
+                          ...prev,
+                          [p.id]: {
+                            ...(prev[p.id] || {}),
+                            [c.field]: e.target.value || null,
+                          },
+                        }))
+                      }
+                    >
+                      <option value={c.winner ?? ""}>
+                        {c.winner || "—"} ({t("tracker.merge.sideA")})
+                      </option>
+                      <option value={c.loser ?? ""}>
+                        {c.loser || "—"} ({t("tracker.merge.sideB")})
+                      </option>
+                    </select>
+                  </label>
+                ))}
+              </div>
+              <Button
+                type="button"
+                disabled={mergeBusyId === p.id}
+                onClick={() => void respondMerge(p.id, "accept")}
+              >
+                {t("tracker.merge.accept")}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={mergeBusyId === p.id}
+                onClick={() => void respondMerge(p.id, "reject")}
+              >
+                {t("tracker.merge.reject")}
+              </Button>
+            </div>
+          ))
+        : null}
 
       {gmailModal ? (
         <div

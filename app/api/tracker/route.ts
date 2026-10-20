@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getTrackerRevision } from "@/lib/db/revision";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { computeTrackerFreshness } from "@/lib/sync/freshness";
+import { listActiveItemOps } from "@/lib/tracker/item-ops";
 import { listTrackerSections } from "@/lib/tracker/list";
 
 export const runtime = "nodejs";
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
         serverNow: serverNow.toISOString(),
         validUntil: validUntil.toISOString(),
         freshness: computeTrackerFreshness(serverNow),
+        itemOps: listActiveItemOps(),
       },
       {
         headers: {

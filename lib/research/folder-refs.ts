@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
 import path from "path";
-import { getDb } from "@/lib/db/client";
-import { bumpTrackerRevision } from "@/lib/db/revision";
+import { getDb, getSqlite } from "@/lib/db/client";
+import { bumpRevision } from "@/lib/db/revision";
 import { trackerItemMails, trackerItems } from "@/lib/db/schema";
 import { emitTrackerLive } from "@/lib/tracker/live";
+import { softDeleteItemInTx } from "@/lib/tracker/item-tx";
 import { getJobs } from "./events";
 import { loadJobsFromDisk, persistJobNow } from "./persist";
 import type { ResearchJob } from "./types";
@@ -27,29 +28,39 @@ export function syncTopLevelFolderRefs(
 
   let trackerChanged = false;
   try {
-    const db = getDb();
-    const updatedAt = new Date().toISOString();
-    if (next) {
-      const result = db
-        .update(trackerItems)
-        .set({ workspaceFolder: next.name, updatedAt })
-        .where(eq(trackerItems.workspaceFolder, oldName))
-        .run();
-      trackerChanged = (result.changes ?? 0) > 0;
-    } else {
+    const sqlite = getSqlite();
+    const run = sqlite.transaction(() => {
+      const db = getDb();
+      const updatedAt = new Date().toISOString();
+      if (next) {
+        const result = db
+          .update(trackerItems)
+          .set({ workspaceFolder: next.name, updatedAt })
+          .where(eq(trackerItems.workspaceFolder, oldName))
+          .run();
+        trackerChanged = (result.changes ?? 0) > 0;
+        if (trackerChanged) {
+          bumpRevision(sqlite, "fs", "global", "all");
+        }
+        return;
+      }
+
       const rows = db
         .select()
         .from(trackerItems)
         .where(eq(trackerItems.workspaceFolder, oldName))
-        .all();
+        .all()
+        .filter((r) => !r.deletedAt);
+
+      let anySoftDelete = false;
+      const unlinked: number[] = [];
+
       for (const row of rows) {
         const hasMails = itemHasMails(row.id);
-        // Research-only row (no outbound yet): remove from tracker entirely.
+        // Research-only row (no outbound yet): soft-delete.
         if (row.status === "ready_to_send" && !hasMails) {
-          db.delete(trackerItemMails)
-            .where(eq(trackerItemMails.itemId, row.id))
-            .run();
-          db.delete(trackerItems).where(eq(trackerItems.id, row.id)).run();
+          softDeleteItemInTx(sqlite, row.id, "folder_deleted", "fs");
+          anySoftDelete = true;
           trackerChanged = true;
           continue;
         }
@@ -65,15 +76,22 @@ export function syncTopLevelFolderRefs(
           })
           .where(eq(trackerItems.id, row.id))
           .run();
+        unlinked.push(row.id);
         trackerChanged = true;
       }
-    }
+
+      if (unlinked.length && !anySoftDelete) {
+        bumpRevision(sqlite, "fs", "upsert", unlinked);
+      } else if (unlinked.length && anySoftDelete) {
+        bumpRevision(sqlite, "fs", "upsert", unlinked);
+      }
+    });
+    run.immediate();
   } catch (err) {
     console.error("[syncTopLevelFolderRefs] tracker", err);
   }
 
   if (trackerChanged) {
-    bumpTrackerRevision("fs", "global", "all");
     emitTrackerLive({ type: "refresh" });
   }
 

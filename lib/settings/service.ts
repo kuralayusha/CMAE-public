@@ -152,11 +152,17 @@ export function updateSettings(input: {
     updatedAt: new Date().toISOString(),
   };
 
-  const credsChanged =
-    (input.gmailAppPassword !== undefined && input.gmailAppPassword !== "") ||
-    (input.gmailAddress !== undefined &&
-      normalizeAccountId(input.gmailAddress) !==
-        normalizeAccountId(current?.gmailAddress));
+  const oldAccount = normalizeAccountId(current?.gmailAddress);
+  const newAccount = normalizeAccountId(next.gmailAddress);
+  const addressChanged =
+    Boolean(input.gmailAddress !== undefined) &&
+    Boolean(newAccount) &&
+    oldAccount !== newAccount;
+  /** Different Gmail identity — K2 wipe must run before (or with) this write. */
+  const isAccountSwitch = Boolean(oldAccount && newAccount && addressChanged);
+  const passwordChanged =
+    input.gmailAppPassword !== undefined && input.gmailAppPassword !== "";
+  const credsChanged = passwordChanged || addressChanged;
 
   const result = db
     .update(settings)
@@ -178,7 +184,9 @@ export function updateSettings(input: {
       .run();
   }
 
-  if (credsChanged) {
+  // Account switch: executeAccountSwitch already set account_id + fencing.
+  // Same-address / first-set: update fencing tokens here.
+  if (credsChanged && !isAccountSwitch) {
     const accountId = normalizeAccountId(next.gmailAddress);
     if (accountId) {
       setAppMeta("account_id", accountId, getSqlite());
@@ -187,6 +195,17 @@ export function updateSettings(input: {
   }
 
   return getPublicSettings();
+}
+
+/** True when saving would change Gmail identity (K2). */
+export function wouldSwitchGmailAccount(
+  nextGmailAddress: string | undefined,
+): boolean {
+  if (nextGmailAddress === undefined) return false;
+  const current = ensureSettingsRow();
+  const oldAccount = normalizeAccountId(current?.gmailAddress);
+  const newAccount = normalizeAccountId(nextGmailAddress);
+  return Boolean(oldAccount && newAccount && oldAccount !== newAccount);
 }
 
 export function getJobPreferences(): JobPreferences {

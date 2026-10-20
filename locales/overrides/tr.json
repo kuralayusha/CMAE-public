@@ -4,7 +4,38 @@
   },
   "tracker": {
     "detailPage": {
-      "goneFromGmail": "Gmail'de silinmiş"
+      "goneFromGmail": "Gmail'de silinmiş",
+      "mergedRedirect": "Bu satır birleştirildi — #{id} açılıyor…",
+      "mergedGone": "Bu başvuru başka bir satırla birleştirildi.",
+      "deletedReason": "Bu başvuru kaldırıldı: {reason}",
+      "reasonFolderDeleted": "araştırma klasörü silindi",
+      "reasonOrphan": "yeniden gruplamada yetim kaldı",
+      "reasonUnknown": "bilinmeyen neden",
+      "openMerged": "Birleştirilmiş satırı aç"
+    },
+    "error": {
+      "versionConflict": "Bu satır başka yerde değişti — yenilendi; tekrar deneyin",
+      "itemMerged": "Bu başvuru başka bir satırla birleştirildi",
+      "itemDeleted": "Bu başvuru kaldırıldı",
+      "itemOpBusy": "Bu satırda zaten başka bir işlem sürüyor",
+      "maintenance": "Tracker bakım için geçici kilitli — kısa süre sonra deneyin",
+      "mergeNotFound": "Birleştirme teklifi bulunamadı",
+      "mergeNotPending": "Bu birleştirme teklifi artık bekleyen değil",
+      "mergeStale": "Satırlar değişti — birleştirme teklifi eskimiş",
+      "mergeChoicesRequired": "Çakışan her alan için bir değer seçin",
+      "mergeDecisionInvalid": "Geçersiz birleştirme kararı",
+      "mergeFailed": "Birleştirme çözülemedi"
+    },
+    "merge": {
+      "prompt": "Bu iki satır aynı başvuru olabilir — {a} ve {b}. Birleştirilsin mi?",
+      "fieldUserState": "Aktif / pasif",
+      "fieldRecipient": "Alıcı",
+      "sideA": "birinci",
+      "sideB": "ikinci",
+      "accept": "Birleştir",
+      "reject": "Ayrı tut",
+      "accepted": "Satırlar birleştirildi",
+      "rejected": "Ayrı satırlar olarak bırakıldı"
     },
     "freshness": {
       "neverSynced": "İlk senkronizasyon yapılıyor — son mailler taranıyor. Liste boş değil; hâlâ yükleniyor.",
@@ -89,6 +120,9 @@
       "trackerDraft": "mail taslağı hazırlama",
       "multiple": "Gmail senkronizasyonu, araştırma veya taslak hazırlama"
     },
+    "accountSwitchTitle": "Gmail hesabı değiştirilsin mi?",
+    "accountSwitchBody": "{old} hesabından geçiyorsunuz. Bu cihazda o hesaba ait {mails} mail, {items} takip satırı ve {drafts} taslak kaydı kalıcı olarak silinecek. Gmail’deki mailleriniz etkilenmez. {kept} yalnızca-araştırma satırı korunacak. Devam edilsin mi?",
+    "accountSwitchConfirm": "Evet, değiştir ve eski veriyi sil",
     "error": {
       "opsBusy": "Gmail senkronizasyonu, araştırma veya taslak hazırlama çalışırken ayarlar değiştirilemez"
     },

@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { getDb } from "@/lib/db/client";
+import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { loadRecipientsForItem } from "@/lib/tracker/recipients";
 import { setTrackerItemRecipient } from "@/lib/tracker/set-recipient";
+import {
+  ItemGoneError,
+  MaintenanceError,
+  MutationConflictError,
+} from "@/lib/tracker/item-tx";
 import {
   loadItemGmailUrls,
   loadLinkedMails,
@@ -27,6 +35,44 @@ export async function GET(
     );
   }
 
+  const raw = getDb()
+    .select()
+    .from(trackerItems)
+    .where(eq(trackerItems.id, id))
+    .get();
+
+  if (!raw) {
+    return NextResponse.json(
+      { error: t("tracker.error.notFound") },
+      { status: 404 },
+    );
+  }
+
+  if (raw.mergedIntoId != null || raw.deletedReason === "merged") {
+    return NextResponse.json(
+      {
+        error: t("tracker.error.itemMerged"),
+        code: "ITEM_GONE",
+        reason: "merged",
+        mergedIntoId: raw.mergedIntoId,
+        deletedReason: raw.deletedReason,
+      },
+      { status: 410 },
+    );
+  }
+
+  if (raw.deletedAt) {
+    return NextResponse.json(
+      {
+        error: t("tracker.error.itemDeleted"),
+        code: "ITEM_GONE",
+        reason: "deleted",
+        deletedReason: raw.deletedReason,
+      },
+      { status: 410 },
+    );
+  }
+
   const item = loadTrackerItem(id);
   if (!item) {
     return NextResponse.json(
@@ -37,11 +83,12 @@ export async function GET(
 
   const mails = loadLinkedMails(id);
   const gmailUrls = loadItemGmailUrls(mails);
-  const recipients = loadRecipientsForItem(item);
+  const recipients = loadRecipientsForItem(raw);
 
   return NextResponse.json({
     item: {
       ...item,
+      userVersion: raw.userVersion || 1,
       recipientOptions: recipients.candidates,
       recommendedTo: recipients.recommended,
     },
@@ -78,9 +125,12 @@ export async function PATCH(
     );
   }
 
-  let body: { primaryTo?: unknown };
+  let body: { primaryTo?: unknown; expectUserVersion?: unknown };
   try {
-    body = (await req.json()) as { primaryTo?: unknown };
+    body = (await req.json()) as {
+      primaryTo?: unknown;
+      expectUserVersion?: unknown;
+    };
   } catch {
     return NextResponse.json(
       { error: t("tracker.error.invalidBody") },
@@ -95,10 +145,46 @@ export async function PATCH(
     );
   }
 
+  const expectUserVersion =
+    typeof body.expectUserVersion === "number" &&
+    Number.isFinite(body.expectUserVersion)
+      ? body.expectUserVersion
+      : undefined;
+
   try {
-    const result = setTrackerItemRecipient(id, body.primaryTo);
+    const result = setTrackerItemRecipient(id, body.primaryTo, {
+      expectUserVersion,
+    });
     return NextResponse.json(result);
   } catch (err) {
+    if (err instanceof MutationConflictError) {
+      return NextResponse.json(
+        {
+          error: err.message,
+          code: err.code,
+          current: err.current,
+        },
+        { status: 409 },
+      );
+    }
+    if (err instanceof ItemGoneError) {
+      return NextResponse.json(
+        {
+          error: err.message,
+          code: err.code,
+          reason: err.reason,
+          mergedIntoId: err.mergedIntoId,
+          deletedReason: err.deletedReason,
+        },
+        { status: 410 },
+      );
+    }
+    if (err instanceof MaintenanceError) {
+      return NextResponse.json(
+        { error: err.message, code: err.code },
+        { status: 503 },
+      );
+    }
     const message = err instanceof Error ? err.message : String(err);
     const status =
       message === t("tracker.error.notFound")

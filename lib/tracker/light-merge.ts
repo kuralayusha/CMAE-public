@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getDb } from "@/lib/db/client";
+import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItemMails, trackerItems } from "@/lib/db/schema";
 import {
@@ -48,6 +48,19 @@ function itemHasMails(itemId: number): boolean {
 function insertReadyToSend(c: WorkspaceCandidate): number {
   const db = getDb();
   const now = new Date().toISOString();
+  // Idempotent: unique origin_research_job_id among live rows
+  const existing = db
+    .select()
+    .from(trackerItems)
+    .all()
+    .find(
+      (r) =>
+        !r.deletedAt &&
+        (r.originResearchJobId === c.researchJobId ||
+          r.researchJobId === c.researchJobId),
+    );
+  if (existing) return existing.id;
+
   const inserted = db
     .insert(trackerItems)
     .values({
@@ -63,6 +76,7 @@ function insertReadyToSend(c: WorkspaceCandidate): number {
       ignored: 0,
       workspaceFolder: c.workspaceFolder,
       researchJobId: c.researchJobId,
+      originResearchJobId: c.researchJobId,
       primaryTo: c.primaryTo,
       notesJson: JSON.stringify({
         notes: "workspace search only (light merge)",
@@ -137,98 +151,93 @@ export function mergeResearchJobIntoTracker(
     };
   }
 
-  const db = getDb();
-  const all = db.select().from(trackerItems).all();
-  const byJob = all.find((r) => r.researchJobId === researchJobId);
+  const sqlite = getSqlite();
+  const result = sqlite
+    .transaction((): LightMergeResult => {
+      const db = getDb();
+      const all = db
+        .select()
+        .from(trackerItems)
+        .all()
+        .filter((r) => !r.deletedAt);
+      const byJob = all.find(
+        (r) =>
+          r.researchJobId === researchJobId ||
+          r.originResearchJobId === researchJobId,
+      );
 
-  if (byJob) {
-    patchResearchMeta(byJob.id, c, { overwriteResearchJobId: true });
-    const result: LightMergeResult = {
-      ok: true,
-      action: "updated",
-      researchJobId,
-      itemId: byJob.id,
-    };
-    emitTrackerLive({
-      type: "research_merged",
-      researchJobId,
-      action: result.action,
-      itemId: result.itemId,
-    });
-    return afterResearchWrite(result);
-  }
-
-  const ck = companyKey(c.company);
-  const sameCompany = all.filter((r) => companyKey(r.company) === ck);
-  const mailFlags = new Map(
-    sameCompany.map((r) => [r.id, itemHasMails(r.id)]),
-  );
-  const companyHasMails = sameCompany.some((r) => mailFlags.get(r.id));
-  const companyHasOutboundThread = sameCompany.some(
-    (r) =>
-      mailFlags.get(r.id) &&
-      r.status !== "ready_to_send" &&
-      r.status !== "closed" &&
-      r.status !== "inactive",
-  );
-
-  // Fresh search draft + existing thread → separate ready_to_send (same rule as full rebuild)
-  if (c.hasEmailDraft && companyHasOutboundThread) {
-    const itemId = insertReadyToSend(c);
-    for (const r of sameCompany) {
-      if (mailFlags.get(r.id)) {
-        patchResearchMeta(r.id, c, { overwriteResearchJobId: true });
+      if (byJob) {
+        patchResearchMeta(byJob.id, c, { overwriteResearchJobId: true });
+        return {
+          ok: true,
+          action: "updated",
+          researchJobId,
+          itemId: byJob.id,
+        };
       }
-    }
-    const result: LightMergeResult = {
-      ok: true,
-      action: "inserted",
-      researchJobId,
-      itemId,
-    };
-    emitTrackerLive({
-      type: "research_merged",
-      researchJobId,
-      action: result.action,
-      itemId,
-    });
-    return afterResearchWrite(result);
-  }
 
-  if (companyHasMails) {
-    // Attach to rows without search meta; otherwise update folder on same-company rows
-    const bare = sameCompany.filter((r) => !r.researchJobId);
-    const targets = bare.length ? bare : sameCompany;
-    for (const r of targets) {
-      patchResearchMeta(r.id, c, { overwriteResearchJobId: !r.researchJobId });
-    }
-    const result: LightMergeResult = {
-      ok: true,
-      action: "linked",
-      researchJobId,
-      itemId: sameCompany[0]?.id,
-    };
+      const ck = companyKey(c.company);
+      const sameCompany = all.filter((r) => companyKey(r.company) === ck);
+      const mailFlags = new Map(
+        sameCompany.map((r) => [r.id, itemHasMails(r.id)]),
+      );
+      const companyHasMails = sameCompany.some((r) => mailFlags.get(r.id));
+      const companyHasOutboundThread = sameCompany.some(
+        (r) =>
+          mailFlags.get(r.id) &&
+          r.status !== "ready_to_send" &&
+          r.status !== "closed" &&
+          r.status !== "inactive",
+      );
+
+      if (c.hasEmailDraft && companyHasOutboundThread) {
+        const itemId = insertReadyToSend(c);
+        for (const r of sameCompany) {
+          if (mailFlags.get(r.id)) {
+            patchResearchMeta(r.id, c, { overwriteResearchJobId: true });
+          }
+        }
+        return {
+          ok: true,
+          action: "inserted",
+          researchJobId,
+          itemId,
+        };
+      }
+
+      if (companyHasMails) {
+        const bare = sameCompany.filter((r) => !r.researchJobId);
+        const targets = bare.length ? bare : sameCompany;
+        for (const r of targets) {
+          patchResearchMeta(r.id, c, {
+            overwriteResearchJobId: !r.researchJobId,
+          });
+        }
+        return {
+          ok: true,
+          action: "linked",
+          researchJobId,
+          itemId: sameCompany[0]?.id,
+        };
+      }
+
+      const itemId = insertReadyToSend(c);
+      return {
+        ok: true,
+        action: "inserted",
+        researchJobId,
+        itemId,
+      };
+    })
+    .immediate();
+
+  if (result.ok && result.action !== "skipped") {
     emitTrackerLive({
       type: "research_merged",
       researchJobId,
       action: result.action,
       itemId: result.itemId,
     });
-    return afterResearchWrite(result);
   }
-
-  const itemId = insertReadyToSend(c);
-  const result: LightMergeResult = {
-    ok: true,
-    action: "inserted",
-    researchJobId,
-    itemId,
-  };
-  emitTrackerLive({
-    type: "research_merged",
-    researchJobId,
-    action: result.action,
-    itemId,
-  });
   return afterResearchWrite(result);
 }

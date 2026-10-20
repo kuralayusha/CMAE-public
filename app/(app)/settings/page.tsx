@@ -117,6 +117,14 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [wipeOpen, setWipeOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
+  const [accountSwitchPreview, setAccountSwitchPreview] = useState<{
+    oldAccountId: string;
+    newAccountId: string;
+    mailCount: number;
+    itemCount: number;
+    draftCount: number;
+    researchOnlyKept: number;
+  } | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   /** When set, full-screen locale prep locks the UI until pack is ready. */
@@ -210,8 +218,7 @@ export default function SettingsPage() {
     setStatusTone(text ? tone : null);
   }
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
+  async function persistSettings(opts?: { confirmAccountSwitch?: boolean }) {
     if (formLocked) return;
     setBusy(true);
     flash(null);
@@ -221,10 +228,24 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, jobPreferences: prefs }),
+        body: JSON.stringify({
+          ...form,
+          jobPreferences: prefs,
+          confirmAccountSwitch: Boolean(opts?.confirmAccountSwitch),
+        }),
       });
       const data = await res.json();
+      if (
+        res.status === 409 &&
+        data.code === "ACCOUNT_SWITCH_REQUIRED" &&
+        data.preview
+      ) {
+        setAccountSwitchPreview(data.preview);
+        setBusy(false);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || t("settings.error.saveFailed"));
+      setAccountSwitchPreview(null);
       setMeta(data);
       if (data.jobPreferences) setPrefs({ ...DEFAULT_PREFS, ...data.jobPreferences });
       setForm((f) => ({ ...f, gmailAppPassword: "", cursorApiKey: "" }));
@@ -240,6 +261,11 @@ export default function SettingsPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    await persistSettings();
   }
 
   async function uploadCv(file: File) {
@@ -851,6 +877,70 @@ export default function SettingsPage() {
             })();
           }}
         />
+      ) : null}
+
+      {accountSwitchPreview ? (
+        <div
+          className="term-modal-backdrop"
+          role="presentation"
+          onClick={() => !busy && setAccountSwitchPreview(null)}
+        >
+          <div
+            className="term-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-switch-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="term-modal-head">
+              <h3 id="account-switch-title">
+                {t("settings.accountSwitchTitle")}
+              </h3>
+              <button
+                type="button"
+                className="term-modal-close"
+                onClick={() => setAccountSwitchPreview(null)}
+                disabled={busy}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+            <div className="term-modal-body">
+              <p>
+                {t("settings.accountSwitchBody", {
+                  old: accountSwitchPreview.oldAccountId,
+                  mails: accountSwitchPreview.mailCount,
+                  items: accountSwitchPreview.itemCount,
+                  drafts: accountSwitchPreview.draftCount,
+                  kept: accountSwitchPreview.researchOnlyKept,
+                })}
+              </p>
+            </div>
+            <div className="term-modal-actions">
+              <button
+                type="button"
+                className="term-modal-btn term-modal-btn-ghost"
+                onClick={() => setAccountSwitchPreview(null)}
+                disabled={busy}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="term-modal-btn term-modal-btn-danger"
+                onClick={() =>
+                  void persistSettings({ confirmAccountSwitch: true })
+                }
+                disabled={busy}
+              >
+                {busy
+                  ? t("common.saving")
+                  : t("settings.accountSwitchConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {wipeOpen ? (

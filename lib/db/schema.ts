@@ -224,6 +224,19 @@ export const itemLineage = sqliteTable("item_lineage", {
   at: text("at").notNull(),
 });
 
+/** Row-level long-op locks (prepare / draft). Faz 6. */
+export const itemOps = sqliteTable(
+  "item_ops",
+  {
+    itemId: integer("item_id").notNull(),
+    op: text("op").notNull(),
+    owner: text("owner").notNull(),
+    startedAt: text("started_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.itemId, t.op] })],
+);
+
 export const syncState = sqliteTable("sync_state", {
   id: integer("id").primaryKey().default(1),
   lastSyncAt: text("last_sync_at"),
