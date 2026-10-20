@@ -930,6 +930,22 @@ export type DraftPayload = {
   inReplyTo?: string | null;
   references?: string | null;
   attachments?: DraftAttachment[];
+  /** Stable Message-ID we generate and persist (<cmae-{uuid}@cmae.local>). */
+  messageId?: string;
+  /** X-CMAE-Draft-Id header (= gmail_drafts.id). */
+  draftId?: string;
+};
+
+/** One message in the Drafts mailbox (full scan for reconcile). */
+export type DraftMailboxMeta = {
+  uid: number;
+  uidValidity: string;
+  gmMsgid: string | null;
+  gmThrid: string | null;
+  messageIdHdr: string | null;
+  cmaeDraftId: string | null;
+  subject: string;
+  toAddr: string;
 };
 
 function wrapBase64(b64: string): string {
@@ -947,14 +963,20 @@ function encodeHeaderFilename(name: string): string {
 
 function buildRfc822(draft: DraftPayload): Buffer {
   const attachments = draft.attachments?.filter((a) => a.buffer?.length) || [];
+  const messageId =
+    draft.messageId?.trim() ||
+    `<cmae-draft-${Date.now()}@cmae.local>`;
   const common = [
     `From: ${draft.from}`,
     `To: ${draft.to}`,
     `Subject: ${draft.subject}`,
     "MIME-Version: 1.0",
     `Date: ${new Date().toUTCString()}`,
-    `Message-ID: <cmae-draft-${Date.now()}@cmae.local>`,
+    `Message-ID: ${messageId}`,
   ];
+  if (draft.draftId) {
+    common.push(`X-CMAE-Draft-Id: ${draft.draftId}`);
+  }
   if (draft.inReplyTo) common.push(`In-Reply-To: ${draft.inReplyTo}`);
   if (draft.references) common.push(`References: ${draft.references}`);
 
@@ -1091,23 +1113,175 @@ export function draftSubjectMatchesAny(
   return draftKeys.some((k) => subjectsMatch(k, needle));
 }
 
+export type AppendDraftResult = {
+  ok: true;
+  draftsUrl: string;
+  uid: number | null;
+  uidValidity: string | null;
+  gmMsgid: string | null;
+  gmThrid: string | null;
+};
+
 export async function appendDraft(
   address: string,
   appPassword: string,
   draft: DraftPayload,
-): Promise<{ ok: true; draftsUrl: string }> {
-  await withClient(address, appPassword, async (client) => {
+): Promise<AppendDraftResult> {
+  return withClient(address, appPassword, async (client) => {
     const draftsPath = await findSpecialMailbox(client, "\\Drafts");
     if (!draftsPath) {
       throw new Error(t("tracker.error.gmailDraftsFolder"));
     }
     const raw = buildRfc822(draft);
-    await client.append(draftsPath, raw, ["\\Draft"]);
+    const appended = await client.append(draftsPath, raw, ["\\Draft"]);
+    const uid =
+      appended && typeof appended === "object" && "uid" in appended
+        ? Number((appended as { uid?: number }).uid) || null
+        : null;
+    const uidValidity =
+      appended && typeof appended === "object" && "uidValidity" in appended
+        ? String((appended as { uidValidity?: unknown }).uidValidity ?? "") ||
+          null
+        : null;
+
+    let gmMsgid: string | null = null;
+    let gmThrid: string | null = null;
+    if (uid) {
+      const lock = await client.getMailboxLock(draftsPath);
+      try {
+        const msg = await client.fetchOne(
+          String(uid),
+          { uid: true, emailId: true, threadId: true },
+          { uid: true },
+        );
+        if (msg && typeof msg === "object") {
+          const m = msg as { emailId?: string; threadId?: string | number };
+          gmMsgid = m.emailId ? String(m.emailId) : null;
+          gmThrid = m.threadId != null ? String(m.threadId) : null;
+        }
+      } finally {
+        lock.release();
+      }
+    }
+
+    return {
+      ok: true as const,
+      draftsUrl: gmailDraftsFolderUrl(address),
+      uid,
+      uidValidity: uidValidity || uidValidityOf(client) || null,
+      gmMsgid,
+      gmThrid,
+    };
   });
-  return {
-    ok: true,
-    draftsUrl: gmailDraftsFolderUrl(address),
-  };
+}
+
+/**
+ * Full Drafts mailbox scan (typically small). Used by drafts_reconcile.
+ */
+export async function listAllDraftMetas(
+  address: string,
+  appPassword: string,
+): Promise<DraftMailboxMeta[]> {
+  return withClient(address, appPassword, async (client) => {
+    const draftsPath = await findSpecialMailbox(client, "\\Drafts");
+    if (!draftsPath) return [];
+    const lock = await client.getMailboxLock(draftsPath);
+    try {
+      const uidValidity = uidValidityOf(client);
+      const out: DraftMailboxMeta[] = [];
+      for await (const msg of client.fetch("1:*", {
+        uid: true,
+        envelope: true,
+        emailId: true,
+        threadId: true,
+        headers: ["Message-ID", "X-CMAE-Draft-Id"],
+      })) {
+        const hdrs = parseHeaderBlock(
+          Buffer.isBuffer(msg.headers) ? msg.headers : undefined,
+        );
+        const messageIdHdr =
+          (msg.envelope?.messageId || "").trim() ||
+          hdrs["message-id"] ||
+          null;
+        const cmaeDraftId = hdrs["x-cmae-draft-id"]?.trim() || null;
+        out.push({
+          uid: msg.uid,
+          uidValidity,
+          gmMsgid: msg.emailId ? String(msg.emailId) : null,
+          gmThrid: msg.threadId != null ? String(msg.threadId) : null,
+          messageIdHdr,
+          cmaeDraftId,
+          subject: msg.envelope?.subject || "",
+          toAddr: addrList(msg.envelope?.to),
+        });
+      }
+      return out;
+    } finally {
+      lock.release();
+    }
+  });
+}
+
+/**
+ * Crash recovery: find a draft by our Message-ID header.
+ */
+export async function searchDraftByMessageId(
+  address: string,
+  appPassword: string,
+  messageIdHdr: string,
+): Promise<DraftMailboxMeta | null> {
+  const needle = messageIdHdr.trim();
+  if (!needle || needle.startsWith("legacy:")) return null;
+  return withClient(address, appPassword, async (client) => {
+    const draftsPath = await findSpecialMailbox(client, "\\Drafts");
+    if (!draftsPath) return null;
+    const lock = await client.getMailboxLock(draftsPath);
+    try {
+      const uidValidity = uidValidityOf(client);
+      const uids = await client.search(
+        { header: { "Message-ID": needle } },
+        { uid: true },
+      );
+      if (!uids || !Array.isArray(uids) || !uids.length) return null;
+      const uid = Number(uids[0]);
+      if (!uid) return null;
+      const msg = await client.fetchOne(
+        String(uid),
+        {
+          uid: true,
+          envelope: true,
+          emailId: true,
+          threadId: true,
+          headers: ["Message-ID", "X-CMAE-Draft-Id"],
+        },
+        { uid: true },
+      );
+      if (!msg || typeof msg !== "object") return null;
+      const m = msg as {
+        uid: number;
+        emailId?: string;
+        threadId?: string | number;
+        envelope?: { subject?: string | null; to?: Parameters<typeof addrList>[0]; messageId?: string | null };
+        headers?: Buffer;
+      };
+      const hdrs = parseHeaderBlock(
+        Buffer.isBuffer(m.headers) ? m.headers : undefined,
+      );
+      return {
+        uid: m.uid,
+        uidValidity,
+        gmMsgid: m.emailId ? String(m.emailId) : null,
+        gmThrid: m.threadId != null ? String(m.threadId) : null,
+        messageIdHdr:
+          (m.envelope?.messageId || "").trim() || hdrs["message-id"] || needle,
+        cmaeDraftId: hdrs["x-cmae-draft-id"]?.trim() || null,
+        subject: m.envelope?.subject || "",
+        toAddr: addrList(m.envelope?.to),
+      };
+    } finally {
+      lock.release();
+    }
+  });
 }
 
 export type ImapSyncMode = "incremental" | "hard";

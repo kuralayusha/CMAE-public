@@ -41,7 +41,11 @@
     "action": {
       "more": "İşlemler",
       "waiting": "Beklemede",
-      "pendingSend": "Gmail Taslaklar'da aç"
+      "pendingSend": "Gmail Taslaklar'da aç",
+      "draftCreating": "Gmail taslağı kaydediliyor…",
+      "draftUnknown": "Taslak durumu bilinmiyor — Taslaklar'ı aç",
+      "draftDeleted": "Taslak Gmail'den silinmiş",
+      "draftSent": "Gmail'den gönderildi"
     },
     "sentiment": {
       "positive": "olumlu",

@@ -6,7 +6,6 @@ import { throwIfSyncCanceled } from "./cancel";
 import { runClassifyRetry } from "./derive/classify-retry";
 import { derivePendingMails } from "./derive/run-derive";
 import { pruneOrphanReadyToSendItems } from "./orphans";
-import { reconcilePendingAgainstLiveDrafts } from "./pending-draft";
 import { rebuildTrackerItems } from "./rebuild";
 import {
   listPendingDeriveMailIds,
@@ -116,7 +115,7 @@ export async function runTrackerSync(opts?: {
     // Backoff via next sync / dedicated classify_retry job (engine scaffold).
   }
 
-  await reconcilePendingAgainstLiveDrafts({ force: true });
+  // drafts_reconcile is a separate job (engine enqueues after mail_sync).
 
   itemCount -= pruneOrphanReadyToSendItems();
 

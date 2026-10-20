@@ -10,9 +10,13 @@ export {
   draftExistsBySubject,
   draftSubjectMatchesAny,
   gmailDraftsFolderUrl,
+  listAllDraftMetas,
   listRecentDraftSubjectKeys,
+  searchDraftByMessageId,
   waitForDraftSubject,
+  type AppendDraftResult,
   type DraftAttachment,
+  type DraftMailboxMeta,
   type DraftPayload,
   type ImapSyncMode,
 } from "@/lib/mail/gmail-imap-source";

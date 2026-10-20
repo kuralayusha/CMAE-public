@@ -36,6 +36,18 @@ export type FakeStoredMail = {
   present?: boolean;
 };
 
+/** In-memory Gmail Drafts message for Faz 5 reconcile tests. */
+export type FakeDraftMail = {
+  uid: number;
+  gmMsgid: string;
+  threadId?: string;
+  messageId: string;
+  cmaeDraftId?: string;
+  subject: string;
+  toAddr: string;
+  present?: boolean;
+};
+
 /**
  * In-memory MailSource for unit / integration tests (no IMAP).
  * Supports All Mail, UIDVALIDITY reset, label changes, and gone detection.
@@ -49,11 +61,14 @@ export class FakeMailSource implements MailSource {
   condstore = true;
   private openFlag = false;
   private mails: FakeStoredMail[];
+  private drafts: FakeDraftMail[];
   private mailboxPath: string;
+  private nextDraftUid = 1;
 
   constructor(opts: {
     userEmail: string;
     mails?: FakeStoredMail[];
+    drafts?: FakeDraftMail[];
     usingAllMail?: boolean;
   }) {
     this.userEmail = normalizeAccountEmail(opts.userEmail);
@@ -62,6 +77,12 @@ export class FakeMailSource implements MailSource {
       present: true,
       ...m,
     }));
+    this.drafts = (opts.drafts || []).map((d) => ({
+      present: true,
+      ...d,
+    }));
+    this.nextDraftUid =
+      this.drafts.reduce((m, d) => Math.max(m, d.uid), 0) + 1;
     this.usingAllMail = opts.usingAllMail ?? true;
     this.mailboxPath = this.usingAllMail ? "[Gmail]/All Mail" : "INBOX";
   }
@@ -96,6 +117,109 @@ export class FakeMailSource implements MailSource {
     for (const m of this.mails) {
       if (m.present !== false) m.uid = next++;
     }
+  }
+
+  /** APPEND to Drafts — returns meta for gmail_drafts.present. */
+  appendDraft(opts: {
+    messageId: string;
+    cmaeDraftId?: string;
+    subject: string;
+    toAddr: string;
+    threadId?: string;
+  }): FakeDraftMail {
+    const d: FakeDraftMail = {
+      uid: this.nextDraftUid++,
+      gmMsgid: `gm-draft-${Date.now()}-${this.nextDraftUid}`,
+      threadId: opts.threadId || `thrid-${opts.cmaeDraftId || opts.messageId}`,
+      messageId: opts.messageId,
+      cmaeDraftId: opts.cmaeDraftId,
+      subject: opts.subject,
+      toAddr: opts.toAddr,
+      present: true,
+    };
+    this.drafts.push(d);
+    return d;
+  }
+
+  listDraftMetas(): Array<{
+    uid: number;
+    uidValidity: string;
+    gmMsgid: string | null;
+    gmThrid: string | null;
+    messageIdHdr: string | null;
+    cmaeDraftId: string | null;
+    subject: string;
+    toAddr: string;
+  }> {
+    return this.drafts
+      .filter((d) => d.present !== false)
+      .map((d) => ({
+        uid: d.uid,
+        uidValidity: this.uidValidity,
+        gmMsgid: d.gmMsgid,
+        gmThrid: d.threadId ?? null,
+        messageIdHdr: d.messageId,
+        cmaeDraftId: d.cmaeDraftId ?? null,
+        subject: d.subject,
+        toAddr: d.toAddr,
+      }));
+  }
+
+  /** User deleted draft in Gmail web. */
+  deleteDraft(gmMsgidOrMessageId: string) {
+    const d = this.drafts.find(
+      (x) =>
+        x.gmMsgid === gmMsgidOrMessageId ||
+        x.messageId === gmMsgidOrMessageId ||
+        x.cmaeDraftId === gmMsgidOrMessageId,
+    );
+    if (d) d.present = false;
+  }
+
+  /**
+   * User sent draft from Gmail — remove from Drafts, add \\Sent in All Mail.
+   * Optionally rewrite gmMsgid (web edit uncertainty).
+   */
+  sendDraft(
+    gmMsgidOrMessageId: string,
+    opts?: { newGmMsgid?: string; keepMessageId?: boolean },
+  ): FakeStoredMail | null {
+    const d = this.drafts.find(
+      (x) =>
+        x.gmMsgid === gmMsgidOrMessageId ||
+        x.messageId === gmMsgidOrMessageId ||
+        x.cmaeDraftId === gmMsgidOrMessageId,
+    );
+    if (!d || d.present === false) return null;
+    d.present = false;
+    const uid =
+      this.mails.reduce((m, x) => Math.max(m, x.uid), 0) + 1;
+    const sent: FakeStoredMail = {
+      uid,
+      gmMsgid: opts?.newGmMsgid || d.gmMsgid,
+      threadId: d.threadId,
+      labels: ["\\Sent"],
+      fromAddr: this.userEmail,
+      toAddr: d.toAddr,
+      subject: d.subject,
+      internalDate: new Date().toISOString(),
+      bodyText: "",
+      messageId:
+        opts?.keepMessageId === false
+          ? `<sent-${Date.now()}@fake.local>`
+          : d.messageId,
+      present: true,
+    };
+    this.mails.push(sent);
+    return sent;
+  }
+
+  /** Gmail web edit: new X-GM-MSGID, same thrid. */
+  editDraft(gmMsgid: string, patch: { subject?: string; newGmMsgid?: string }) {
+    const d = this.drafts.find((x) => x.gmMsgid === gmMsgid && x.present !== false);
+    if (!d) return;
+    if (patch.subject) d.subject = patch.subject;
+    if (patch.newGmMsgid) d.gmMsgid = patch.newGmMsgid;
   }
 
   async open(): Promise<void> {

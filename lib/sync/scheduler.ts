@@ -1,6 +1,8 @@
 import { getSqlite } from "@/lib/db/client";
 import { isOnboardingComplete } from "@/lib/onboarding/status";
 import {
+  enqueueDraftsReconcile,
+  hasPendingDraftsReconcile,
   isAutoSyncBlockedByAuth,
   recoverInterruptedJobs,
   requestSync,
@@ -8,6 +10,7 @@ import {
 import { activeSyncIntervalMs } from "./freshness";
 
 const STARTUP_DELAY_MS = 2_000;
+const DRAFTS_RECONCILE_INTERVAL_MS = 2 * 60_000;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -16,6 +19,7 @@ declare global {
     timer: ReturnType<typeof setTimeout> | null;
     expectedAt: number | null;
     lastTickAt: number | null;
+    draftsTimer: ReturnType<typeof setTimeout> | null;
   } | undefined;
 }
 
@@ -26,9 +30,32 @@ function state() {
       timer: null,
       expectedAt: null,
       lastTickAt: null,
+      draftsTimer: null,
     };
   }
   return globalThis.__cmaeSyncScheduler;
+}
+
+function scheduleDraftsReconcileTick() {
+  const s = state();
+  if (s.draftsTimer) {
+    clearTimeout(s.draftsTimer);
+    s.draftsTimer = null;
+  }
+  if (!hasPendingDraftsReconcile()) return;
+  if (isAutoSyncBlockedByAuth()) return;
+  s.draftsTimer = setTimeout(() => {
+    s.draftsTimer = null;
+    if (isOnboardingComplete() && !isAutoSyncBlockedByAuth()) {
+      if (hasPendingDraftsReconcile()) {
+        enqueueDraftsReconcile("interval");
+      }
+    }
+    scheduleDraftsReconcileTick();
+  }, DRAFTS_RECONCILE_INTERVAL_MS);
+  if (typeof s.draftsTimer === "object" && s.draftsTimer && "unref" in s.draftsTimer) {
+    s.draftsTimer.unref();
+  }
 }
 
 function jitter(ms: number): number {
@@ -119,6 +146,7 @@ function onTick() {
   }
 
   scheduleNext("interval");
+  scheduleDraftsReconcileTick();
 }
 
 /** Resume / unlock / online wake from Electron or drift. */
@@ -139,11 +167,13 @@ export function wakeScheduler(opts?: {
 
   requestSync({ reason, mode: "incremental" });
   scheduleNext("interval");
+  scheduleDraftsReconcileTick();
 }
 
 export function rescheduleAfterVisibilityChange(): void {
   if (!state().started) return;
   scheduleNext("interval");
+  scheduleDraftsReconcileTick();
 }
 
 export function onCredentialsVersionChanged(): void {
@@ -178,8 +208,12 @@ export function start(): void {
     setTimeout(() => {
       if (!isAutoSyncBlockedByAuth()) {
         requestSync({ reason: "startup", mode: "incremental" });
+        if (hasPendingDraftsReconcile()) {
+          enqueueDraftsReconcile("startup");
+        }
       }
       scheduleNext("interval");
+      scheduleDraftsReconcileTick();
     }, STARTUP_DELAY_MS).unref?.();
   } else {
     scheduleNext("interval");

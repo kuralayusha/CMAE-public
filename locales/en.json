@@ -477,6 +477,10 @@
       "prepareThanks": "Prepare thanks",
       "draftThanks": "Thanks Gmail draft",
       "pendingSend": "Open in Gmail Drafts",
+      "draftCreating": "Saving Gmail draft…",
+      "draftUnknown": "Draft status unknown — open Drafts",
+      "draftDeleted": "Draft removed from Gmail",
+      "draftSent": "Sent from Gmail",
       "pendingRecreating": "Draft missing — recreating from your saved template…"
     },
     "pendingDraft": {

@@ -194,6 +194,8 @@ type TrackerItem = {
     at: string;
     subject: string;
     draftsUrl?: string;
+    state?: string;
+    confirmedAt?: string | null;
   } | null;
   recipientOptions?: RecipientOption[];
   recommendedTo?: string | null;
@@ -1102,8 +1104,15 @@ export function TrackerList() {
     const spinning = isBusyItem(item.id);
 
     if (item.pendingGmailDraft) {
+      const st = item.pendingGmailDraft.state || "present";
+      const labelKey =
+        st === "unknown"
+          ? "tracker.action.draftUnknown"
+          : st === "creating"
+            ? "tracker.action.draftCreating"
+            : "tracker.action.pendingSend";
       return renderMenuItem({
-        label: t("tracker.action.pendingSend"),
+        label: t(labelKey),
         icon: isBusyKey(
           `${item.id}:draft:${item.pendingGmailDraft.kind}`,
         ) ? (

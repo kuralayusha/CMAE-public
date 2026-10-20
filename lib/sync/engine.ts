@@ -13,6 +13,8 @@ import { emitTrackerEvent } from "@/lib/tracker/events-bus";
 import { SyncCanceledError } from "@/lib/tracker/cancel";
 import { listTrackerSections } from "@/lib/tracker/list";
 import { runClassifyRetry } from "@/lib/tracker/derive/classify-retry";
+import { runDraftsReconcile } from "@/lib/tracker/drafts-reconcile";
+import { countLiveDrafts } from "@/lib/tracker/gmail-drafts-store";
 import { runTrackerSync } from "@/lib/tracker/run";
 import { getGmailCredentials } from "@/lib/settings/service";
 import type { SyncMode } from "@/lib/tracker/sync";
@@ -37,7 +39,7 @@ const STALE_LEASE_MS = 30_000;
 const NON_MANUAL_DEBOUNCE_MS = 3_000;
 const JOB_HISTORY_KEEP = 200;
 
-export type SyncJobKind = "mail_sync" | "classify_retry";
+export type SyncJobKind = "mail_sync" | "drafts_reconcile" | "classify_retry";
 export type SyncJobState =
   | "queued"
   | "running"
@@ -302,15 +304,21 @@ function getQueuedJob(kind: SyncJobKind = "mail_sync"): JobRow | null {
   );
 }
 
-/** Next queued job: mail_sync first, then classify_retry. */
+/** Next queued job: mail_sync → drafts_reconcile → classify_retry. */
 function getQueuedJobAny(): JobRow | null {
-  return getQueuedJob("mail_sync") || getQueuedJob("classify_retry");
+  return (
+    getQueuedJob("mail_sync") ||
+    getQueuedJob("drafts_reconcile") ||
+    getQueuedJob("classify_retry")
+  );
 }
 
-/** Enqueue classify_retry when provisional regex intents remain (Faz 4). */
-export function enqueueClassifyRetry(reason: SyncTriggerReason = "post_mutation"): string | null {
-  if (getRunningJob("classify_retry") || getQueuedJob("classify_retry")) {
-    return getQueuedJob("classify_retry")?.id || getRunningJob("classify_retry")?.id || null;
+function enqueueJobOfKind(
+  kind: SyncJobKind,
+  reason: SyncTriggerReason,
+): string | null {
+  if (getRunningJob(kind) || getQueuedJob(kind)) {
+    return getQueuedJob(kind)?.id || getRunningJob(kind)?.id || null;
   }
   const db = getSqlite();
   const fencing = getFencingTokens(db);
@@ -322,9 +330,10 @@ export function enqueueClassifyRetry(reason: SyncTriggerReason = "post_mutation"
       id, kind, mode, state, phase, reasons, rerun_requested, rerun_mode,
       attempt, owner, db_epoch, credentials_version, account_id,
       queued_at, progress_at
-    ) VALUES (?, 'classify_retry', 'incremental', 'queued', NULL, ?, 0, NULL, 1, NULL, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, 'incremental', 'queued', NULL, ?, 0, NULL, 1, NULL, ?, ?, ?, ?, ?)`,
   ).run(
     id,
+    kind,
     JSON.stringify([reason]),
     fencing.dbEpoch,
     fencing.credentialsVersion,
@@ -332,9 +341,32 @@ export function enqueueClassifyRetry(reason: SyncTriggerReason = "post_mutation"
     now,
     now,
   );
-  emitJobEvent({ id, kind: "classify_retry", state: "queued" });
+  emitJobEvent({ id, kind, state: "queued" });
   pumpJobs();
   return id;
+}
+
+/** Enqueue classify_retry when provisional regex intents remain (Faz 4). */
+export function enqueueClassifyRetry(
+  reason: SyncTriggerReason = "post_mutation",
+): string | null {
+  return enqueueJobOfKind("classify_retry", reason);
+}
+
+/** Enqueue drafts_reconcile (post draft create / mail sync / interval). */
+export function enqueueDraftsReconcile(
+  reason: SyncTriggerReason = "post_mutation",
+): string | null {
+  return enqueueJobOfKind("drafts_reconcile", reason);
+}
+
+/** True when live gmail_drafts rows exist (for 2‑min interval). */
+export function hasPendingDraftsReconcile(): boolean {
+  try {
+    return countLiveDrafts(currentAccountId() || undefined) > 0;
+  } catch {
+    return false;
+  }
 }
 
 function isSessionStuck(session: SyncSession): boolean {
@@ -642,7 +674,8 @@ function claimNextJob(): JobRow | null {
         `UPDATE sync_jobs
          SET state = 'queued', owner = NULL, started_at = NULL, heartbeat_at = NULL,
              finished_at = NULL, error_kind = NULL, error_message = NULL
-         WHERE kind IN ('mail_sync', 'classify_retry') AND state = 'interrupted'`,
+         WHERE kind IN ('mail_sync', 'drafts_reconcile', 'classify_retry')
+           AND state = 'interrupted'`,
       ).run();
 
       const queued = getQueuedJobAny();
@@ -793,6 +826,46 @@ async function runClaimedJob(job: JobRow): Promise<void> {
       return;
     }
 
+    if (job.kind === "drafts_reconcile") {
+      const result = await runDraftsReconcile({
+        signal: abort.signal,
+        onProgress: (kind, text) => {
+          if (session.cancelRequested || abort.signal.aborted) return;
+          appendLine(session, kind, text);
+        },
+      });
+      assertFencing(job);
+      finishJob(job, "succeeded", {
+        stats: {
+          checked: result.checked,
+          present: result.present,
+          sent: result.sent,
+          deleted: result.deleted,
+          failed: result.failed,
+        },
+      });
+      if (result.triggerMailSync) {
+        // Sent from Gmail — pull outbound so status advances.
+        setTimeout(() => {
+          if (isAutoSyncBlockedByAuth() || isMaintenanceActive()) return;
+          requestSync({ reason: "post_mutation", mode: "incremental" });
+        }, 60_000).unref?.();
+        requestSync({ reason: "post_mutation", mode: "incremental" });
+      }
+      const list = listTrackerSections();
+      finishSession(session, "done", {
+        result: {
+          skippedImap: true,
+          upserted: 0,
+          itemCount: list.total,
+          sections: list.sections,
+          sync: list.sync,
+          total: list.total,
+        },
+      });
+      return;
+    }
+
     const run = await runTrackerSync({
       mode,
       signal: abort.signal,
@@ -853,6 +926,15 @@ async function runClaimedJob(job: JobRow): Promise<void> {
         )
         .get() as { n: number };
       if (pending?.n > 0) enqueueClassifyRetry("post_mutation");
+    } catch {
+      /* ignore */
+    }
+
+    // Drafts reconcile after every successful mail sync (separate job).
+    try {
+      if (countLiveDrafts(currentAccountId() || undefined) > 0) {
+        enqueueDraftsReconcile("post_mutation");
+      }
     } catch {
       /* ignore */
     }

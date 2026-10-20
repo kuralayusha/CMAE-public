@@ -131,6 +131,40 @@ async function main() {
     errors.push("UIDVALIDITY reset produced duplicate gmMsgid");
   }
 
+  // Faz 5 drafts lifecycle on FakeMailSource
+  const draftSrc = new FakeMailSource({ userEmail: "me@example.com" });
+  const d = draftSrc.appendDraft({
+    messageId: "<cmae-test@cmae.local>",
+    cmaeDraftId: "draft-uuid-1",
+    subject: "Hello HR",
+    toAddr: "hr@co.com",
+  });
+  if (draftSrc.listDraftMetas().length !== 1) {
+    errors.push("appendDraft should list 1");
+  }
+  draftSrc.editDraft(d.gmMsgid, { newGmMsgid: "gm-edited", subject: "Hello HR v2" });
+  const afterEdit = draftSrc.listDraftMetas()[0];
+  if (afterEdit?.gmMsgid !== "gm-edited" || afterEdit.gmThrid !== d.threadId) {
+    errors.push("editDraft should change msgid keep thrid");
+  }
+  draftSrc.deleteDraft("gm-edited");
+  if (draftSrc.listDraftMetas().length !== 0) {
+    errors.push("deleteDraft should remove from list");
+  }
+  const d2 = draftSrc.appendDraft({
+    messageId: "<cmae-test2@cmae.local>",
+    cmaeDraftId: "draft-uuid-2",
+    subject: "App",
+    toAddr: "hr@co.com",
+  });
+  const sent = draftSrc.sendDraft(d2.gmMsgid);
+  if (!sent || !sent.labels.includes("\\Sent")) {
+    errors.push("sendDraft should add \\Sent mail");
+  }
+  if (draftSrc.listDraftMetas().length !== 0) {
+    errors.push("sendDraft should clear drafts");
+  }
+
   if (errors.length) {
     console.error("FAIL", errors);
     process.exit(1);

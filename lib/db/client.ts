@@ -100,6 +100,7 @@ export function wipeDatabaseContents() {
     "item_lineage",
     "mail_sources",
     "mail_fetch_failures",
+    "gmail_drafts",
   ]) {
     try {
       sqlite.exec(`DELETE FROM ${table}`);

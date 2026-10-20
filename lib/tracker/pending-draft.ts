@@ -1,21 +1,16 @@
 /**
- * Gmail Drafts ≠ sent. Track pending drafts in notesJson until SENT sync.
- * Reconcile runs at sync end and after draft create — never on GET /api/tracker.
+ * Gmail Drafts ≠ sent. Pending UX reads gmail_drafts (Faz 5).
+ * Legacy notesJson.pendingGmailDraft helpers kept for derive/migration.
+ * IMAP reconcile lives in drafts-reconcile.ts — never on GET /api/tracker.
  */
 
 import fs from "fs";
 import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
-import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItems } from "@/lib/db/schema";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
-import { getGmailCredentials, getSettingsRow } from "@/lib/settings/service";
-import {
-  draftSubjectMatchesAny,
-  gmailDraftsFolderUrl,
-  listRecentDraftSubjectKeys,
-} from "./imap";
+import { getLiveDraftAnyKind } from "./gmail-drafts-store";
 import type { DraftKind, TrackerStatus } from "./types";
 
 /** Status → which Gmail draft kind can be pending for the clock. */
@@ -190,7 +185,10 @@ export function reconcileDraftFlagsForRow(
   hasReplyDraft: boolean;
 } {
   const persist = Boolean(opts?.persist);
-  const pending = parsePendingGmailDraft(row.notesJson);
+  const live = getLiveDraftAnyKind(row.id);
+  const pending = live
+    ? { kind: live.kind as DraftKind }
+    : parsePendingGmailDraft(row.notesJson);
   const disk = draftFlagsFromDisk(row.workspaceFolder, row.followUpCount);
 
   // If Gmail draft already created, keep has* false even if md remains on disk
@@ -233,229 +231,3 @@ export function clearPendingFromNotesObj(
   delete notesObj.pendingGmailDraft;
 }
 
-let lastLiveReconcileAt = 0;
-const LIVE_RECONCILE_MIN_MS = 12_000;
-const RECONCILE_IMAP_TIMEOUT_MS = 15_000;
-
-type ReconcileResult = { checked: number; cleared: number; set: number };
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __cmaePendingDraftReconcile: Promise<ReconcileResult> | null | undefined;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`${label} timed out after ${ms}ms`));
-    }, ms);
-    promise.then(
-      (v) => {
-        clearTimeout(timer);
-        resolve(v);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
-}
-
-/**
- * Align pendingGmailDraft / clock with live Gmail Drafts (source of truth).
- * - Subject in Drafts → set/keep pending (clock)
- * - Subject gone → clear pending (create/prepare returns)
- * Call only from sync end / after draft create — never from GET.
- * Single-flight; debounce stamp written before IMAP; 15s IMAP timeout;
- * rows re-read immediately before notes merge write.
- */
-export async function reconcilePendingAgainstLiveDrafts(opts?: {
-  force?: boolean;
-}): Promise<ReconcileResult> {
-  if (globalThis.__cmaePendingDraftReconcile) {
-    return globalThis.__cmaePendingDraftReconcile;
-  }
-
-  const now = Date.now();
-  if (
-    !opts?.force &&
-    lastLiveReconcileAt &&
-    now - lastLiveReconcileAt < LIVE_RECONCILE_MIN_MS
-  ) {
-    return { checked: 0, cleared: 0, set: 0 };
-  }
-
-  const runPromise = (async (): Promise<ReconcileResult> => {
-    const db = getDb();
-    const rows = db.select().from(trackerItems).all();
-    const eligibleIds = rows
-      .filter((row) => {
-        if (
-          row.status === "inactive" ||
-          row.status === "ignored" ||
-          row.status === "closed"
-        ) {
-          return Boolean(parsePendingGmailDraft(row.notesJson));
-        }
-        return (
-          Boolean(parsePendingGmailDraft(row.notesJson)) ||
-          Boolean(expectedPendingKindForStatus(row.status))
-        );
-      })
-      .map((r) => r.id);
-
-    if (!eligibleIds.length) {
-      lastLiveReconcileAt = Date.now();
-      return { checked: 0, cleared: 0, set: 0 };
-    }
-
-    const creds = getGmailCredentials();
-    if (!creds) {
-      return { checked: eligibleIds.length, cleared: 0, set: 0 };
-    }
-
-    // Stamp before IMAP so offline / hang does not re-enter on every call.
-    lastLiveReconcileAt = Date.now();
-
-    let draftKeys: string[] = [];
-    try {
-      draftKeys = await withTimeout(
-        listRecentDraftSubjectKeys(creds.address, creds.appPassword),
-        RECONCILE_IMAP_TIMEOUT_MS,
-        "Gmail Drafts reconcile",
-      );
-    } catch {
-      // IMAP failure / timeout — keep pending cache; do not wipe on network blip
-      return { checked: eligibleIds.length, cleared: 0, set: 0 };
-    }
-
-    const draftsUrl = gmailDraftsFolderUrl(creds.address);
-    const lang = getSettingsRow()?.preferredLanguage || "en";
-    const { resolveDraftContent } = await import("./drafts");
-
-    let cleared = 0;
-    let set = 0;
-
-    for (const id of eligibleIds) {
-      // Re-read immediately before write so concurrent mutations are not overwritten.
-      const row = db
-        .select()
-        .from(trackerItems)
-        .where(eq(trackerItems.id, id))
-        .get();
-      if (!row) continue;
-
-      const existing = parsePendingGmailDraft(row.notesJson);
-      const kind =
-        expectedPendingKindForStatus(row.status) || existing?.kind || null;
-
-      let resolvedSubject: string | null = null;
-      if (kind) {
-        try {
-          resolvedSubject = resolveDraftContent(
-            {
-              id: row.id,
-              workspaceFolder: row.workspaceFolder,
-              primaryTo: row.primaryTo,
-              company: row.company,
-              followUpCount: row.followUpCount,
-            },
-            kind,
-            lang,
-          ).subject;
-        } catch {
-          /* workspace draft may be missing */
-        }
-      }
-
-      // Prefer workspace subject; fall back to cached pending subject still in Drafts
-      const subject =
-        (resolvedSubject &&
-        draftSubjectMatchesAny(resolvedSubject, draftKeys)
-          ? resolvedSubject
-          : null) ||
-        (existing?.subject &&
-        draftSubjectMatchesAny(existing.subject, draftKeys)
-          ? existing.subject
-          : null);
-
-      if (subject && kind) {
-        const same =
-          existing?.kind === kind &&
-          existing.subject === subject &&
-          Boolean(existing.draftsUrl);
-        if (!same) {
-          const fresh = db
-            .select()
-            .from(trackerItems)
-            .where(eq(trackerItems.id, id))
-            .get();
-          if (!fresh) continue;
-          const patch: Partial<typeof trackerItems.$inferInsert> = {
-            notesJson: withPendingGmailDraft(fresh.notesJson, {
-              kind,
-              at: parsePendingGmailDraft(fresh.notesJson)?.at ||
-                existing?.at ||
-                new Date().toISOString(),
-              subject,
-              draftsUrl,
-            }),
-          };
-          if (kind === "follow_up") patch.hasFollowUpDraft = 0;
-          if (kind === "thanks") patch.hasThanksDraft = 0;
-          if (kind === "reply") patch.hasReplyDraft = 0;
-          db.update(trackerItems)
-            .set(patch)
-            .where(eq(trackerItems.id, id))
-            .run();
-          set += 1;
-        }
-        continue;
-      }
-
-      if (existing) {
-        const fresh = db
-          .select()
-          .from(trackerItems)
-          .where(eq(trackerItems.id, id))
-          .get();
-        if (!fresh) continue;
-        const nextNotes = withoutPendingGmailDraft(fresh.notesJson);
-        db.update(trackerItems)
-          .set({
-            notesJson: nextNotes,
-          })
-          .where(eq(trackerItems.id, id))
-          .run();
-
-        // Re-enable prepare / create-draft from disk now that Gmail draft is gone
-        reconcileDraftFlagsForRow(
-          {
-            ...fresh,
-            notesJson: nextNotes,
-            hasFollowUpDraft: 0,
-            hasThanksDraft: 0,
-            hasReplyDraft: 0,
-          },
-          { persist: true },
-        );
-        cleared += 1;
-      }
-    }
-
-    if (cleared > 0 || set > 0) {
-      bumpTrackerRevision("drafts", "upsert", "all");
-    }
-    return { checked: eligibleIds.length, cleared, set };
-  })();
-
-  globalThis.__cmaePendingDraftReconcile = runPromise;
-  try {
-    return await runPromise;
-  } finally {
-    if (globalThis.__cmaePendingDraftReconcile === runPromise) {
-      globalThis.__cmaePendingDraftReconcile = null;
-    }
-  }
-}

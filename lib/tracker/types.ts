@@ -78,6 +78,9 @@ export type PendingGmailDraftInfo = {
   at: string;
   subject: string;
   draftsUrl?: string;
+  /** creating|present|unknown|deleted_by_user|sent|… — from gmail_drafts */
+  state?: string;
+  confirmedAt?: string | null;
 };
 
 export type RecipientCandidateInfo = {

@@ -3,6 +3,7 @@ import { migration002Revision } from "./002_revision";
 import { migration003SyncJobs } from "./003_sync_jobs";
 import { migration004MailSources } from "./004_mail_sources";
 import { migration005Derive } from "./005_derive";
+import { migration006GmailDrafts } from "./006_gmail_drafts";
 import type { Migration } from "./types";
 
 export const MIGRATIONS: Migration[] = [
@@ -11,4 +12,5 @@ export const MIGRATIONS: Migration[] = [
   migration003SyncJobs,
   migration004MailSources,
   migration005Derive,
+  migration006GmailDrafts,
 ];

@@ -62,21 +62,43 @@ function hasRunningMailJob(): boolean {
   }
 }
 
-function latestSucceededJobAt(): string | null {
+function latestSucceededJobAt(kind: string): string | null {
   try {
     const row = getSqlite()
       .prepare(
         `SELECT finished_at AS finishedAt
          FROM sync_jobs
-         WHERE kind = 'mail_sync' AND state IN ('succeeded', 'partial')
+         WHERE kind = ? AND state IN ('succeeded', 'partial')
          ORDER BY finished_at DESC
          LIMIT 1`,
       )
-      .get() as { finishedAt: string | null } | undefined;
+      .get(kind) as { finishedAt: string | null } | undefined;
     return row?.finishedAt ?? null;
   } catch {
     return null;
   }
+}
+
+/** dataAsOf = oldest of last full-success mail + drafts jobs (when drafts pending). */
+function computeDataAsOf(syncLast: string | null): string | null {
+  const mailAt = latestSucceededJobAt("mail_sync") || syncLast;
+  let draftsAt: string | null = null;
+  try {
+    const live = getSqlite()
+      .prepare(
+        `SELECT COUNT(*) AS n FROM gmail_drafts
+         WHERE state IN ('creating','present','unknown')`,
+      )
+      .get() as { n: number } | undefined;
+    if ((live?.n || 0) > 0) {
+      draftsAt = latestSucceededJobAt("drafts_reconcile");
+    }
+  } catch {
+    /* table may not exist mid-upgrade */
+  }
+  if (!mailAt) return draftsAt;
+  if (!draftsAt) return mailAt;
+  return Date.parse(mailAt) <= Date.parse(draftsAt) ? mailAt : draftsAt;
 }
 
 function latestFailedJob(): {
@@ -120,7 +142,7 @@ function formatRelativeMinutes(iso: string | null, now: Date): number | null {
 export function computeTrackerFreshness(now = new Date()): TrackerFreshness {
   const intervalMs = activeSyncIntervalMs();
   const sync = getSyncState();
-  const dataAsOf = latestSucceededJobAt() || sync.lastSyncAt;
+  const dataAsOf = computeDataAsOf(sync.lastSyncAt);
   const failed = latestFailedJob();
 
   if (hasRunningMailJob()) {

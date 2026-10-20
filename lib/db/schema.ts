@@ -313,3 +313,31 @@ export const syncJobs = sqliteTable("sync_jobs", {
   finishedAt: text("finished_at"),
   nextRetryAt: text("next_retry_at"),
 });
+
+/** Gmail Drafts lifecycle — source of truth for pending send UX (Faz 5). */
+export const gmailDrafts = sqliteTable("gmail_drafts", {
+  id: text("id").primaryKey(),
+  itemId: integer("item_id")
+    .notNull()
+    .references(() => trackerItems.id),
+  accountId: text("account_id").notNull(),
+  kind: text("kind").notNull(),
+  /** creating|present|sent|deleted_by_user|failed|unknown|superseded */
+  state: text("state").notNull(),
+  messageIdHdr: text("message_id_hdr").notNull(),
+  gmMsgid: text("gm_msgid"),
+  gmThrid: text("gm_thrid"),
+  draftsUid: integer("drafts_uid"),
+  draftsUidvalidity: text("drafts_uidvalidity"),
+  subject: text("subject").notNull(),
+  toAddr: text("to_addr").notNull(),
+  contentHash: text("content_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  confirmedAt: text("confirmed_at"),
+  lastSeenAt: text("last_seen_at"),
+  lastCheckedAt: text("last_checked_at"),
+  missingSince: text("missing_since"),
+  missingChecks: integer("missing_checks").notNull().default(0),
+  sentMailId: integer("sent_mail_id").references(() => mailMessages.id),
+  error: text("error"),
+});

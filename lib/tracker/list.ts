@@ -11,9 +11,10 @@ import { getSettingsRow } from "@/lib/settings/service";
 import { effective, factsFromItemRow } from "./derive/effective";
 import { buildGmailThreadUrls } from "./gmail-links";
 import {
-  parsePendingGmailDraft,
-  reconcileDraftFlagsForRow,
-} from "./pending-draft";
+  getLiveDraftAnyKind,
+  toPendingInfo,
+} from "./gmail-drafts-store";
+import { reconcileDraftFlagsForRow } from "./pending-draft";
 import { loadRecipientsForItem } from "./recipients";
 import { getSyncState } from "./sync";
 import {
@@ -53,6 +54,7 @@ function mapRow(
   },
   followUpDays: number,
   nowMs?: number,
+  gmailAddress?: string | null,
 ): TrackerListItem {
   // Computed-on-read: follow-up / OOO transitions without waiting for sync.
   const facts = factsFromItemRow(row);
@@ -102,7 +104,11 @@ function mapRow(
     statusLabel: statusTitle(status),
     gmailUrls,
     waitingUntil: parseWaitingUntil(row.notesJson, row.waitingUntil),
-    pendingGmailDraft: parsePendingGmailDraft(row.notesJson),
+    pendingGmailDraft: (() => {
+      const live = getLiveDraftAnyKind(row.id);
+      if (!live) return null;
+      return toPendingInfo(live, gmailAddress);
+    })(),
     recipientOptions: recipients.candidates,
     recommendedTo: recipients.recommended,
   };
@@ -178,7 +184,9 @@ export function listTrackerSections(opts?: { now?: number }): {
 } {
   const db = getDb();
   const urlsMap = gmailUrlsByItemId();
-  const followUpDays = getSettingsRow()?.followUpDays ?? 5;
+  const settings = getSettingsRow();
+  const followUpDays = settings?.followUpDays ?? 5;
+  const gmailAddress = settings?.gmailAddress?.trim() || null;
   const rows = db
     .select()
     .from(trackerItems)
@@ -193,6 +201,7 @@ export function listTrackerSections(opts?: { now?: number }): {
         flags,
         followUpDays,
         opts?.now,
+        gmailAddress,
       );
     });
   const byStatus = new Map<TrackerStatus, TrackerListItem[]>();
