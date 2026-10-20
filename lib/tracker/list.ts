@@ -3,7 +3,6 @@ import { getDb } from "@/lib/db/client";
 import {
   mailAssignments,
   mailMessages,
-  trackerItemMails,
   trackerItems,
 } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
@@ -157,13 +156,11 @@ function mapRow(
 
 function gmailUrlsByItemId(): Map<number, string[]> {
   const db = getDb();
-  const assigns = db.select().from(mailAssignments).all();
-  const legacy = assigns.length
-    ? []
-    : db.select().from(trackerItemMails).all();
-  const links = assigns.length
-    ? assigns.map((a) => ({ itemId: a.itemId, mailId: a.mailId }))
-    : legacy.map((l) => ({ itemId: l.itemId, mailId: l.mailId }));
+  const links = db
+    .select()
+    .from(mailAssignments)
+    .all()
+    .map((a) => ({ itemId: a.itemId, mailId: a.mailId }));
   if (!links.length) return new Map();
 
   const mailIds = [...new Set(links.map((l) => l.mailId))];

@@ -221,15 +221,7 @@ function markDeleted(row: GmailDraftRow): void {
     .where(eq(trackerItems.id, row.itemId))
     .get();
   if (item) {
-    reconcileDraftFlagsForRow(
-      {
-        ...item,
-        hasFollowUpDraft: 0,
-        hasThanksDraft: 0,
-        hasReplyDraft: 0,
-      },
-      { persist: true },
-    );
+    reconcileDraftFlagsForRow(item);
   }
   bumpTrackerRevision("drafts", "upsert", [row.itemId]);
 }

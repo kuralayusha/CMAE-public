@@ -9,7 +9,6 @@ import {
   mailAssignments,
   mailMessages,
   mailUnassigned,
-  trackerItemMails,
   trackerItems,
 } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
@@ -125,16 +124,10 @@ export function previewRegroup(
       .from(mailAssignments)
       .where(eq(mailAssignments.itemId, item.id))
       .all();
-    let ids = assigns.map((a) => a.mailId);
-    if (!ids.length) {
-      ids = db
-        .select()
-        .from(trackerItemMails)
-        .where(eq(trackerItemMails.itemId, item.id))
-        .all()
-        .map((l) => l.mailId);
-    }
-    itemMailIds.set(item.id, ids);
+    itemMailIds.set(
+      item.id,
+      assigns.map((a) => a.mailId),
+    );
   }
 
   const edges: WeightEdge[] = [];
@@ -287,9 +280,6 @@ export async function regroupTrackerItems(opts?: {
             originResearchJobId: g.researchJobId,
             notesJson: JSON.stringify({ notes: g.notes }),
             userState: "active",
-            hasFollowUpDraft: 0,
-            hasThanksDraft: 0,
-            hasReplyDraft: 0,
             ignored: 0,
             updatedAt: now,
             createdAt: now,

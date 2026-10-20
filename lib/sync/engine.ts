@@ -31,12 +31,15 @@ import {
   type SyncErrorKind,
 } from "./errors";
 import { computeTrackerFreshness } from "./freshness";
+import { appendSyncLog } from "./jsonl-log";
 
 /** Stuck = no progress for this long (IMAP batch 180s / LLM 90s). */
 const PHASE_BUDGET_MS = 180_000;
 const HEARTBEAT_MS = 5_000;
 const STALE_LEASE_MS = 30_000;
 const NON_MANUAL_DEBOUNCE_MS = 3_000;
+/** IDLE exists → incremental (architecture: 10s). */
+const IDLE_DEBOUNCE_MS = 10_000;
 const JOB_HISTORY_KEEP = 200;
 
 export type SyncJobKind =
@@ -496,11 +499,13 @@ export function requestSync(opts: {
   const reason = opts.reason;
 
   if (reason !== "manual") {
-    // Debounce non-manual triggers.
+    // Debounce non-manual triggers (IDLE uses 10s; others 3s).
     globalThis.__cmaeSyncPendingRequest = { reason, mode };
     if (globalThis.__cmaeSyncDebounceTimer) {
       clearTimeout(globalThis.__cmaeSyncDebounceTimer);
     }
+    const debounceMs =
+      reason === "idle" ? IDLE_DEBOUNCE_MS : NON_MANUAL_DEBOUNCE_MS;
     globalThis.__cmaeSyncDebounceTimer = setTimeout(() => {
       globalThis.__cmaeSyncDebounceTimer = null;
       const pending = globalThis.__cmaeSyncPendingRequest;
@@ -508,7 +513,7 @@ export function requestSync(opts: {
       if (pending) {
         requestSyncImmediate(pending);
       }
-    }, NON_MANUAL_DEBOUNCE_MS);
+    }, debounceMs);
     if (
       typeof globalThis.__cmaeSyncDebounceTimer === "object" &&
       globalThis.__cmaeSyncDebounceTimer &&
@@ -778,6 +783,24 @@ async function runClaimedJob(job: JobRow): Promise<void> {
     abort,
   };
   globalThis.__cmaeTrackerSync = session;
+
+  // Free the work IMAP slot: pause dedicated IDLE while sync/drafts use IMAP.
+  const usesImap = job.kind === "mail_sync" || job.kind === "drafts_reconcile";
+  if (usesImap) {
+    try {
+      const idle = await import("@/lib/mail/idle-watcher");
+      idle.pauseIdleWatcher();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  appendSyncLog({
+    jobId: job.id,
+    kind: job.kind,
+    phase: "start",
+    event: "job_start",
+  });
 
   const heartbeat = setInterval(() => {
     try {
@@ -1076,6 +1099,14 @@ async function runClaimedJob(job: JobRow): Promise<void> {
     }
     pruneJobHistory();
     emitFreshness();
+    if (usesImap) {
+      try {
+        const idle = await import("@/lib/mail/idle-watcher");
+        idle.resumeIdleWatcher();
+      } catch {
+        /* ignore */
+      }
+    }
   }
 }
 
@@ -1112,6 +1143,31 @@ function finishJob(
       job.id,
     );
   emitJobEvent({ id: job.id, kind: job.kind, state, phase: "finalize" });
+
+  let durMs: number | undefined;
+  if (job.started_at) {
+    const a = Date.parse(job.started_at);
+    const b = Date.parse(now);
+    if (Number.isFinite(a) && Number.isFinite(b) && b >= a) durMs = b - a;
+  }
+  const counts: Record<string, number> = {};
+  if (extra?.stats) {
+    for (const [k, v] of Object.entries(extra.stats)) {
+      if (typeof v === "number" && Number.isFinite(v)) counts[k] = v;
+      else if (typeof v === "boolean") counts[k] = v ? 1 : 0;
+    }
+  }
+  appendSyncLog({
+    at: now,
+    jobId: job.id,
+    kind: job.kind,
+    phase: "finalize",
+    event: `job_${state}`,
+    durMs,
+    counts: Object.keys(counts).length ? counts : undefined,
+    errorKind: extra?.errorKind ? String(extra.errorKind) : null,
+    errorMessage: extra?.errorMessage ?? null,
+  });
 }
 
 function scheduleRetry(job: JobRow, errorKind: string): void {

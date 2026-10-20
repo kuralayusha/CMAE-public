@@ -27,9 +27,6 @@ export type UserColumnPatch = {
   ignored?: number;
   workspaceFolder?: string | null;
   researchJobId?: string | null;
-  hasFollowUpDraft?: number;
-  hasThanksDraft?: number;
-  hasReplyDraft?: number;
   deletedAt?: string | null;
   deletedReason?: string | null;
   mergedIntoId?: number | null;

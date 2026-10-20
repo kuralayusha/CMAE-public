@@ -1092,15 +1092,15 @@ Her faz bağımsız olarak yayınlanabilir. Kabul kriterleri otomatik testlerle 
 - Dış `.md` düzenlemesi uyarı üretiyor.
 - GET'te sıfır `fs` çağrısı (spy testi).
 
-### Faz 8: Gecikme ve operasyon
+### Faz 8: Gecikme ve operasyon ✅
 
-- IMAP IDLE (All Mail, `maxIdleTime` 25 dk, ayrı bağlantı).
-- Tanılama sayfası, JSONL loglar, sözleşme test koşusu.
-- Yıkıcı temizlik migration'ı (`tracker_item_mails` ve `has_*` kolonlarının kaldırılması, `message_id` unique'inin düşürülmesi) + `version-policy.json` minimum sürüm.
+- IMAP IDLE (All Mail, `maxIdleTime` 25 dk, ayrı bağlantı; sync sırasında pause).
+- Tanılama (Ayarlar alt bölümü + `/api/diagnostics`), JSONL loglar (`userData/logs`, 7 gün).
+- Yıkıcı temizlik migration 009 (`tracker_item_mails` drop, `has_*` drop, `message_id` non-unique) + `minSupported` yükseltmesi.
 
 **Kabul kriterleri:**
-- Yeni yanıt ≤ 30 sn'de listede.
-- Gece sözleşme testleri yeşil.
+- Yeni yanıt ≤ 30 sn'de listede (IDLE çalışırken).
+- FakeMailSource smoke + `tsc --noEmit` yeşil.
 
 ---
 

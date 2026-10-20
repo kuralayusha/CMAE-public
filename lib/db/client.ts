@@ -73,7 +73,6 @@ export function wipeDatabaseContents() {
   sqlite.exec(`
     PRAGMA foreign_keys = OFF;
     DELETE FROM tracker_timelines;
-    DELETE FROM tracker_item_mails;
     DELETE FROM tracker_items;
     DELETE FROM mail_messages;
     DELETE FROM mail_folder_cursors;

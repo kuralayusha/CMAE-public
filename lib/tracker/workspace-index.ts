@@ -10,14 +10,13 @@ import { and, eq } from "drizzle-orm";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpRevision } from "@/lib/db/revision";
 import {
-  mailAssignments,
-  trackerItemMails,
   trackerItems,
   workspaceFiles,
   workspaceFolders,
 } from "@/lib/db/schema";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
 import { softDeleteItemInTx } from "@/lib/tracker/item-tx";
+import { itemHasAssignedMails } from "@/lib/tracker/item-mails";
 import { emitTrackerLive } from "@/lib/tracker/live";
 import { WS, WS_LEGACY } from "@/lib/workspace/filenames";
 import { contentHashForDraft } from "./gmail-drafts-store";
@@ -285,19 +284,7 @@ function listIndexedNames(folder: string): Set<string> {
 }
 
 function itemHasMails(itemId: number): boolean {
-  const db = getDb();
-  const assign = db
-    .select({ mailId: mailAssignments.mailId })
-    .from(mailAssignments)
-    .where(eq(mailAssignments.itemId, itemId))
-    .get();
-  if (assign) return true;
-  const legacy = db
-    .select({ id: trackerItemMails.id })
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.itemId, itemId))
-    .get();
-  return Boolean(legacy);
+  return itemHasAssignedMails(itemId);
 }
 
 /** Index-only: folder absent, clear file rows, bump revision. */
@@ -356,9 +343,6 @@ export function applyMissingFolderSemantics(folder: string): boolean {
         .update(trackerItems)
         .set({
           researchJobId: null,
-          hasFollowUpDraft: 0,
-          hasThanksDraft: 0,
-          hasReplyDraft: 0,
           updatedAt,
         })
         .where(eq(trackerItems.id, row.id))

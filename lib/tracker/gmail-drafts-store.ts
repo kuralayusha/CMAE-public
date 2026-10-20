@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "crypto";
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpTrackerRevision } from "@/lib/db/revision";
-import { gmailDrafts, trackerItems } from "@/lib/db/schema";
+import { gmailDrafts } from "@/lib/db/schema";
 import { normalizeAccountId } from "@/lib/db/app-meta";
 import { gmailDraftsFolderUrl } from "./imap";
 import type { DraftKind } from "./types";
@@ -217,21 +217,12 @@ export function markDraftFailed(id: string, error: string): void {
   if (row) bumpTrackerRevision("drafts", "upsert", [row.itemId]);
 }
 
-/** Clear has_* draft flags when a Gmail draft is live for that kind. */
+/** @deprecated No-op since Faz 8 (flags from workspace index + gmail_drafts). */
 export function clearHasDraftFlagsForKind(
-  itemId: number,
-  kind: DraftKind,
+  _itemId: number,
+  _kind: DraftKind,
 ): void {
-  const patch: Partial<typeof trackerItems.$inferInsert> = {};
-  if (kind === "follow_up") patch.hasFollowUpDraft = 0;
-  if (kind === "thanks") patch.hasThanksDraft = 0;
-  if (kind === "reply") patch.hasReplyDraft = 0;
-  if (!Object.keys(patch).length) return;
-  getDb()
-    .update(trackerItems)
-    .set(patch)
-    .where(eq(trackerItems.id, itemId))
-    .run();
+  /* intentionally empty */
 }
 
 export function toPendingInfo(

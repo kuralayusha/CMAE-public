@@ -97,9 +97,6 @@ export function previewAccountSwitch(
        AND (ti.status = 'ready_to_send' OR ti.ai_status = 'ready_to_send')
        AND NOT EXISTS (
          SELECT 1 FROM mail_assignments ma WHERE ma.item_id = ti.id
-       )
-       AND NOT EXISTS (
-         SELECT 1 FROM tracker_item_mails tim WHERE tim.item_id = ti.id
        )`,
   );
 
@@ -159,31 +156,7 @@ function deleteOldAccountData(db: Database.Database, oldAccountId: string) {
       .all(oldAccountId, oldAccountId) as { id: number }[]
   ).map((r) => r.id);
 
-  // Also items linked only via legacy tracker_item_mails to old-account mails
-  const legacyIds = (
-    db
-      .prepare(
-        `SELECT ti.id AS id FROM tracker_items ti
-         WHERE ti.deleted_at IS NULL
-           AND EXISTS (
-             SELECT 1 FROM tracker_item_mails tim
-             JOIN mail_messages mm ON mm.id = tim.mail_id
-             WHERE tim.item_id = ti.id AND mm.account_id = ?
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM tracker_item_mails tim2
-             JOIN mail_messages mm2 ON mm2.id = tim2.mail_id
-             WHERE tim2.item_id = ti.id
-               AND (mm2.account_id IS NULL OR mm2.account_id != ?)
-           )
-           AND NOT EXISTS (
-             SELECT 1 FROM mail_assignments ma WHERE ma.item_id = ti.id
-           )`,
-      )
-      .all(oldAccountId, oldAccountId) as { id: number }[]
-  ).map((r) => r.id);
-
-  const allItemIds = [...new Set([...itemIds, ...legacyIds])];
+  const allItemIds = [...new Set(itemIds)];
 
   if (allItemIds.length) {
     const placeholders = allItemIds.map(() => "?").join(",");
@@ -198,9 +171,6 @@ function deleteOldAccountData(db: Database.Database, oldAccountId: string) {
       `DELETE FROM item_lineage
        WHERE old_id IN (${placeholders}) OR new_id IN (${placeholders})`,
     ).run(...allItemIds, ...allItemIds);
-    db.prepare(
-      `DELETE FROM tracker_item_mails WHERE item_id IN (${placeholders})`,
-    ).run(...allItemIds);
     db.prepare(
       `DELETE FROM mail_assignments WHERE item_id IN (${placeholders})`,
     ).run(...allItemIds);

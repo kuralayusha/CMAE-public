@@ -5,9 +5,6 @@
  * Draft flags: workspace_files index (Faz 7), not direct fs on GET.
  */
 
-import { eq } from "drizzle-orm";
-import { getDb } from "@/lib/db/client";
-import { trackerItems } from "@/lib/db/schema";
 import { getLiveDraftAnyKind } from "./gmail-drafts-store";
 import { draftFlagsFromIndex } from "./workspace-index";
 import type { DraftKind, TrackerStatus } from "./types";
@@ -125,8 +122,8 @@ export function draftFlagsFromDisk(
 }
 
 /**
- * Align has*Draft flags with workspace_files index + live gmail_drafts.
- * GET/list must use persist:false (read-only). Sync/draft reconcile may persist:true.
+ * Draft flags from workspace_files index + live gmail_drafts (Faz 8: no DB columns).
+ * `persist` is ignored (kept for call-site compatibility).
  */
 export function reconcileDraftFlagsForRow(
   row: {
@@ -134,53 +131,30 @@ export function reconcileDraftFlagsForRow(
     workspaceFolder: string | null;
     followUpCount: number;
     notesJson: string | null;
-    hasFollowUpDraft: number | boolean;
-    hasThanksDraft: number | boolean;
-    hasReplyDraft: number | boolean;
+    hasFollowUpDraft?: number | boolean;
+    hasThanksDraft?: number | boolean;
+    hasReplyDraft?: number | boolean;
   },
-  opts?: { persist?: boolean },
+  _opts?: { persist?: boolean },
 ): {
   hasFollowUpDraft: boolean;
   hasThanksDraft: boolean;
   hasReplyDraft: boolean;
 } {
-  const persist = Boolean(opts?.persist);
   const live = getLiveDraftAnyKind(row.id);
   const pending = live
     ? { kind: live.kind as DraftKind }
     : parsePendingGmailDraft(row.notesJson);
   const indexed = draftFlagsFromIndex(row.workspaceFolder, row.followUpCount);
 
-  // If Gmail draft already created, keep has* false even if md remains indexed
-  let hasFollowUpDraft =
-    Boolean(row.hasFollowUpDraft) || indexed.hasFollowUpDraft;
-  let hasThanksDraft = Boolean(row.hasThanksDraft) || indexed.hasThanksDraft;
-  let hasReplyDraft = Boolean(row.hasReplyDraft) || indexed.hasReplyDraft;
+  let hasFollowUpDraft = indexed.hasFollowUpDraft;
+  let hasThanksDraft = indexed.hasThanksDraft;
+  let hasReplyDraft = indexed.hasReplyDraft;
 
+  // Live Gmail draft for that kind → not "pending local draft"
   if (pending?.kind === "follow_up") hasFollowUpDraft = false;
   if (pending?.kind === "thanks") hasThanksDraft = false;
   if (pending?.kind === "reply") hasReplyDraft = false;
-
-  const dbFu = Boolean(row.hasFollowUpDraft);
-  const dbTh = Boolean(row.hasThanksDraft);
-  const dbRe = Boolean(row.hasReplyDraft);
-
-  if (
-    persist &&
-    (hasFollowUpDraft !== dbFu ||
-      hasThanksDraft !== dbTh ||
-      hasReplyDraft !== dbRe)
-  ) {
-    getDb()
-      .update(trackerItems)
-      .set({
-        hasFollowUpDraft: hasFollowUpDraft ? 1 : 0,
-        hasThanksDraft: hasThanksDraft ? 1 : 0,
-        hasReplyDraft: hasReplyDraft ? 1 : 0,
-      })
-      .where(eq(trackerItems.id, row.id))
-      .run();
-  }
 
   return { hasFollowUpDraft, hasThanksDraft, hasReplyDraft };
 }

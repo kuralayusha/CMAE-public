@@ -7,7 +7,6 @@ import { getDb } from "@/lib/db/client";
 import {
   mailAssignments,
   mailMessages,
-  trackerItemMails,
   trackerItems,
 } from "@/lib/db/schema";
 import type { MailIntentMap } from "../mail-kind";
@@ -29,15 +28,7 @@ function loadAssignedMails(itemId: number): FactMail[] {
     .from(mailAssignments)
     .where(eq(mailAssignments.itemId, itemId))
     .all();
-  let mailIds = assigns.map((a) => a.mailId);
-  if (!mailIds.length) {
-    mailIds = db
-      .select()
-      .from(trackerItemMails)
-      .where(eq(trackerItemMails.itemId, itemId))
-      .all()
-      .map((l) => l.mailId);
-  }
+  const mailIds = assigns.map((a) => a.mailId);
   if (!mailIds.length) return [];
   return db
     .select()

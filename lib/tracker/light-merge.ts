@@ -1,7 +1,8 @@
 import { eq } from "drizzle-orm";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpTrackerRevision } from "@/lib/db/revision";
-import { trackerItemMails, trackerItems } from "@/lib/db/schema";
+import { trackerItems } from "@/lib/db/schema";
+import { itemHasAssignedMails } from "./item-mails";
 import {
   loadRecipientsForItem,
   parseSelectedRecipient,
@@ -33,16 +34,6 @@ function afterResearchWrite(
     );
   }
   return result;
-}
-
-function itemHasMails(itemId: number): boolean {
-  const db = getDb();
-  const row = db
-    .select({ id: trackerItemMails.id })
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.itemId, itemId))
-    .get();
-  return Boolean(row);
 }
 
 function insertReadyToSend(c: WorkspaceCandidate): number {
@@ -82,9 +73,6 @@ function insertReadyToSend(c: WorkspaceCandidate): number {
         notes: "workspace search only (light merge)",
         waitingUntil: null,
       }),
-      hasFollowUpDraft: 0,
-      hasThanksDraft: 0,
-      hasReplyDraft: 0,
       updatedAt: now,
       createdAt: now,
     })
@@ -179,7 +167,7 @@ export function mergeResearchJobIntoTracker(
       const ck = companyKey(c.company);
       const sameCompany = all.filter((r) => companyKey(r.company) === ck);
       const mailFlags = new Map(
-        sameCompany.map((r) => [r.id, itemHasMails(r.id)]),
+        sameCompany.map((r) => [r.id, itemHasAssignedMails(r.id)]),
       );
       const companyHasMails = sameCompany.some((r) => mailFlags.get(r.id));
       const companyHasOutboundThread = sameCompany.some(

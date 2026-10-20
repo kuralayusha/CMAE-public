@@ -3,11 +3,11 @@
  * Full AI rebuild stays for hard sync / empty tracker / large influx.
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import {
+  mailAssignments,
   mailMessages,
-  trackerItemMails,
   trackerItems,
 } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
@@ -139,8 +139,8 @@ function findItemIdByThread(
   if (!sameThread.length) return null;
   const link = db
     .select()
-    .from(trackerItemMails)
-    .where(inArray(trackerItemMails.mailId, sameThread))
+    .from(mailAssignments)
+    .where(inArray(mailAssignments.mailId, sameThread))
     .get();
   return link?.itemId ?? null;
 }
@@ -151,8 +151,8 @@ function existingItemBriefs(): ExistingItemBrief[] {
   return items.map((item) => {
     const links = db
       .select()
-      .from(trackerItemMails)
-      .where(eq(trackerItemMails.itemId, item.id))
+      .from(mailAssignments)
+      .where(eq(mailAssignments.itemId, item.id))
       .all();
     let lastSubject: string | null = null;
     if (links.length) {
@@ -197,8 +197,8 @@ function refreshItemStatus(
 
   const links = db
     .select()
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.itemId, itemId))
+    .from(mailAssignments)
+    .where(eq(mailAssignments.itemId, itemId))
     .all();
   const linkedMails = links.length
     ? db
@@ -383,22 +383,27 @@ function linkMail(itemId: number, mail: typeof mailMessages.$inferSelect): boole
   const db = getDb();
   const existing = db
     .select()
-    .from(trackerItemMails)
-    .where(
-      and(
-        eq(trackerItemMails.itemId, itemId),
-        eq(trackerItemMails.mailId, mail.id),
-      ),
-    )
+    .from(mailAssignments)
+    .where(eq(mailAssignments.mailId, mail.id))
     .get();
-  if (existing) return false;
-  db.insert(trackerItemMails)
+  if (existing) {
+    if (existing.itemId === itemId) return false;
+    db.update(mailAssignments)
+      .set({ itemId, source: "legacy" })
+      .where(eq(mailAssignments.mailId, mail.id))
+      .run();
+    return true;
+  }
+  db.insert(mailAssignments)
     .values({
       itemId,
       mailId: mail.id,
-      role: mailRole(mail),
+      source: "legacy",
+      locked: 0,
+      assignedRev: 0,
     })
     .run();
+  void mailRole(mail);
   return true;
 }
 
@@ -440,9 +445,6 @@ function createItemForMail(
         notes: "incremental create (AI)",
         lastMailIntent: "unknown",
       }),
-      hasFollowUpDraft: 0,
-      hasThanksDraft: 0,
-      hasReplyDraft: 0,
       updatedAt: now,
       createdAt: now,
     })
@@ -533,8 +535,8 @@ export async function patchTrackerWithNewMails(
 
     const already = db
       .select()
-      .from(trackerItemMails)
-      .where(eq(trackerItemMails.mailId, mail.id))
+      .from(mailAssignments)
+      .where(eq(mailAssignments.mailId, mail.id))
       .get();
     if (already) {
       touched.add(already.itemId);

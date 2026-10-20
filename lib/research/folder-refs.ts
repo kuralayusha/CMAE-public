@@ -2,33 +2,14 @@ import { eq } from "drizzle-orm";
 import path from "path";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpRevision } from "@/lib/db/revision";
-import {
-  mailAssignments,
-  trackerItemMails,
-  trackerItems,
-} from "@/lib/db/schema";
+import { trackerItems } from "@/lib/db/schema";
 import { emitTrackerLive } from "@/lib/tracker/live";
 import { softDeleteItemInTx } from "@/lib/tracker/item-tx";
+import { itemHasAssignedMails } from "@/lib/tracker/item-mails";
 import { getJobs } from "./events";
 import { loadJobsFromDisk, persistJobNow } from "./persist";
 import type { ResearchJob } from "./types";
 import { getWorkspaceRoot } from "./workspace";
-
-function itemHasMails(itemId: number): boolean {
-  const db = getDb();
-  const assign = db
-    .select({ mailId: mailAssignments.mailId })
-    .from(mailAssignments)
-    .where(eq(mailAssignments.itemId, itemId))
-    .get();
-  if (assign) return true;
-  const row = db
-    .select({ id: trackerItemMails.id })
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.itemId, itemId))
-    .get();
-  return Boolean(row);
-}
 
 /** Keep tracker + search-job refs in sync after a top-level workspace folder rename/delete. */
 export function syncTopLevelFolderRefs(
@@ -67,7 +48,7 @@ export function syncTopLevelFolderRefs(
       const unlinked: number[] = [];
 
       for (const row of rows) {
-        const hasMails = itemHasMails(row.id);
+        const hasMails = itemHasAssignedMails(row.id);
         // Research-only row (no outbound yet): soft-delete.
         if (row.status === "ready_to_send" && !hasMails) {
           softDeleteItemInTx(sqlite, row.id, "folder_deleted", "fs");
@@ -80,9 +61,6 @@ export function syncTopLevelFolderRefs(
         db.update(trackerItems)
           .set({
             researchJobId: null,
-            hasFollowUpDraft: 0,
-            hasThanksDraft: 0,
-            hasReplyDraft: 0,
             updatedAt,
           })
           .where(eq(trackerItems.id, row.id))

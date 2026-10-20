@@ -5,7 +5,7 @@
 
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
-import { mailMessages, trackerItemMails } from "@/lib/db/schema";
+import { mailAssignments, mailMessages } from "@/lib/db/schema";
 import { getSettingsRow } from "@/lib/settings/service";
 
 export type ThreadReplyTarget = {
@@ -64,8 +64,8 @@ export function resolveThreadReplyTarget(
   const db = getDb();
   const links = db
     .select()
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.itemId, itemId))
+    .from(mailAssignments)
+    .where(eq(mailAssignments.itemId, itemId))
     .all();
   if (!links.length) return null;
 

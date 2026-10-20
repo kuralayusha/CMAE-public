@@ -2,14 +2,13 @@
  * K3 merge proposal list + respond (accept / reject).
  */
 
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpRevision, getTrackerRevision } from "@/lib/db/revision";
 import {
   itemLineage,
   mailAssignments,
   mergeProposals,
-  trackerItemMails,
   trackerItems,
 } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
@@ -241,35 +240,7 @@ export function respondMergeProposal(
       .where(eq(trackerItems.id, winner.id))
       .run();
 
-    // Reassign mail links / assignments from loser → winner
-    const loserLinks = db
-      .select()
-      .from(trackerItemMails)
-      .where(eq(trackerItemMails.itemId, loser.id))
-      .all();
-    for (const link of loserLinks) {
-      const existing = db
-        .select()
-        .from(trackerItemMails)
-        .where(
-          and(
-            eq(trackerItemMails.itemId, winner.id),
-            eq(trackerItemMails.mailId, link.mailId),
-          ),
-        )
-        .get();
-      if (existing) {
-        db.delete(trackerItemMails)
-          .where(eq(trackerItemMails.id, link.id))
-          .run();
-      } else {
-        db.update(trackerItemMails)
-          .set({ itemId: winner.id })
-          .where(eq(trackerItemMails.id, link.id))
-          .run();
-      }
-    }
-
+    // Reassign mail assignments from loser → winner
     const loserAssign = db
       .select()
       .from(mailAssignments)

@@ -127,6 +127,37 @@ export default function SettingsPage() {
   } | null>(null);
   const [isDesktop, setIsDesktop] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<{
+    at: string;
+    jobs: { p50Ms: number | null; p95Ms: number | null; historyKept: number };
+    queues: {
+      pendingDerive: number;
+      needsClassification: number;
+      unassigned: number;
+      poisonAbandoned: number;
+      mergeProposalsOpen: number;
+    };
+    drafts: Record<string, number>;
+    sources: Array<{
+      role: string;
+      lastSuccessAt: string | null;
+      lastErrorKind: string | null;
+    }>;
+    imap: {
+      connections: number;
+      idle: {
+        running: boolean;
+        paused: boolean;
+        mailbox: string | null;
+        usingAllMail: boolean;
+        lastExistsAt: string | null;
+        lastError: string | null;
+      };
+    };
+    llm: { errorRate: number | null; llmErrorJobs: number; recentJobs: number };
+    logsDir: string;
+  } | null>(null);
+  const [diagnosticsErr, setDiagnosticsErr] = useState<string | null>(null);
   /** When set, full-screen locale prep locks the UI until pack is ready. */
   const [localePrep, setLocalePrep] = useState<{
     next: string;
@@ -165,6 +196,23 @@ export default function SettingsPage() {
     if (!res.ok) throw new Error(data.error || t("settings.error.loadCvs"));
     setCvs(data.cvs || []);
     setCvMax(data.max || 4);
+  }
+
+  async function loadDiagnostics() {
+    setDiagnosticsErr(null);
+    try {
+      const res = await fetch("/api/diagnostics", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || t("settings.diagnosticsLoadFailed"));
+      }
+      setDiagnostics(data);
+    } catch (err) {
+      setDiagnostics(null);
+      setDiagnosticsErr(
+        err instanceof Error ? err.message : String(err),
+      );
+    }
   }
 
   async function load() {
@@ -808,6 +856,95 @@ export default function SettingsPage() {
               </span>
             ) : null}
           </div>
+
+          <SettingsAcc title={t("settings.accDiagnostics")}>
+            <p className="cmae-form-hint">{t("settings.diagnosticsHint")}</p>
+            <Button
+              type="button"
+              disabled={busy || formLocked}
+              onClick={() => void loadDiagnostics()}
+            >
+              {t("settings.diagnosticsRefresh")}
+            </Button>
+            {diagnosticsErr ? (
+              <p className="cmae-form-hint is-err" role="alert">
+                {diagnosticsErr}
+              </p>
+            ) : null}
+            {diagnostics ? (
+              <div className="cmae-diagnostics" style={{ marginTop: "1rem" }}>
+                <p className="cmae-form-hint">
+                  {t("settings.diagnosticsAt", { at: diagnostics.at })}
+                </p>
+                <ul className="cmae-form-hint" style={{ paddingLeft: "1.25rem" }}>
+                  <li>
+                    {t("settings.diagnosticsJobs", {
+                      p50: diagnostics.jobs.p50Ms ?? "—",
+                      p95: diagnostics.jobs.p95Ms ?? "—",
+                      n: diagnostics.jobs.historyKept,
+                    })}
+                  </li>
+                  <li>
+                    {t("settings.diagnosticsQueues", {
+                      pending: diagnostics.queues.pendingDerive,
+                      needsClass: diagnostics.queues.needsClassification,
+                      unassigned: diagnostics.queues.unassigned,
+                      poison: diagnostics.queues.poisonAbandoned,
+                      merges: diagnostics.queues.mergeProposalsOpen,
+                    })}
+                  </li>
+                  <li>
+                    {t("settings.diagnosticsDrafts", {
+                      summary:
+                        Object.entries(diagnostics.drafts)
+                          .map(([k, v]) => `${k}:${v}`)
+                          .join(", ") || "—",
+                    })}
+                  </li>
+                  <li>
+                    {t("settings.diagnosticsImap", {
+                      connections: diagnostics.imap.connections,
+                      idle: diagnostics.imap.idle.running
+                        ? diagnostics.imap.idle.paused
+                          ? "paused"
+                          : "on"
+                        : "off",
+                      mailbox: diagnostics.imap.idle.mailbox || "—",
+                      allMail: diagnostics.imap.idle.usingAllMail
+                        ? "yes"
+                        : "no",
+                    })}
+                  </li>
+                  <li>
+                    {t("settings.diagnosticsLlm", {
+                      rate:
+                        diagnostics.llm.errorRate == null
+                          ? "—"
+                          : String(diagnostics.llm.errorRate),
+                      errors: diagnostics.llm.llmErrorJobs,
+                      jobs: diagnostics.llm.recentJobs,
+                    })}
+                  </li>
+                  <li>
+                    {t("settings.diagnosticsSources", {
+                      summary:
+                        diagnostics.sources
+                          .map(
+                            (s) =>
+                              `${s.role}:${s.lastSuccessAt?.slice(0, 19) || "never"}`,
+                          )
+                          .join(", ") || "—",
+                    })}
+                  </li>
+                  <li>
+                    {t("settings.diagnosticsLogs", {
+                      dir: diagnostics.logsDir,
+                    })}
+                  </li>
+                </ul>
+              </div>
+            ) : null}
+          </SettingsAcc>
 
           <SettingsAcc title={t("settings.accDanger")} danger>
             <p className="cmae-form-hint">{t("settings.dangerWipeHint")}</p>

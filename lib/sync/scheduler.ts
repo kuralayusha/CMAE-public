@@ -169,6 +169,11 @@ function onTick() {
 
   if (isOnboardingComplete() && !isAutoSyncBlockedByAuth()) {
     requestSync({ reason, mode: "incremental" });
+    if (reason === "resume") {
+      void import("@/lib/mail/idle-watcher").then((idle) => {
+        idle.reconnectIdleWatcher();
+      });
+    }
   }
 
   scheduleNext("interval");
@@ -194,6 +199,9 @@ export function wakeScheduler(opts?: {
   requestSync({ reason, mode: "incremental" });
   scheduleNext("interval");
   scheduleDraftsReconcileTick();
+  void import("@/lib/mail/idle-watcher").then((idle) => {
+    idle.reconnectIdleWatcher();
+  });
 }
 
 export function rescheduleAfterVisibilityChange(): void {
@@ -206,6 +214,13 @@ export function onCredentialsVersionChanged(): void {
   scheduleNext("interval");
   if (isOnboardingComplete() && !isAutoSyncBlockedByAuth()) {
     requestSync({ reason: "wake", mode: "incremental" });
+    void import("@/lib/mail/idle-watcher").then((idle) => {
+      idle.reconnectIdleWatcher();
+    });
+  } else {
+    void import("@/lib/mail/idle-watcher").then((idle) => {
+      idle.stopIdleWatcher();
+    });
   }
 }
 
@@ -246,6 +261,17 @@ export function start(): void {
       console.error("[sync-scheduler] workspace index failed to start", err);
     });
 
+  // Faz 8: IMAP IDLE (separate connection; paused during mail_sync / drafts).
+  void import("@/lib/mail/idle-watcher")
+    .then((idle) => {
+      if (isOnboardingComplete() && !isAutoSyncBlockedByAuth()) {
+        idle.startIdleWatcher();
+      }
+    })
+    .catch((err) => {
+      console.error("[sync-scheduler] IDLE watcher failed to start", err);
+    });
+
   globalThis.__cmaeSyncNotifyAuthChange = () => {
     onCredentialsVersionChanged();
   };
@@ -257,6 +283,9 @@ export function start(): void {
         if (hasPendingDraftsReconcile()) {
           enqueueDraftsReconcile("startup");
         }
+        void import("@/lib/mail/idle-watcher").then((idle) => {
+          idle.startIdleWatcher();
+        });
       }
       scheduleNext("interval");
       scheduleDraftsReconcileTick();

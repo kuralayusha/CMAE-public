@@ -3,7 +3,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import {
   mailMessages,
-  trackerItemMails,
+  mailAssignments,
   trackerItems,
   trackerTimelines,
 } from "@/lib/db/schema";
@@ -103,12 +103,12 @@ export function loadLinkedMails(itemId: number): LinkedTimelineMail[] {
   const db = getDb();
   const links = db
     .select()
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.itemId, itemId))
+    .from(mailAssignments)
+    .where(eq(mailAssignments.itemId, itemId))
     .all();
   if (!links.length) return [];
 
-  const roleByMail = new Map(links.map((l) => [l.mailId, l.role]));
+  const roleByMail = new Map(links.map((l) => [l.mailId, "inbound" as string]));
   const mailIds = links.map((l) => l.mailId);
   const mails = db
     .select()

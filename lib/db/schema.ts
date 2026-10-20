@@ -71,7 +71,6 @@ export const mailMessages = sqliteTable(
       .notNull()
       .default(sql`(datetime('now'))`),
   },
-  (t) => [uniqueIndex("mail_messages_message_id_uq").on(t.messageId)],
 );
 
 /** Per-account mailbox cursor (All Mail / inbox / sent / drafts). */
@@ -122,9 +121,6 @@ export const trackerItems = sqliteTable("tracker_items", {
   researchJobId: text("research_job_id"),
   primaryTo: text("primary_to"),
   notesJson: text("notes_json"),
-  hasFollowUpDraft: integer("has_follow_up_draft").notNull().default(0),
-  hasThanksDraft: integer("has_thanks_draft").notNull().default(0),
-  hasReplyDraft: integer("has_reply_draft").notNull().default(0),
   /** active | inactive | dismissed — user overlay; derivation never writes */
   userState: text("user_state").notNull().default("active"),
   selectedRecipient: text("selected_recipient"),
@@ -149,23 +145,7 @@ export const trackerItems = sqliteTable("tracker_items", {
     .default(sql`(datetime('now'))`),
 });
 
-/** Legacy junction — dual-written with mail_assignments in Faz 4. */
-export const trackerItemMails = sqliteTable(
-  "tracker_item_mails",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    itemId: integer("item_id")
-      .notNull()
-      .references(() => trackerItems.id, { onDelete: "cascade" }),
-    mailId: integer("mail_id")
-      .notNull()
-      .references(() => mailMessages.id, { onDelete: "cascade" }),
-    role: text("role").notNull().default("inbound"), // outbound | inbound | followup | thanks
-  },
-  (t) => [uniqueIndex("tracker_item_mails_uq").on(t.itemId, t.mailId)],
-);
-
-/** One mail → at most one item (replaces multi-link tracker_item_mails). */
+/** One mail → at most one item. */
 export const mailAssignments = sqliteTable("mail_assignments", {
   mailId: integer("mail_id")
     .primaryKey()

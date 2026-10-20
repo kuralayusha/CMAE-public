@@ -9,7 +9,6 @@ import {
   mailAssignments,
   mailMessages,
   mailUnassigned,
-  trackerItemMails,
   trackerItems,
 } from "@/lib/db/schema";
 import { emailDomain, parseEmailAddr } from "../identity";
@@ -28,29 +27,7 @@ export type AssignResult =
   | { kind: "already"; itemId: number }
   | { kind: "none" };
 
-function mailRole(mail: {
-  folder: string;
-  subject: string;
-  bodyText: string;
-}): string {
-  if (mail.folder !== "SENT") return "inbound";
-  const blob = `${mail.subject}\n${mail.bodyText}`.toLowerCase();
-  if (
-    /teşekkür|thank you for (your time|the update|letting)|appreciate the (update|opportunity)/.test(
-      blob,
-    )
-  ) {
-    return "thanks";
-  }
-  if (
-    /follow[- ]?up|following up|checking in|hatırlat|tekrar yazıyorum/.test(blob)
-  ) {
-    return "followup";
-  }
-  return "outbound";
-}
-
-/** Dual-write assignment + legacy tracker_item_mails. */
+/** Persist mail → item assignment (mail_assignments only). */
 export function writeAssignment(input: {
   mailId: number;
   itemId: number;
@@ -105,38 +82,7 @@ export function writeAssignment(input: {
     .where(eq(mailUnassigned.mailId, input.mailId))
     .run();
 
-  // Dual-write legacy junction
-  const legacy = db
-    .select()
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.mailId, input.mailId))
-    .all();
-  for (const link of legacy) {
-    if (link.itemId !== input.itemId) {
-      db.delete(trackerItemMails)
-        .where(eq(trackerItemMails.id, link.id))
-        .run();
-    }
-  }
-  const keep = db
-    .select()
-    .from(trackerItemMails)
-    .where(
-      and(
-        eq(trackerItemMails.itemId, input.itemId),
-        eq(trackerItemMails.mailId, input.mailId),
-      ),
-    )
-    .get();
-  if (!keep) {
-    db.insert(trackerItemMails)
-      .values({
-        itemId: input.itemId,
-        mailId: input.mailId,
-        role: mailRole(input.mail),
-      })
-      .run();
-  }
+  void input.mail;
 }
 
 export function markUnassigned(
@@ -252,15 +198,7 @@ export function findItemByThread(
     .from(mailAssignments)
     .where(inArray(mailAssignments.mailId, sameThread))
     .get();
-  if (assign) return assign.itemId;
-
-  // Legacy fallback during dual-write period
-  const legacy = db
-    .select()
-    .from(trackerItemMails)
-    .where(inArray(trackerItemMails.mailId, sameThread))
-    .get();
-  return legacy?.itemId ?? null;
+  return assign?.itemId ?? null;
 }
 
 const FREEMAIL = new Set([

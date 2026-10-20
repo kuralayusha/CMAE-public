@@ -3,7 +3,7 @@ import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { bumpTrackerRevision } from "@/lib/db/revision";
-import { mailMessages, trackerItemMails, trackerItems } from "@/lib/db/schema";
+import { mailAssignments, mailMessages, trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import {
   formatPreferencesForApplication,
@@ -137,8 +137,8 @@ async function recentMailsForItem(itemId: number) {
   const db = getDb();
   const links = db
     .select()
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.itemId, itemId))
+    .from(mailAssignments)
+    .where(eq(mailAssignments.itemId, itemId))
     .all();
   const mails = [];
   for (const link of links) {
@@ -350,16 +350,8 @@ ${toWrite}
     }
   }
 
-  // Flags are derived from workspace_files on read (Faz 7). Still bump revision
-  // so clients refresh; has_* columns remain until Faz 8 cleanup.
-  const patch: Partial<typeof trackerItems.$inferInsert> = {};
-  if (kind === "follow_up") patch.hasFollowUpDraft = 1;
-  if (kind === "thanks") patch.hasThanksDraft = 1;
-  if (kind === "reply") patch.hasReplyDraft = 1;
-  if (Object.keys(patch).length) {
-    db.update(trackerItems).set(patch).where(eq(trackerItems.id, itemId)).run();
-    bumpTrackerRevision("mutation", "upsert", [itemId]);
-  }
+  // Flags derived from workspace_files on read (Faz 8). Bump revision for clients.
+  bumpTrackerRevision("mutation", "upsert", [itemId]);
 
   const workspaceFolder =
     db

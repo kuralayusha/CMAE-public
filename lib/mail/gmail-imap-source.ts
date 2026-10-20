@@ -9,6 +9,7 @@ import {
   parseHeaderBlock,
   textFromBodyPart,
 } from "./body-extract";
+import { trackImapConnection } from "./imap-connections";
 import {
   BODY_MAX_BYTES,
   FETCH_ABANDON_AFTER,
@@ -166,9 +167,11 @@ async function withClient<T>(
     signal.addEventListener("abort", onAbort, { once: true });
   }
   await client.connect();
+  trackImapConnection(1);
   try {
     return await fn(client);
   } finally {
+    trackImapConnection(-1);
     if (signal) signal.removeEventListener("abort", onAbort);
     try {
       await client.logout();
@@ -488,6 +491,7 @@ export class GmailImapSource implements MailSource {
       greetingTimeout: 15_000,
     });
     await client.connect();
+    trackImapConnection(1);
     this.client = client;
     this.caps = clientCapabilities(client);
     this.discovery = await this.discover();
@@ -497,6 +501,7 @@ export class GmailImapSource implements MailSource {
     const client = this.client;
     this.client = null;
     if (!client) return;
+    trackImapConnection(-1);
     try {
       await client.logout();
     } catch {

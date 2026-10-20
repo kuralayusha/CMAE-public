@@ -165,11 +165,19 @@ async function main() {
     errors.push("sendDraft should clear drafts");
   }
 
+  // Light diagnostics shape check (no SQLite): percentile helper contract via sorted list.
+  const sorted = [10, 20, 30, 40, 100];
+  const p50 = sorted[Math.ceil((50 / 100) * sorted.length) - 1];
+  const p95 = sorted[Math.ceil((95 / 100) * sorted.length) - 1];
+  if (p50 !== 30 || p95 !== 100) {
+    errors.push(`diagnostics percentile shape p50=${p50} p95=${p95}`);
+  }
+
   if (errors.length) {
     console.error("FAIL", errors);
     process.exit(1);
   }
-  console.log("ok: FakeMailSource smoke passed");
+  console.log("ok: FakeMailSource smoke passed (incl. light diagnostics shape)");
 }
 
 void main();

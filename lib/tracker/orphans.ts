@@ -3,17 +3,9 @@ import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { bumpTrackerRevision } from "@/lib/db/revision";
-import { trackerItemMails, trackerItems } from "@/lib/db/schema";
+import { trackerItems } from "@/lib/db/schema";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
-
-function itemHasMails(itemId: number): boolean {
-  const row = getDb()
-    .select({ id: trackerItemMails.id })
-    .from(trackerItemMails)
-    .where(eq(trackerItemMails.itemId, itemId))
-    .get();
-  return Boolean(row);
-}
+import { itemHasAssignedMails } from "./item-mails";
 
 function folderExistsOnDisk(workspaceFolder: string | null): boolean {
   if (!workspaceFolder) return false;
@@ -36,8 +28,7 @@ export function pruneOrphanReadyToSendItems(): number {
   for (const row of rows) {
     if (row.status !== "ready_to_send") continue;
     if (folderExistsOnDisk(row.workspaceFolder)) continue;
-    if (itemHasMails(row.id)) continue;
-    db.delete(trackerItemMails).where(eq(trackerItemMails.itemId, row.id)).run();
+    if (itemHasAssignedMails(row.id)) continue;
     db.delete(trackerItems).where(eq(trackerItems.id, row.id)).run();
     removed += 1;
   }
