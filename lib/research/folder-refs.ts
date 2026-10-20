@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import path from "path";
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItemMails, trackerItems } from "@/lib/db/schema";
 import { emitTrackerLive } from "@/lib/tracker/live";
 import { getJobs } from "./events";
@@ -72,6 +73,7 @@ export function syncTopLevelFolderRefs(
   }
 
   if (trackerChanged) {
+    bumpTrackerRevision("fs", "global", "all");
     emitTrackerLive({ type: "refresh" });
   }
 

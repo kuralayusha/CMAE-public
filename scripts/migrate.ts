@@ -1,4 +1,4 @@
 import { getDb } from "../lib/db/client";
 
 getDb();
-console.log("SQLite şeması hazır: data/cmae.db");
+console.log("SQLite migrations applied (schema_migrations + app tables).");

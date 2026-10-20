@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItemMails, trackerItems } from "@/lib/db/schema";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
 
@@ -39,6 +40,10 @@ export function pruneOrphanReadyToSendItems(): number {
     db.delete(trackerItemMails).where(eq(trackerItemMails.itemId, row.id)).run();
     db.delete(trackerItems).where(eq(trackerItems.id, row.id)).run();
     removed += 1;
+  }
+  // When called from sync, runTrackerSync also bumps; an extra rev is harmless.
+  if (removed) {
+    bumpTrackerRevision("sync", "delete", "all");
   }
   return removed;
 }

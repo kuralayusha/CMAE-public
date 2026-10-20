@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { throwIfSyncCanceled } from "./cancel";
@@ -115,6 +116,7 @@ export async function runTrackerSync(opts?: {
     lastSyncAt: new Date().toISOString(),
     lastError: partial ? partialError : null,
   });
+  bumpTrackerRevision("sync", "global", "all");
 
   log?.(
     "ok",

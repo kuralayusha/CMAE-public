@@ -22,6 +22,11 @@ import {
   type DraftVariantId,
   type DraftVariantMeta,
 } from "@/lib/tracker/draft-variants";
+import {
+  applyTrackerListPayload,
+  refreshTrackerList,
+  useTrackerListSync,
+} from "@/lib/tracker/client-store";
 import type { SyncLogLine } from "@/lib/tracker/types";
 import type { TVars } from "@/lib/i18n/lookup";
 import "./tracker-list.css";
@@ -343,10 +348,11 @@ export function TrackerList() {
   const t = useT();
   const upper = useLocaleUpper();
   const locale = useIntlLocale();
-  const [sections, setSections] = useState<Section[]>([]);
-  const [sync, setSync] = useState<SyncMeta | null>(null);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const store = useTrackerListSync();
+  const sections = (store.sections || []) as Section[];
+  const sync = store.sync as SyncMeta | null;
+  const total = store.total;
+  const loading = store.loading;
   const [syncing, setSyncing] = useState(false);
   const [syncLines, setSyncLines] = useState<SyncLogLine[]>([]);
   const [syncTermStatus, setSyncTermStatus] = useState<SyncTermStatus | null>(
@@ -355,7 +361,6 @@ export function TrackerList() {
   const [error, setError] = useState<string | null>(null);
   /** Per-row busy keys (itemId:op) — multiple rows can be busy at once. */
   const [busyKeys, setBusyKeys] = useState<Set<string>>(() => new Set());
-  const loadSeqRef = useRef(0);
 
   function addBusyKey(key: string) {
     setBusyKeys((prev) => {
@@ -403,8 +408,11 @@ export function TrackerList() {
   const [hardSync, setHardSync] = useState(false);
   const [actionsMenuId, setActionsMenuId] = useState<number | null>(null);
   const syncEsRef = useRef<EventSource | null>(null);
-  const liveEsRef = useRef<EventSource | null>(null);
   const syncShowToastRef = useRef(false);
+
+  useEffect(() => {
+    if (store.error) setError(store.error);
+  }, [store.error]);
 
   useEffect(() => {
     if (!toast) return;
@@ -470,11 +478,14 @@ export function TrackerList() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("tracker.error.bulkFailed"));
       if (data.sections) {
-        setSections(data.sections);
-        setSync(data.sync || null);
-        setTotal(data.total || 0);
+        applyTrackerListPayload({
+          sections: data.sections,
+          sync: data.sync || null,
+          total: data.total || 0,
+          rev: typeof data.rev === "number" ? data.rev : undefined,
+        });
       } else {
-        await load();
+        await refreshTrackerList({ force: true });
       }
       if (opts?.clearSelection) setSelectedIds(new Set());
       setToast(
@@ -566,16 +577,7 @@ export function TrackerList() {
   }, [prepareModalItemId, prepareModalKind, prepareModalFollowUpCount]);
 
   const load = useCallback(async () => {
-    const seq = ++loadSeqRef.current;
-    const res = await fetch("/api/tracker");
-    const data = await res.json();
-    // Latest request wins — ignore stale responses from focus/SSE races.
-    if (seq !== loadSeqRef.current) return;
-    if (!res.ok) throw new Error(data.error || t("tracker.error.loadList"));
-    setSections(data.sections || []);
-    setSync(data.sync || null);
-    setTotal(data.total || 0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable load(); t is for errors only
+    await refreshTrackerList({ force: true });
   }, []);
 
   const pendingDraftCount = useMemo(
@@ -583,27 +585,12 @@ export function TrackerList() {
     [allItems],
   );
 
-  // Prepare may finish while the user is on another page — refresh flags/buttons.
-  useEffect(() => {
-    const refresh = () => {
-      if (document.visibilityState === "hidden") return;
-      void load().catch(() => {
-        /* keep prior list */
-      });
-    };
-    document.addEventListener("visibilitychange", refresh);
-    window.addEventListener("focus", refresh);
-    return () => {
-      document.removeEventListener("visibilitychange", refresh);
-      window.removeEventListener("focus", refresh);
-    };
-  }, [load]);
-
   const applySyncPayload = useCallback(
     (data: {
       sections?: Section[];
       sync?: SyncMeta;
       total?: number;
+      rev?: number;
       skippedImap?: boolean;
       skipReason?: string;
       upserted?: number;
@@ -612,9 +599,12 @@ export function TrackerList() {
       mode?: "incremental" | "hard";
       keptOutsideWindow?: number;
     }) => {
-      setSections(data.sections || []);
-      setSync(data.sync || null);
-      setTotal(data.total || 0);
+      applyTrackerListPayload({
+        sections: data.sections || [],
+        sync: data.sync || null,
+        total: data.total || 0,
+        rev: data.rev,
+      });
       if (data.showToast) {
         const parts = [
           data.mode === "hard"
@@ -768,9 +758,7 @@ export function TrackerList() {
     let cancelled = false;
     (async () => {
       try {
-        setLoading(true);
-        await load();
-        if (cancelled) return;
+        // List load + SSE come from useTrackerListSync; only join running sync here.
         const res = await fetch("/api/tracker/sync");
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
@@ -781,35 +769,13 @@ export function TrackerList() {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
         }
-      } finally {
-        if (!cancelled) setLoading(false);
       }
     })();
-
-    // Research light-merge → refresh list immediately (not a Gmail sync)
-    const live = new EventSource("/api/tracker/live");
-    liveEsRef.current = live;
-    live.onmessage = (ev) => {
-      try {
-        const data = JSON.parse(ev.data) as { type?: string };
-        if (data.type === "research_merged" || data.type === "refresh") {
-          void load().catch(() => {
-            /* keep prior list */
-          });
-        }
-      } catch {
-        /* ignore malformed */
-      }
-    };
 
     return () => {
       cancelled = true;
       // Only detach UI stream — do NOT cancel the server sync
       detachSyncStream();
-      if (liveEsRef.current) {
-        liveEsRef.current.close();
-        liveEsRef.current = null;
-      }
     };
     // mount-only bootstrap
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -838,21 +804,25 @@ export function TrackerList() {
     recipientOptions?: RecipientOption[],
     recommendedTo?: string | null,
   ) {
-    setSections((prev) =>
-      prev.map((sec) => ({
-        ...sec,
-        items: sec.items.map((it) =>
-          it.id === itemId
-            ? {
-                ...it,
-                primaryTo,
-                ...(recipientOptions ? { recipientOptions } : {}),
-                ...(recommendedTo !== undefined ? { recommendedTo } : {}),
-              }
-            : it,
-        ),
-      })),
-    );
+    const nextSections = sections.map((sec) => ({
+      ...sec,
+      items: sec.items.map((it) =>
+        it.id === itemId
+          ? {
+              ...it,
+              primaryTo,
+              ...(recipientOptions ? { recipientOptions } : {}),
+              ...(recommendedTo !== undefined ? { recommendedTo } : {}),
+            }
+          : it,
+      ),
+    }));
+    applyTrackerListPayload({
+      sections: nextSections,
+      sync,
+      total,
+      rev: store.rev,
+    });
   }
 
   async function changeRecipient(item: TrackerItem, email: string) {

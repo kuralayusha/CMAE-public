@@ -132,3 +132,23 @@ export const trackerTimelines = sqliteTable(
   },
   (t) => [uniqueIndex("tracker_timelines_fp_uq").on(t.fingerprint)],
 );
+
+/** Key/value app metadata (tracker_revision, db_epoch, …). */
+export const appMeta = sqliteTable("app_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
+/** Changelog for SSE backfill (rev = tracker_revision after bump). */
+export const trackerChanges = sqliteTable("tracker_changes", {
+  rev: integer("rev").primaryKey(),
+  at: text("at").notNull(),
+  source: text("source").notNull(),
+  kind: text("kind").notNull(),
+  itemIds: text("item_ids").notNull().default("[]"),
+});
+
+export const schemaMigrations = sqliteTable("schema_migrations", {
+  version: integer("version").primaryKey(),
+  appliedAt: text("applied_at").notNull(),
+});

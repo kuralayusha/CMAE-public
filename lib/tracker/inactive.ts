@@ -5,6 +5,7 @@
 
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItemMails, trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { sameCompanyIdentity, samePrimaryEmail } from "./identity";
@@ -57,6 +58,13 @@ export function setItemsInactive(ids: number[]): { updated: number } {
       .run();
     updated += 1;
   }
+  if (updated) {
+    bumpTrackerRevision(
+      "mutation",
+      "upsert",
+      rows.filter((r) => r.status !== "inactive").map((r) => r.id),
+    );
+  }
   return { updated };
 }
 
@@ -89,6 +97,13 @@ export function setItemsActive(ids: number[]): { updated: number } {
       .where(inArray(trackerItems.id, [row.id]))
       .run();
     updated += 1;
+  }
+  if (updated) {
+    bumpTrackerRevision(
+      "mutation",
+      "upsert",
+      rows.filter((r) => r.status === "inactive").map((r) => r.id),
+    );
   }
   return { updated };
 }
@@ -153,5 +168,6 @@ export function collapseInactiveActiveTwins(): number {
       deleted += 1;
     }
   }
+  // Caller (rebuild/sync) bumps revision once for the whole write.
   return deleted;
 }

@@ -1,4 +1,12 @@
-import { EventEmitter } from "events";
+/**
+ * Legacy live bus — forwards to the revision-aware events bus.
+ * Prefer bumpTrackerRevision / emitTrackerEvent for new code.
+ */
+import {
+  emitTrackerEvent,
+  subscribeTrackerEvents,
+  type TrackerEvent,
+} from "./events-bus";
 
 export type TrackerLiveEvent = {
   type: "research_merged" | "refresh";
@@ -8,29 +16,35 @@ export type TrackerLiveEvent = {
   at?: number;
 };
 
-declare global {
-  // eslint-disable-next-line no-var
-  var __cmaeTrackerLiveBus: EventEmitter | undefined;
-}
-
-export function getTrackerLiveBus(): EventEmitter {
-  if (!globalThis.__cmaeTrackerLiveBus) {
-    globalThis.__cmaeTrackerLiveBus = new EventEmitter();
-    globalThis.__cmaeTrackerLiveBus.setMaxListeners(100);
-  }
-  return globalThis.__cmaeTrackerLiveBus;
-}
-
 export function emitTrackerLive(event: TrackerLiveEvent) {
-  getTrackerLiveBus().emit("live", { ...event, at: Date.now() });
+  const at = Date.now();
+  if (event.type === "research_merged") {
+    emitTrackerEvent({
+      type: "research_merged",
+      researchJobId: event.researchJobId,
+      action: event.action,
+      itemId: event.itemId,
+      at,
+    });
+  } else {
+    emitTrackerEvent({ type: "refresh", at });
+  }
 }
 
 export function subscribeTrackerLive(
   listener: (event: TrackerLiveEvent) => void,
 ): () => void {
-  const bus = getTrackerLiveBus();
-  bus.on("live", listener);
-  return () => {
-    bus.off("live", listener);
-  };
+  return subscribeTrackerEvents((event: TrackerEvent) => {
+    if (event.type === "research_merged") {
+      listener({
+        type: "research_merged",
+        researchJobId: event.researchJobId,
+        action: event.action,
+        itemId: event.itemId,
+        at: event.at,
+      });
+    } else if (event.type === "refresh" || event.type === "changed") {
+      listener({ type: "refresh", at: Date.now() });
+    }
+  });
 }

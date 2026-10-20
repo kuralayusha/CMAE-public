@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { mailMessages, trackerItemMails, trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import {
@@ -127,6 +128,7 @@ async function ensureWorkspaceFolder(item: {
     })
     .where(eq(trackerItems.id, item.id))
     .run();
+  bumpTrackerRevision("mutation", "upsert", [item.id]);
 
   return created.folderPath;
 }
@@ -338,6 +340,7 @@ ${toWrite}
   if (kind === "reply") patch.hasReplyDraft = 1;
   if (Object.keys(patch).length) {
     db.update(trackerItems).set(patch).where(eq(trackerItems.id, itemId)).run();
+    bumpTrackerRevision("mutation", "upsert", [itemId]);
   }
 
   const workspaceFolder =

@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItemMails, trackerItems } from "@/lib/db/schema";
 import {
   loadRecipientsForItem,
@@ -20,6 +21,19 @@ export type LightMergeResult = {
   itemId?: number;
   reason?: string;
 };
+
+function afterResearchWrite(
+  result: LightMergeResult,
+): LightMergeResult {
+  if (result.ok && result.action !== "skipped") {
+    bumpTrackerRevision(
+      "research",
+      "upsert",
+      result.itemId != null ? [result.itemId] : "all",
+    );
+  }
+  return result;
+}
 
 function itemHasMails(itemId: number): boolean {
   const db = getDb();
@@ -141,7 +155,7 @@ export function mergeResearchJobIntoTracker(
       action: result.action,
       itemId: result.itemId,
     });
-    return result;
+    return afterResearchWrite(result);
   }
 
   const ck = companyKey(c.company);
@@ -178,7 +192,7 @@ export function mergeResearchJobIntoTracker(
       action: result.action,
       itemId,
     });
-    return result;
+    return afterResearchWrite(result);
   }
 
   if (companyHasMails) {
@@ -200,7 +214,7 @@ export function mergeResearchJobIntoTracker(
       action: result.action,
       itemId: result.itemId,
     });
-    return result;
+    return afterResearchWrite(result);
   }
 
   const itemId = insertReadyToSend(c);
@@ -216,5 +230,5 @@ export function mergeResearchJobIntoTracker(
     action: result.action,
     itemId,
   });
-  return result;
+  return afterResearchWrite(result);
 }

@@ -156,7 +156,8 @@ export function listTrackerSections(): {
     .from(trackerItems)
     .all()
     .map((row) => {
-      const flags = reconcileDraftFlagsForRow(row);
+      // Read-only: never persist flag repairs on GET.
+      const flags = reconcileDraftFlagsForRow(row, { persist: false });
       return mapRow(row, urlsMap.get(row.id) || [], flags);
     });
   const byStatus = new Map<TrackerStatus, TrackerListItem[]>();

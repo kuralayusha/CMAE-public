@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useIntlLocale, useT } from "@/components/I18nProvider";
 import { TruncateTip } from "@/components/TruncateTip";
 import { Button } from "@/components/ui";
+import { useTrackerItemEvents } from "@/lib/tracker/client-store";
 import "./tracker-detail.css";
 
 type RecipientOption = {
@@ -194,6 +195,8 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
   useEffect(() => {
     void loadItem();
   }, [loadItem]);
+
+  useTrackerItemEvents(itemId, loadItem);
 
   useEffect(() => {
     if (!item) return;

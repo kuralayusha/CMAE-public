@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getTrackerRevision } from "@/lib/db/revision";
 import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { setItemsActive, setItemsInactive } from "@/lib/tracker/inactive";
@@ -35,7 +36,11 @@ export async function POST(req: Request) {
     const result =
       action === "inactive" ? setItemsInactive(ids) : setItemsActive(ids);
     const list = listTrackerSections();
-    return NextResponse.json({ ...result, ...list });
+    return NextResponse.json({
+      ...result,
+      ...list,
+      rev: getTrackerRevision(),
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

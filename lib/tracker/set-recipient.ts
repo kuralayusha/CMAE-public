@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import {
@@ -54,6 +55,7 @@ export function setTrackerItemRecipient(
     })
     .where(eq(trackerItems.id, itemId))
     .run();
+  bumpTrackerRevision("mutation", "upsert", [itemId]);
 
   return {
     id: itemId,

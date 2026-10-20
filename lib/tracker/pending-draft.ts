@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItems } from "@/lib/db/schema";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
 import { getGmailCredentials, getSettingsRow } from "@/lib/settings/service";
@@ -167,22 +168,28 @@ export function draftFlagsFromDisk(
 }
 
 /**
- * Align DB has*Draft flags with workspace files (prepare may finish while UI is away).
+ * Align has*Draft flags with workspace files (prepare may finish while UI is away).
  * Does not clear flags when pendingGmailDraft is set (md still on disk but already pushed to Gmail).
+ *
+ * GET/list must use persist:false (read-only). Sync/draft reconcile may persist:true.
  */
-export function reconcileDraftFlagsForRow(row: {
-  id: number;
-  workspaceFolder: string | null;
-  followUpCount: number;
-  notesJson: string | null;
-  hasFollowUpDraft: number | boolean;
-  hasThanksDraft: number | boolean;
-  hasReplyDraft: number | boolean;
-}): {
+export function reconcileDraftFlagsForRow(
+  row: {
+    id: number;
+    workspaceFolder: string | null;
+    followUpCount: number;
+    notesJson: string | null;
+    hasFollowUpDraft: number | boolean;
+    hasThanksDraft: number | boolean;
+    hasReplyDraft: number | boolean;
+  },
+  opts?: { persist?: boolean },
+): {
   hasFollowUpDraft: boolean;
   hasThanksDraft: boolean;
   hasReplyDraft: boolean;
 } {
+  const persist = Boolean(opts?.persist);
   const pending = parsePendingGmailDraft(row.notesJson);
   const disk = draftFlagsFromDisk(row.workspaceFolder, row.followUpCount);
 
@@ -200,9 +207,10 @@ export function reconcileDraftFlagsForRow(row: {
   const dbRe = Boolean(row.hasReplyDraft);
 
   if (
-    hasFollowUpDraft !== dbFu ||
-    hasThanksDraft !== dbTh ||
-    hasReplyDraft !== dbRe
+    persist &&
+    (hasFollowUpDraft !== dbFu ||
+      hasThanksDraft !== dbTh ||
+      hasReplyDraft !== dbRe)
   ) {
     getDb()
       .update(trackerItems)
@@ -422,17 +430,23 @@ export async function reconcilePendingAgainstLiveDrafts(opts?: {
           .run();
 
         // Re-enable prepare / create-draft from disk now that Gmail draft is gone
-        reconcileDraftFlagsForRow({
-          ...fresh,
-          notesJson: nextNotes,
-          hasFollowUpDraft: 0,
-          hasThanksDraft: 0,
-          hasReplyDraft: 0,
-        });
+        reconcileDraftFlagsForRow(
+          {
+            ...fresh,
+            notesJson: nextNotes,
+            hasFollowUpDraft: 0,
+            hasThanksDraft: 0,
+            hasReplyDraft: 0,
+          },
+          { persist: true },
+        );
         cleared += 1;
       }
     }
 
+    if (cleared > 0 || set > 0) {
+      bumpTrackerRevision("drafts", "upsert", "all");
+    }
     return { checked: eligibleIds.length, cleared, set };
   })();
 

@@ -13,6 +13,7 @@ import {
 import { clearUserPack } from "@/lib/i18n/pack";
 import { clearAllResearchJobs } from "@/lib/research/persist";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
+import { emitTrackerEvent } from "@/lib/tracker/events-bus";
 import {
   cancelTrackerSyncSession,
   waitForSyncSessionIdle,
@@ -60,6 +61,8 @@ export async function resetAppForOnboarding(): Promise<void> {
       "Data was wiped but the onboarding flag could not be cleared — restart the server and try again",
     );
   }
+
+  emitTrackerEvent({ type: "reset", rev: 0 });
 }
 
 function wipeWorkspaceContents(): void {

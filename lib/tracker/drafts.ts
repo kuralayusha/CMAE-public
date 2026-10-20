@@ -5,6 +5,7 @@ import {
   pickBestCv,
 } from "@/lib/cv/library";
 import { getDb } from "@/lib/db/client";
+import { bumpTrackerRevision } from "@/lib/db/revision";
 import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getGmailCredentials, getSettingsRow } from "@/lib/settings/service";
@@ -98,6 +99,7 @@ function markPendingOnItem(
     .set(patch)
     .where(eq(trackerItems.id, itemId))
     .run();
+  bumpTrackerRevision("drafts", "upsert", [itemId]);
 }
 
 function folderPathForItem(item: {
