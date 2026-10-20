@@ -172,7 +172,9 @@ export async function derivePendingMails(
 }> {
   const log = opts?.onProgress;
   const signal = opts?.signal;
-  const db = getDb();
+  // Never hold a drizzle handle across IMAP/LLM awaits (onboarding reconcile
+  // / path flip can closeDb mid-job).
+  let db = getDb();
   const settings = getSettingsRow();
   const followUpDays = settings?.followUpDays ?? 5;
   const userEmail = (settings?.gmailAddress || "").toLowerCase();
@@ -222,6 +224,13 @@ export async function derivePendingMails(
     const needsRoute: (typeof mailMessages.$inferSelect)[] = [];
     const needsClassifyBriefs: MailBrief[] = [];
     const chunkNeedsClass = new Set<number>();
+    const stateAfter = (
+      mail: typeof mailMessages.$inferSelect,
+      inNeedsClass: boolean,
+    ): "done" | "needs_classification" | "pending" => {
+      if (mail.bodyState === "failed") return "pending";
+      return inNeedsClass ? "needs_classification" : "done";
+    };
 
     for (const mail of newMails) {
       throwIfSyncCanceled(signal);
@@ -257,7 +266,11 @@ export async function derivePendingMails(
         autoFlagsRaw: mail.autoFlags,
       });
       allIntents.set(mail.id, intentResult.record);
-      if (intentResult.needsClassification) {
+      // Empty/failed body: keep pending so body retry re-derives; don't park
+      // forever in needs_classification with header-only text.
+      const deferForBody =
+        mail.bodyState === "failed" && intentResult.needsClassification;
+      if (intentResult.needsClassification && !deferForBody) {
         chunkNeedsClass.add(mail.id);
         needsClassifyBriefs.push(toBrief(mail));
       }
@@ -265,7 +278,7 @@ export async function derivePendingMails(
       const already = getAssignment(mail.id);
       if (already) {
         touched.add(already.itemId);
-        markDeriveState([mail.id], "done");
+        markDeriveState([mail.id], deferForBody ? "pending" : "done");
         continue;
       }
 
@@ -273,7 +286,7 @@ export async function derivePendingMails(
       if (rule.kind === "assigned" || rule.kind === "already") {
         attached += rule.kind === "assigned" ? 1 : 0;
         touched.add(rule.itemId);
-        markDeriveState([mail.id], "done");
+        markDeriveState([mail.id], deferForBody ? "pending" : "done");
         const item = db
           .select()
           .from(trackerItems)
@@ -294,7 +307,7 @@ export async function derivePendingMails(
       // Unmatched SENT → visible unassigned queue (not silent drop)
       if (mail.folder === "SENT") {
         markUnassigned(mail.id, "unmatched_outbound");
-        markDeriveState([mail.id], "done");
+        markDeriveState([mail.id], deferForBody ? "pending" : "done");
         unassigned += 1;
         log?.(
           "system",
@@ -316,6 +329,7 @@ export async function derivePendingMails(
           onProgress: log,
           signal,
         });
+        db = getDb();
         for (const [mailId, rec] of classified) {
           allIntents.set(mailId, rec);
           upsertMailIntent({
@@ -328,6 +342,7 @@ export async function derivePendingMails(
           chunkNeedsClass.delete(mailId);
         }
       } catch (err) {
+        db = getDb();
         // LLM down: keep regex intents + needs_classification; do not drop mails
         log?.(
           "system",
@@ -350,13 +365,15 @@ export async function derivePendingMails(
           existingItemBriefs(),
           { onProgress: log, signal },
         );
+        db = getDb();
       } catch {
+        db = getDb();
         // AI unavailable → unassigned queue (visible), preserve rows
         for (const mail of needsRoute) {
           markUnassigned(mail.id, "ai_unavailable");
           markDeriveState(
             [mail.id],
-            chunkNeedsClass.has(mail.id) ? "needs_classification" : "done",
+            stateAfter(mail, chunkNeedsClass.has(mail.id)),
           );
           unassigned += 1;
         }
@@ -377,7 +394,7 @@ export async function derivePendingMails(
             .get();
           if (!item || item.deletedAt) {
             markUnassigned(mail.id, "ambiguous");
-            markDeriveState([mail.id], "done");
+            markDeriveState([mail.id], stateAfter(mail, false));
             unassigned += 1;
             continue;
           }
@@ -392,7 +409,7 @@ export async function derivePendingMails(
           touched.add(decision.itemId);
           markDeriveState(
             [mail.id],
-            chunkNeedsClass.has(mail.id) ? "needs_classification" : "done",
+            stateAfter(mail, chunkNeedsClass.has(mail.id)),
           );
           log?.(
             "ok",
@@ -413,7 +430,7 @@ export async function derivePendingMails(
           touched.add(newId);
           markDeriveState(
             [mail.id],
-            chunkNeedsClass.has(mail.id) ? "needs_classification" : "done",
+            stateAfter(mail, chunkNeedsClass.has(mail.id)),
           );
           log?.(
             "ok",
@@ -425,7 +442,7 @@ export async function derivePendingMails(
         markUnassigned(mail.id, "ambiguous");
         markDeriveState(
           [mail.id],
-          chunkNeedsClass.has(mail.id) ? "needs_classification" : "done",
+          stateAfter(mail, chunkNeedsClass.has(mail.id)),
         );
         unassigned += 1;
         log?.(
@@ -438,8 +455,13 @@ export async function derivePendingMails(
     }
 
     // Mark remaining needs_classification on mails that still need AI upgrade
+    // (skip body-failed — those stay pending for body retry).
     if (chunkNeedsClass.size) {
-      markDeriveState([...chunkNeedsClass], "needs_classification");
+      const ready = [...chunkNeedsClass].filter((id) => {
+        const row = newMails.find((m) => m.id === id);
+        return row?.bodyState !== "failed";
+      });
+      markDeriveState(ready, "needs_classification");
       for (const itemId of touched) {
         db.update(trackerItems)
           .set({ needsClassification: 1 })
@@ -449,6 +471,7 @@ export async function derivePendingMails(
     }
   }
 
+  db = getDb();
   for (const itemId of touched) {
     refreshItemFacts(itemId, allIntents, followUpDays, {
       needsClassification: false,
@@ -464,7 +487,7 @@ export async function derivePendingMails(
     );
   }
 
-  const itemCount = db
+  const itemCount = getDb()
     .select()
     .from(trackerItems)
     .all()

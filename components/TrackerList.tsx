@@ -1654,7 +1654,9 @@ export function TrackerList() {
             {t(
               freshness.messageKey || `tracker.freshness.${freshness.state}`,
               {
+                ...(freshness.messageParams || {}),
                 minutes: Number(freshness.messageParams?.minutes ?? 0),
+                count: Number(freshness.messageParams?.count ?? 0),
                 when: freshness.dataAsOf
                   ? formatWhen(freshness.dataAsOf, locale)
                   : String(freshness.messageParams?.when ?? "—"),

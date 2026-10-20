@@ -823,6 +823,8 @@
     "fetchOneFailed": "{folder}: uid {uid} timed out or failed — {msg}",
     "fetchBatchFailed": "{folder}: batch download failed — {msg}",
     "fetchConnectionDead": "{folder}: connection reset at uid {uid} — skipping it; run sync again for the rest",
+    "bodyRetryQueued": "Retrying {count} message(s) with missing bodies…",
+    "bodyFetchPartial": "Some message bodies could not be downloaded — will retry on next sync",
     "sentSkippedDeadConnection": "SENT skipped — INBOX download reset the IMAP connection; sync again to catch Sent",
     "forceResetStuck": "Previous sync looked stuck — resetting and starting fresh",
     "incrementalFallback": "{folder}: quick sync failed — using date window instead ({msg})",

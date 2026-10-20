@@ -133,6 +133,8 @@ type JobRow = {
   progress_at: string | null;
 };
 
+const SYNC_LOG_TAIL_MAX = 120;
+
 declare global {
   // eslint-disable-next-line no-var
   var __cmaeTrackerSync: SyncSession | null | undefined;
@@ -151,6 +153,9 @@ declare global {
     | { reason: SyncTriggerReason; mode: SyncMode }
     | null
     | undefined;
+  /** Last finished sync terminal lines — seeded into the next session. */
+  // eslint-disable-next-line no-var
+  var __cmaeSyncLogTail: SyncLogLine[] | undefined;
 }
 
 function ownerId(): string {
@@ -427,6 +432,30 @@ function finishSession(
   if (extra?.error) emit(session.id, { type: "error", error: extra.error });
   if (extra?.result) emit(session.id, { type: "result", result: extra.result });
   emit(session.id, { type: "done", status });
+  // Keep a short tail across refresh / next job so the UI doesn't lose context.
+  if (session.lines.length) {
+    globalThis.__cmaeSyncLogTail = session.lines.slice(-SYNC_LOG_TAIL_MAX);
+  }
+}
+
+function seedSessionLines(): SyncLogLine[] {
+  const tail = globalThis.__cmaeSyncLogTail;
+  if (!tail?.length) return [];
+  return tail.map((line) => ({ ...line }));
+}
+
+/** Enqueue classify_retry when provisional intents remain (success or fail path). */
+function maybeEnqueueClassifyRetry(reason: SyncTriggerReason = "post_mutation") {
+  try {
+    const pending = getSqlite()
+      .prepare(
+        `SELECT COUNT(*) AS n FROM mail_messages WHERE derive_state = 'needs_classification'`,
+      )
+      .get() as { n: number };
+    if (pending?.n > 0) enqueueClassifyRetry(reason);
+  } catch {
+    /* ignore */
+  }
 }
 
 function currentAccountId(): string {
@@ -774,7 +803,7 @@ async function runClaimedJob(job: JobRow): Promise<void> {
     id: job.id,
     jobId: job.id,
     status: "running",
-    lines: [],
+    lines: seedSessionLines(),
     error: null,
     result: null,
     createdAt: now,
@@ -987,16 +1016,7 @@ async function runClaimedJob(job: JobRow): Promise<void> {
     assertFencing(job);
 
     // If regex intents still provisional, enqueue dedicated retry job.
-    try {
-      const pending = getSqlite()
-        .prepare(
-          `SELECT COUNT(*) AS n FROM mail_messages WHERE derive_state = 'needs_classification'`,
-        )
-        .get() as { n: number };
-      if (pending?.n > 0) enqueueClassifyRetry("post_mutation");
-    } catch {
-      /* ignore */
-    }
+    maybeEnqueueClassifyRetry("post_mutation");
 
     // Drafts reconcile after every successful mail sync (separate job).
     try {
@@ -1062,6 +1082,12 @@ async function runClaimedJob(job: JobRow): Promise<void> {
       attempt: job.attempt,
     });
     finishSession(session, "error", { error: classified.message });
+
+    // Partial IMAP commits may already have left needs_classification rows —
+    // drain them even when the mail_sync job itself failed.
+    if (job.kind === "mail_sync") {
+      maybeEnqueueClassifyRetry("retry");
+    }
 
     if (classified.kind === "auth") {
       markAuthBlocked(job.credentials_version);

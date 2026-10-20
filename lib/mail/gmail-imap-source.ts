@@ -385,11 +385,19 @@ async function fetchUidBatch(
       );
       meta = [...messages] as MetaMsg[];
     } catch (err) {
+      // Soft-fail the chunk: earlier batches were already committed. Killing the
+      // whole job after meta scan left the mailbox half-imported (and used to
+      // killClient, which also aborted later body retries on a live socket).
       const msg = formatImapError(err);
       onProgress?.("err", t("sync.fetchBatchFailed", { folder: role, msg }));
       for (const uid of chunk) failures.push({ uid, error: msg });
-      killClient(client);
-      throw err;
+      if (!client.usable) {
+        for (const uid of sorted.slice(i + chunk.length)) {
+          failures.push({ uid, error: msg });
+        }
+        return { mails: out, failures };
+      }
+      continue;
     }
 
     // Resolve per-message text part ids, then bodyParts fetch (no source:true).
@@ -486,9 +494,26 @@ async function fetchUidBatch(
           const buf = parts.get("TEXT");
           bodyText = extractBodyFromRaw(buf || null);
           if (buf && buf.length >= BODY_MAX_BYTES) bodyState = "truncated";
+        } else {
+          // FETCH returned a bodyParts map without our preferred keys.
+          bodyState = "failed";
+          if (!failures.some((f) => f.uid === m.uid)) {
+            failures.push({
+              uid: m.uid,
+              error: "body part keys missing from FETCH",
+            });
+          }
         }
-      } else if (failures.some((f) => f.uid === m.uid)) {
+      } else {
+        // Missing body (fetch failure or empty response) — mark failed so
+        // the next sync can retry via listBodyRetryUids.
         bodyState = "failed";
+        if (!failures.some((f) => f.uid === m.uid)) {
+          failures.push({
+            uid: m.uid,
+            error: "body FETCH returned no parts",
+          });
+        }
       }
 
       const mail = buildSourceMail({
@@ -653,13 +678,26 @@ export class GmailImapSource implements MailSource {
         fetched += n.fetched;
         batches += n.batches;
         rolesSynced.push(role);
+        if (n.stoppedEarly || n.hadBodyFailures) {
+          partial = true;
+          partialError =
+            partialError ||
+            (n.stoppedEarly
+              ? t("sync.sentSkippedDeadConnection")
+              : t("sync.bodyFetchPartial"));
+        }
       } catch (err) {
         throwIfSyncCanceled(signal);
         const msg = err instanceof Error ? err.message : String(err);
-        if (role === "inbox" || role === "all") throw err;
+        // Inbox/All: keep committed batches; mark partial instead of failing the
+        // whole job (derive + classify_retry can still drain what we have).
         partial = true;
-        partialError = t("sync.sentReadFailed", { path, msg });
+        partialError =
+          role === "inbox" || role === "all"
+            ? t("sync.fetchBatchFailed", { folder: role, msg })
+            : t("sync.sentReadFailed", { path, msg });
         log?.("err", partialError);
+        if (role === "inbox" || role === "all") break;
       }
     }
 
@@ -691,7 +729,12 @@ export class GmailImapSource implements MailSource {
     folder: MailFolder;
     opts: MailSourceSyncOpts;
     since: Date;
-  }): Promise<{ fetched: number; batches: number }> {
+  }): Promise<{
+    fetched: number;
+    batches: number;
+    stoppedEarly: boolean;
+    hadBodyFailures: boolean;
+  }> {
     const { client, role, path, folder, opts, since } = args;
     const log = opts.onProgress;
     const signal = opts.signal;
@@ -700,6 +743,7 @@ export class GmailImapSource implements MailSource {
     const lock = await client.getMailboxLock(path);
     let fetched = 0;
     let batches = 0;
+    let hadBodyFailures = false;
     try {
       const uidValidity = uidValidityOf(client);
       const stored = opts.getCursor(role);
@@ -716,29 +760,41 @@ export class GmailImapSource implements MailSource {
         const fromUid = stored.lastUid + 1;
         const hw = highWaterUid(client);
         if (hw > 0 && fromUid > hw) {
-          log?.(
-            "ok",
-            t("sync.incrementalEmpty", {
-              folder: role.toUpperCase(),
-              cursor: stored.lastUid,
-            }),
+          const retryOnly = (opts.listBodyRetryUids?.(role) || []).filter(
+            (u) => typeof u === "number" && u > 0,
           );
-          // Park cursor at high-water on clean empty incremental.
-          await opts.onBatch({
-            role,
-            mailboxPath: path,
-            uidValidity,
-            mails: [],
-            commitLastUid: Math.max(stored.lastUid, hw),
-            highestModseq: highestModseqOf(client),
-            failures: [],
-            abandonedUids: [],
-          });
-          batches += 1;
-          return { fetched: 0, batches };
+          if (!retryOnly.length) {
+            log?.(
+              "ok",
+              t("sync.incrementalEmpty", {
+                folder: role.toUpperCase(),
+                cursor: stored.lastUid,
+              }),
+            );
+            // Park cursor at high-water on clean empty incremental.
+            await opts.onBatch({
+              role,
+              mailboxPath: path,
+              uidValidity,
+              mails: [],
+              commitLastUid: Math.max(stored.lastUid, hw),
+              highestModseq: highestModseqOf(client),
+              failures: [],
+              abandonedUids: [],
+            });
+            batches += 1;
+            return {
+              fetched: 0,
+              batches,
+              stoppedEarly: false,
+              hadBodyFailures: false,
+            };
+          }
+          uids = retryOnly;
+        } else {
+          uids = await searchUids(client, { uid: `${fromUid}:*` }, signal);
+          uids = uids.filter((u) => u > stored.lastUid);
         }
-        uids = await searchUids(client, { uid: `${fromUid}:*` }, signal);
-        uids = uids.filter((u) => u > stored.lastUid);
       } else {
         if (mode === "incremental") {
           log?.(
@@ -764,20 +820,42 @@ export class GmailImapSource implements MailSource {
       }
 
       if (!uids.length) {
-        const prev = stored?.lastUid ?? 0;
-        await opts.onBatch({
-          role,
-          mailboxPath: path,
-          uidValidity,
-          mails: [],
-          commitLastUid: prev,
-          highestModseq: highestModseqOf(client),
-          failures: [],
-          abandonedUids: [],
-        });
-        batches += 1;
-        return { fetched: 0, batches };
+        const retryOnly = (opts.listBodyRetryUids?.(role) || []).filter(
+          (u) => typeof u === "number" && u > 0,
+        );
+        if (!retryOnly.length) {
+          const prev = stored?.lastUid ?? 0;
+          await opts.onBatch({
+            role,
+            mailboxPath: path,
+            uidValidity,
+            mails: [],
+            commitLastUid: prev,
+            highestModseq: highestModseqOf(client),
+            failures: [],
+            abandonedUids: [],
+          });
+          batches += 1;
+          return {
+            fetched: 0,
+            batches,
+            stoppedEarly: false,
+            hadBodyFailures: false,
+          };
+        }
+        uids = retryOnly;
       }
+
+      const retryUids = (opts.listBodyRetryUids?.(role) || []).filter(
+        (u) => typeof u === "number" && u > 0,
+      );
+      if (retryUids.length) {
+        log?.(
+          "think",
+          t("sync.bodyRetryQueued", { count: retryUids.length }),
+        );
+      }
+      uids = [...uids, ...retryUids];
 
       log?.(
         "think",
@@ -786,10 +864,14 @@ export class GmailImapSource implements MailSource {
 
       const sorted = [...new Set(uids)].sort((a, b) => a - b);
       let runningLast = stored?.lastUid ?? 0;
+      let stoppedEarly = false;
 
       for (let i = 0; i < sorted.length; i += FETCH_BATCH_SIZE) {
         throwIfSyncCanceled(signal);
-        if (!client.usable) break;
+        if (!client.usable) {
+          stoppedEarly = true;
+          break;
+        }
         const chunk = sorted.slice(i, i + FETCH_BATCH_SIZE);
         const { mails, failures } = await fetchUidBatch(
           client,
@@ -842,9 +924,20 @@ export class GmailImapSource implements MailSource {
         runningLast = commitLastUid;
         fetched += mails.length;
         batches += 1;
+
+        if (
+          failures.length > 0 ||
+          mails.some((m) => m.bodyState === "failed")
+        ) {
+          hadBodyFailures = true;
+        }
+        if (!client.usable) {
+          stoppedEarly = true;
+          break;
+        }
       }
 
-      return { fetched, batches };
+      return { fetched, batches, stoppedEarly, hadBodyFailures };
     } finally {
       try {
         lock.release();

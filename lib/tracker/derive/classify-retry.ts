@@ -44,7 +44,7 @@ export async function runClassifyRetry(opts?: {
 }): Promise<{ classified: number; stillPending: number }> {
   const log = opts?.onProgress;
   const signal = opts?.signal;
-  const db = getDb();
+  let db = getDb();
   const followUpDays = getSettingsRow()?.followUpDays ?? 5;
 
   const pendingMails = db
@@ -69,9 +69,10 @@ export async function runClassifyRetry(opts?: {
     t("sync.incrementalStart", { count: pendingMails.length }),
   );
 
-  const briefs = pendingMails
-    .filter((m) => m.folder === "INBOX" || m.folder === "inbox")
-    .map(toBrief);
+  const isInbox = (folder: string) =>
+    folder === "INBOX" || folder.toLowerCase() === "inbox";
+
+  const briefs = pendingMails.filter((m) => isInbox(m.folder)).map(toBrief);
 
   let classified = 0;
   const touched = new Set<number>();
@@ -82,6 +83,7 @@ export async function runClassifyRetry(opts?: {
         onProgress: log,
         signal,
       });
+      db = getDb();
       for (const [mailId, rec] of map) {
         upsertMailIntent({
           mailId,
@@ -105,9 +107,10 @@ export async function runClassifyRetry(opts?: {
     }
   }
 
+  db = getDb();
   // Non-inbox leftovers → done (no inbound intent needed)
   for (const m of pendingMails) {
-    if (m.folder === "INBOX") continue;
+    if (isInbox(m.folder)) continue;
     db.update(mailMessages)
       .set({ deriveState: "done" })
       .where(eq(mailMessages.id, m.id))

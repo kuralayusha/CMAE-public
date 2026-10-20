@@ -120,6 +120,11 @@ export type MailSourceSyncOpts = {
   signal?: AbortSignal;
   /** Prior failure attempts by uid (account+role scoped by caller). */
   getFailureAttempts?: (role: MailSourceRole, uid: number) => number;
+  /**
+   * UIDs with body_state=failed that should be re-fetched even when the
+   * incremental cursor has already advanced past them.
+   */
+  listBodyRetryUids?: (role: MailSourceRole) => number[];
 };
 
 export type MailSourceMetaOpts = {

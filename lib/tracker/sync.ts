@@ -5,7 +5,11 @@ import { mailMessages, mailSources, syncState } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { GmailImapSource, WINDOW_DAYS } from "@/lib/mail/gmail-imap-source";
 import type { MailSource, SourceMail } from "@/lib/mail/source";
-import { META_SCAN_INTERVAL_MS, normalizeAccountEmail } from "@/lib/mail/source";
+import {
+  FETCH_ABANDON_AFTER,
+  META_SCAN_INTERVAL_MS,
+  normalizeAccountEmail,
+} from "@/lib/mail/source";
 import {
   clearFetchFailure,
   getFetchFailureAttempts,
@@ -107,10 +111,23 @@ export function upsertSourceMails(
 
     if (existing) {
       const labelsChanged = (existing.labelsJson || "[]") !== labelsJson;
+      const incomingBody = normalizeMailText(m.bodyText || "");
+      // Failed/empty body fetch must not wipe a previously good body.
+      const keepExistingBody =
+        !incomingBody &&
+        Boolean(existing.bodyText) &&
+        (m.bodyState === "failed" || !m.bodyText);
+      const nextBodyText = keepExistingBody
+        ? existing.bodyText
+        : incomingBody || existing.bodyText || "";
+      const nextBodyState = keepExistingBody
+        ? existing.bodyState === "failed"
+          ? "failed"
+          : existing.bodyState || "ok"
+        : m.bodyState || existing.bodyState || "ok";
       const bodyChanged =
-        Boolean(m.bodyText) &&
-        normalizeMailText(m.bodyText) !==
-          normalizeMailText(existing.bodyText || "");
+        Boolean(incomingBody) &&
+        incomingBody !== normalizeMailText(existing.bodyText || "");
       const contentChanged =
         bodyChanged ||
         normalizeMailText(m.subject || "") !==
@@ -120,7 +137,9 @@ export function upsertSourceMails(
       const shouldPending =
         contentChanged ||
         labelsChanged ||
-        existing.deriveState === "pending";
+        existing.deriveState === "pending" ||
+        // Body refill after a failed fetch → re-derive with real text.
+        (bodyChanged && existing.bodyState === "failed");
 
       if (shouldPending) pendingTouched = true;
 
@@ -140,12 +159,11 @@ export function upsertSourceMails(
           dateIso: m.internalDate || m.dateIso || existing.dateIso,
           internalDate: m.internalDate ?? existing.internalDate,
           headerDate: m.headerDate ?? existing.headerDate,
-          snippet: normalizeMailText(m.snippet || existing.snippet).slice(
-            0,
-            240,
-          ),
-          bodyText: normalizeMailText(m.bodyText || existing.bodyText),
-          bodyState: m.bodyState || existing.bodyState || "ok",
+          snippet: normalizeMailText(
+            (incomingBody ? m.snippet : "") || existing.snippet,
+          ).slice(0, 240),
+          bodyText: nextBodyText,
+          bodyState: nextBodyState,
           headersHash: m.headersHash ?? existing.headersHash,
           labelsJson,
           direction: m.direction || existing.direction,
@@ -405,6 +423,45 @@ function applyGoneMarks(
   return touched;
 }
 
+/** UIDs whose body_state is failed and not yet abandoned — re-fetch on next sync. */
+function listBodyRetryUidsForRole(
+  accountId: string,
+  role: "all" | "inbox" | "sent" | "drafts",
+): number[] {
+  const db = getDb();
+  const base = and(
+    eq(mailMessages.accountId, accountId),
+    eq(mailMessages.bodyState, "failed"),
+    isNotNull(mailMessages.gmailUid),
+  );
+  const rows =
+    role === "all"
+      ? db.select({ uid: mailMessages.gmailUid }).from(mailMessages).where(base).all()
+      : db
+          .select({ uid: mailMessages.gmailUid })
+          .from(mailMessages)
+          .where(
+            and(
+              base,
+              eq(
+                mailMessages.folder,
+                role === "sent" ? "SENT" : "INBOX",
+              ),
+            ),
+          )
+          .all();
+
+  const out: number[] = [];
+  for (const r of rows) {
+    const uid = r.uid;
+    if (typeof uid !== "number" || uid <= 0) continue;
+    const attempts = getFetchFailureAttempts(accountId, role, uid);
+    if (attempts >= FETCH_ABANDON_AFTER) continue;
+    out.push(uid);
+  }
+  return out;
+}
+
 function listKnownUidsForRole(
   accountId: string,
   role: "all" | "inbox" | "sent" | "drafts",
@@ -514,6 +571,7 @@ async function runWithMailSource(
       getCursor: (role) => getMailSourceCursor(accountId, role),
       getFailureAttempts: (role, uid) =>
         getFetchFailureAttempts(accountId, role, uid),
+      listBodyRetryUids: (role) => listBodyRetryUidsForRole(accountId, role),
       onProgress: log,
       signal,
       onBatch: async (batch) => {
@@ -526,11 +584,24 @@ async function runWithMailSource(
             insertedIds.push(...result.insertedIds);
             batchPending = result.pendingTouched;
             for (const m of batch.mails) {
-              if (m.gmailUid) clearFetchFailure(accountId, batch.role, m.gmailUid);
+              if (!m.gmailUid) continue;
+              if (m.bodyState === "failed") {
+                // Meta-ok / body-failed: keep on the retry queue.
+                recordFetchFailure({
+                  accountId,
+                  role: batch.role,
+                  uid: m.gmailUid,
+                  error:
+                    batch.failures.find((f) => f.uid === m.gmailUid)?.error ||
+                    "body fetch failed",
+                });
+              } else {
+                clearFetchFailure(accountId, batch.role, m.gmailUid);
+              }
             }
           }
           for (const f of batch.failures) {
-            // Only count as poison when the UID was not returned as a mail.
+            // Missing entirely from FETCH — poison / gap tracking.
             if (batch.mails.some((m) => m.gmailUid === f.uid)) continue;
             recordFetchFailure({
               accountId,
