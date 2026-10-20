@@ -2,7 +2,11 @@ import { eq } from "drizzle-orm";
 import path from "path";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpRevision } from "@/lib/db/revision";
-import { trackerItemMails, trackerItems } from "@/lib/db/schema";
+import {
+  mailAssignments,
+  trackerItemMails,
+  trackerItems,
+} from "@/lib/db/schema";
 import { emitTrackerLive } from "@/lib/tracker/live";
 import { softDeleteItemInTx } from "@/lib/tracker/item-tx";
 import { getJobs } from "./events";
@@ -11,7 +15,14 @@ import type { ResearchJob } from "./types";
 import { getWorkspaceRoot } from "./workspace";
 
 function itemHasMails(itemId: number): boolean {
-  const row = getDb()
+  const db = getDb();
+  const assign = db
+    .select({ mailId: mailAssignments.mailId })
+    .from(mailAssignments)
+    .where(eq(mailAssignments.itemId, itemId))
+    .get();
+  if (assign) return true;
+  const row = db
     .select({ id: trackerItemMails.id })
     .from(trackerItemMails)
     .where(eq(trackerItemMails.itemId, itemId))
@@ -64,10 +75,10 @@ export function syncTopLevelFolderRefs(
           trackerChanged = true;
           continue;
         }
-        // Mail history exists: unlink workspace/drafts, keep the conversation row.
+        // Mail history: keep workspaceFolder name so UI can show
+        // "Research klasörü bulunamadı" via workspace_folders.present=0.
         db.update(trackerItems)
           .set({
-            workspaceFolder: null,
             researchJobId: null,
             hasFollowUpDraft: 0,
             hasThanksDraft: 0,
@@ -89,6 +100,19 @@ export function syncTopLevelFolderRefs(
     run.immediate();
   } catch (err) {
     console.error("[syncTopLevelFolderRefs] tracker", err);
+  }
+
+  // Keep workspace index in sync (tracker soft-delete already done above).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const idx = require("@/lib/tracker/workspace-index") as typeof import("@/lib/tracker/workspace-index");
+    if (next) {
+      idx.renameWorkspaceIndexFolder(oldName, next.name);
+    } else {
+      idx.markWorkspaceFolderAbsent(oldName);
+    }
+  } catch (err) {
+    console.error("[syncTopLevelFolderRefs] workspace index", err);
   }
 
   if (trackerChanged) {

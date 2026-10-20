@@ -102,6 +102,8 @@ export function wipeDatabaseContents() {
     "mail_sources",
     "mail_fetch_failures",
     "gmail_drafts",
+    "workspace_files",
+    "workspace_folders",
   ]) {
     try {
       sqlite.exec(`DELETE FROM ${table}`);

@@ -2,6 +2,7 @@ import { getSqlite } from "@/lib/db/client";
 import { isOnboardingComplete } from "@/lib/onboarding/status";
 import {
   enqueueDraftsReconcile,
+  enqueueWorkspaceScan,
   hasPendingDraftsReconcile,
   isAutoSyncBlockedByAuth,
   recoverInterruptedJobs,
@@ -11,6 +12,7 @@ import { activeSyncIntervalMs } from "./freshness";
 
 const STARTUP_DELAY_MS = 2_000;
 const DRAFTS_RECONCILE_INTERVAL_MS = 2 * 60_000;
+const WORKSPACE_SCAN_INTERVAL_MS = 10 * 60_000;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -20,6 +22,7 @@ declare global {
     expectedAt: number | null;
     lastTickAt: number | null;
     draftsTimer: ReturnType<typeof setTimeout> | null;
+    workspaceTimer: ReturnType<typeof setTimeout> | null;
   } | undefined;
 }
 
@@ -31,6 +34,7 @@ function state() {
       expectedAt: null,
       lastTickAt: null,
       draftsTimer: null,
+      workspaceTimer: null,
     };
   }
   return globalThis.__cmaeSyncScheduler;
@@ -55,6 +59,28 @@ function scheduleDraftsReconcileTick() {
   }, DRAFTS_RECONCILE_INTERVAL_MS);
   if (typeof s.draftsTimer === "object" && s.draftsTimer && "unref" in s.draftsTimer) {
     s.draftsTimer.unref();
+  }
+}
+
+function scheduleWorkspaceScanTick() {
+  const s = state();
+  if (s.workspaceTimer) {
+    clearTimeout(s.workspaceTimer);
+    s.workspaceTimer = null;
+  }
+  s.workspaceTimer = setTimeout(() => {
+    s.workspaceTimer = null;
+    if (isOnboardingComplete()) {
+      enqueueWorkspaceScan("interval");
+    }
+    scheduleWorkspaceScanTick();
+  }, WORKSPACE_SCAN_INTERVAL_MS);
+  if (
+    typeof s.workspaceTimer === "object" &&
+    s.workspaceTimer &&
+    "unref" in s.workspaceTimer
+  ) {
+    s.workspaceTimer.unref();
   }
 }
 
@@ -203,6 +229,22 @@ export function start(): void {
   } catch (err) {
     console.error("[sync-scheduler] recover failed", err);
   }
+
+  // Faz 7: workspace index watcher + startup full scan (disk-derived state).
+  void import("@/lib/tracker/workspace-index")
+    .then((ws) => {
+      ws.startWorkspaceWatcher();
+      try {
+        ws.fullWorkspaceScan();
+      } catch (err) {
+        console.error("[sync-scheduler] workspace startup scan failed", err);
+      }
+      enqueueWorkspaceScan("startup");
+      scheduleWorkspaceScanTick();
+    })
+    .catch((err) => {
+      console.error("[sync-scheduler] workspace index failed to start", err);
+    });
 
   globalThis.__cmaeSyncNotifyAuthChange = () => {
     onCredentialsVersionChanged();

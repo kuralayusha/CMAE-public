@@ -39,7 +39,11 @@ const STALE_LEASE_MS = 30_000;
 const NON_MANUAL_DEBOUNCE_MS = 3_000;
 const JOB_HISTORY_KEEP = 200;
 
-export type SyncJobKind = "mail_sync" | "drafts_reconcile" | "classify_retry";
+export type SyncJobKind =
+  | "mail_sync"
+  | "drafts_reconcile"
+  | "classify_retry"
+  | "workspace_scan";
 export type SyncJobState =
   | "queued"
   | "running"
@@ -304,12 +308,17 @@ function getQueuedJob(kind: SyncJobKind = "mail_sync"): JobRow | null {
   );
 }
 
-/** Next queued job: mail_sync → drafts_reconcile → classify_retry. */
+/** Next queued job: mail_sync → drafts_reconcile → classify_retry → workspace_scan. */
 function getQueuedJobAny(): JobRow | null {
+  // Disk index does not need Gmail — still run when auth is blocked.
+  if (isAutoSyncBlockedByAuth()) {
+    return getQueuedJob("workspace_scan");
+  }
   return (
     getQueuedJob("mail_sync") ||
     getQueuedJob("drafts_reconcile") ||
-    getQueuedJob("classify_retry")
+    getQueuedJob("classify_retry") ||
+    getQueuedJob("workspace_scan")
   );
 }
 
@@ -358,6 +367,13 @@ export function enqueueDraftsReconcile(
   reason: SyncTriggerReason = "post_mutation",
 ): string | null {
   return enqueueJobOfKind("drafts_reconcile", reason);
+}
+
+/** Enqueue workspace_scan (startup / 10‑min safety net). */
+export function enqueueWorkspaceScan(
+  reason: SyncTriggerReason = "interval",
+): string | null {
+  return enqueueJobOfKind("workspace_scan", reason);
 }
 
 /** True when live gmail_drafts rows exist (for 2‑min interval). */
@@ -674,7 +690,7 @@ function claimNextJob(): JobRow | null {
         `UPDATE sync_jobs
          SET state = 'queued', owner = NULL, started_at = NULL, heartbeat_at = NULL,
              finished_at = NULL, error_kind = NULL, error_message = NULL
-         WHERE kind IN ('mail_sync', 'drafts_reconcile', 'classify_retry')
+         WHERE kind IN ('mail_sync', 'drafts_reconcile', 'classify_retry', 'workspace_scan')
            AND state = 'interrupted'`,
       ).run();
 
@@ -682,6 +698,7 @@ function claimNextJob(): JobRow | null {
       if (!queued) return null;
       if (
         isAutoSyncBlockedByAuth() &&
+        queued.kind !== "workspace_scan" &&
         !parseReasons(queued.reasons).includes("manual")
       ) {
         return null;
@@ -852,6 +869,34 @@ async function runClaimedJob(job: JobRow): Promise<void> {
         }, 60_000).unref?.();
         requestSync({ reason: "post_mutation", mode: "incremental" });
       }
+      const list = listTrackerSections();
+      finishSession(session, "done", {
+        result: {
+          skippedImap: true,
+          upserted: 0,
+          itemCount: list.total,
+          sections: list.sections,
+          sync: list.sync,
+          total: list.total,
+        },
+      });
+      return;
+    }
+
+    if (job.kind === "workspace_scan") {
+      const { fullWorkspaceScan } = await import(
+        "@/lib/tracker/workspace-index"
+      );
+      appendLine(session, "think", "Scanning workspace folders…");
+      const result = fullWorkspaceScan();
+      assertFencing(job);
+      finishJob(job, "succeeded", {
+        stats: {
+          folders: result.folders,
+          changed: result.changed ? 1 : 0,
+          missing: result.missing,
+        },
+      });
       const list = listTrackerSections();
       finishSession(session, "done", {
         result: {

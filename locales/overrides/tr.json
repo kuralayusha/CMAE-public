@@ -13,6 +13,10 @@
       "reasonUnknown": "bilinmeyen neden",
       "openMerged": "Birleştirilmiş satırı aç"
     },
+    "warning": {
+      "folderMissing": "Research klasörü bulunamadı",
+      "draftContentMismatch": "Taslak dosyası Gmail'deki taslaktan farklı"
+    },
     "error": {
       "versionConflict": "Bu satır başka yerde değişti — yenilendi; tekrar deneyin",
       "itemMerged": "Bu başvuru başka bir satırla birleştirildi",

@@ -370,6 +370,10 @@
       "mergeDecisionInvalid": "Invalid merge decision",
       "mergeFailed": "Could not resolve merge"
     },
+    "warning": {
+      "folderMissing": "Research folder not found",
+      "draftContentMismatch": "Draft file differs from the Gmail draft"
+    },
     "merge": {
       "prompt": "These two rows may be the same application — {a} and {b}. Merge them?",
       "fieldUserState": "Active / inactive",

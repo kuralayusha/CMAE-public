@@ -112,7 +112,17 @@ export type TrackerListItem = TrackerItemRow & {
   recommendedTo: string | null;
   /** Optimistic concurrency token for user-column mutations. */
   userVersion: number;
+  /**
+   * Disk/index warnings for the row (i18n keys under tracker.warning.*).
+   * e.g. folderMissing, draftContentMismatch
+   */
+  warnings?: TrackerRowWarning[];
 };
+
+export type TrackerRowWarning =
+  | { code: "folderMissing"; message: string }
+  | { code: "draftContentMismatch"; message: string };
+
 export type TrackerSection = {
   status: TrackerStatus;
   title: string;

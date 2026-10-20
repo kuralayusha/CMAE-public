@@ -130,6 +130,14 @@ export async function createCompanyFolder(companyName: string): Promise<{
       }
       try {
         await fs.mkdir(folderPath);
+        try {
+          const { noteWorkspaceFolderCreated } = await import(
+            "@/lib/tracker/workspace-index"
+          );
+          noteWorkspaceFolderCreated(folderName);
+        } catch (err) {
+          console.error("[workspace] index folder create failed", err);
+        }
         return { index, folderName, folderPath };
       } catch (err) {
         const code = (err as NodeJS.ErrnoException)?.code;
@@ -208,6 +216,14 @@ export async function writeFile(
   await fs.mkdir(folderPath, { recursive: true });
   const full = path.join(folderPath, fileName);
   await fs.writeFile(full, content, "utf8");
+  try {
+    const { noteWorkspaceFileWrite } = await import(
+      "@/lib/tracker/workspace-index"
+    );
+    noteWorkspaceFileWrite(folderPath, fileName, content);
+  } catch (err) {
+    console.error("[workspace] index write failed", err);
+  }
   return full;
 }
 

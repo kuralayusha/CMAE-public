@@ -2,15 +2,14 @@
  * Gmail Drafts ≠ sent. Pending UX reads gmail_drafts (Faz 5).
  * Legacy notesJson.pendingGmailDraft helpers kept for derive/migration.
  * IMAP reconcile lives in drafts-reconcile.ts — never on GET /api/tracker.
+ * Draft flags: workspace_files index (Faz 7), not direct fs on GET.
  */
 
-import fs from "fs";
-import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { trackerItems } from "@/lib/db/schema";
-import { getWorkspaceRoot } from "@/lib/research/workspace";
 import { getLiveDraftAnyKind } from "./gmail-drafts-store";
+import { draftFlagsFromIndex } from "./workspace-index";
 import type { DraftKind, TrackerStatus } from "./types";
 
 /** Status → which Gmail draft kind can be pending for the clock. */
@@ -117,55 +116,16 @@ export function shouldClearPendingGmailDraft(
   return out >= at;
 }
 
-function folderPath(workspaceFolder: string | null): string | null {
-  if (!workspaceFolder) return null;
-  const full = path.join(getWorkspaceRoot(), workspaceFolder);
-  if (!fs.existsSync(full)) return null;
-  return full;
-}
-
-function listMdNames(folder: string): string[] {
-  try {
-    return fs
-      .readdirSync(folder)
-      .filter((n) => n.toLowerCase().endsWith(".md"));
-  } catch {
-    return [];
-  }
-}
-
+/** @deprecated Prefer draftFlagsFromIndex — kept name for call sites. */
 export function draftFlagsFromDisk(
   workspaceFolder: string | null,
   followUpCount: number,
 ): DraftFlagsOnDisk {
-  const folder = folderPath(workspaceFolder);
-  if (!folder) {
-    return {
-      hasFollowUpDraft: false,
-      hasThanksDraft: false,
-      hasReplyDraft: false,
-    };
-  }
-  const names = listMdNames(folder);
-  const n = Math.max(1, (followUpCount || 0) + 1);
-  const hasFollowUpDraft = names.some(
-    (f) =>
-      new RegExp(`^follow_up_${n}\\.md$`, "i").test(f) ||
-      /^follow_up_\d+\.md$/i.test(f),
-  );
-  const hasThanksDraft = names.some(
-    (f) => /^thanks\.md$/i.test(f) || /^tesekkur.*\.md$/i.test(f),
-  );
-  const hasReplyDraft = names.some(
-    (f) => /^reply\.md$/i.test(f) || /^yanit.*\.md$/i.test(f),
-  );
-  return { hasFollowUpDraft, hasThanksDraft, hasReplyDraft };
+  return draftFlagsFromIndex(workspaceFolder, followUpCount);
 }
 
 /**
- * Align has*Draft flags with workspace files (prepare may finish while UI is away).
- * Does not clear flags when pendingGmailDraft is set (md still on disk but already pushed to Gmail).
- *
+ * Align has*Draft flags with workspace_files index + live gmail_drafts.
  * GET/list must use persist:false (read-only). Sync/draft reconcile may persist:true.
  */
 export function reconcileDraftFlagsForRow(
@@ -189,12 +149,13 @@ export function reconcileDraftFlagsForRow(
   const pending = live
     ? { kind: live.kind as DraftKind }
     : parsePendingGmailDraft(row.notesJson);
-  const disk = draftFlagsFromDisk(row.workspaceFolder, row.followUpCount);
+  const indexed = draftFlagsFromIndex(row.workspaceFolder, row.followUpCount);
 
-  // If Gmail draft already created, keep has* false even if md remains on disk
-  let hasFollowUpDraft = Boolean(row.hasFollowUpDraft) || disk.hasFollowUpDraft;
-  let hasThanksDraft = Boolean(row.hasThanksDraft) || disk.hasThanksDraft;
-  let hasReplyDraft = Boolean(row.hasReplyDraft) || disk.hasReplyDraft;
+  // If Gmail draft already created, keep has* false even if md remains indexed
+  let hasFollowUpDraft =
+    Boolean(row.hasFollowUpDraft) || indexed.hasFollowUpDraft;
+  let hasThanksDraft = Boolean(row.hasThanksDraft) || indexed.hasThanksDraft;
+  let hasReplyDraft = Boolean(row.hasReplyDraft) || indexed.hasReplyDraft;
 
   if (pending?.kind === "follow_up") hasFollowUpDraft = false;
   if (pending?.kind === "thanks") hasThanksDraft = false;

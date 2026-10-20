@@ -1,6 +1,7 @@
 /**
  * Company-folder contact.md candidates + user recipient preference (notesJson).
  * Research ranks emails; user may override; drafts use effective primaryTo.
+ * List/GET reads from workspace index (Faz 7) — no fs on that path.
  */
 
 import fs from "fs";
@@ -91,11 +92,10 @@ function sectionBody(text: string, heading: string): string {
   return m?.[1]?.trim() || "";
 }
 
-/** Parse ranked emails from contact.md (Recommended + Candidates). */
-export function parseContactRecipients(
-  folderPath: string,
+/** Parse ranked emails from contact.md text (Recommended + Candidates). */
+export function parseContactRecipientsFromText(
+  text: string,
 ): WorkspaceRecipients {
-  const text = readContactText(folderPath);
   if (!text) return { recommended: null, candidates: [] };
 
   const recommendedBody = sectionBody(text, "Recommended");
@@ -155,6 +155,15 @@ export function parseContactRecipients(
   return { recommended, candidates };
 }
 
+/** Parse ranked emails from contact.md on disk (indexing / non-GET paths). */
+export function parseContactRecipients(
+  folderPath: string,
+): WorkspaceRecipients {
+  const text = readContactText(folderPath);
+  if (!text) return { recommended: null, candidates: [] };
+  return parseContactRecipientsFromText(text);
+}
+
 export function folderPathForWorkspace(
   workspaceFolder: string | null | undefined,
 ): string | null {
@@ -166,9 +175,12 @@ export function folderPathForWorkspace(
 export function loadRecipientsForItem(item: {
   workspaceFolder: string | null;
 }): WorkspaceRecipients {
-  const folder = folderPathForWorkspace(item.workspaceFolder);
-  if (!folder) return { recommended: null, candidates: [] };
-  return parseContactRecipients(folder);
+  // Faz 7: index only — never touch disk on list/GET.
+  // Lazy import avoids cycle with workspace-index → parseContactRecipientsFromText.
+  const { loadRecipientsFromIndex } =
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("./workspace-index") as typeof import("./workspace-index");
+  return loadRecipientsFromIndex(item.workspaceFolder);
 }
 
 /**

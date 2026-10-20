@@ -300,6 +300,14 @@ SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, t
     toWrite,
     "utf8",
   );
+  try {
+    const { noteWorkspaceFileWrite } = await import(
+      "@/lib/tracker/workspace-index"
+    );
+    noteWorkspaceFileWrite(folder, fileName, toWrite);
+  } catch (err) {
+    console.error("[prepare] workspace index write failed", err);
+  }
 
   // Skip translate LLM + *_translated.md only when we know send lang == user lang
   const skipTranslate =
@@ -322,18 +330,28 @@ ${toWrite}
           formatSubjectBody(translatedParsed.subject, translatedParsed.body),
           settings?.emailSignature,
         );
+        const translatedBody = `# Translated for user (${userLang})\n\n${translatedSigned}`;
         fs.writeFileSync(
           path.join(/*turbopackIgnore: true*/ folder, translatedFileName),
-          `# Translated for user (${userLang})\n\n${translatedSigned}`,
+          translatedBody,
           "utf8",
         );
+        try {
+          const { noteWorkspaceFileWrite } = await import(
+            "@/lib/tracker/workspace-index"
+          );
+          noteWorkspaceFileWrite(folder, translatedFileName, translatedBody);
+        } catch {
+          /* index best-effort */
+        }
       }
     } catch {
       /* translated copy is best-effort */
     }
   }
 
-  // Prepare writes .md only — not activity; lastActivityAt uses mail timestamps.
+  // Flags are derived from workspace_files on read (Faz 7). Still bump revision
+  // so clients refresh; has_* columns remain until Faz 8 cleanup.
   const patch: Partial<typeof trackerItems.$inferInsert> = {};
   if (kind === "follow_up") patch.hasFollowUpDraft = 1;
   if (kind === "thanks") patch.hasThanksDraft = 1;

@@ -354,3 +354,28 @@ export const gmailDrafts = sqliteTable("gmail_drafts", {
   sentMailId: integer("sent_mail_id").references(() => mailMessages.id),
   error: text("error"),
 });
+
+/** Disk-derived research/draft file index (Faz 7). Source of truth for GET draft flags + recipients. */
+export const workspaceFiles = sqliteTable(
+  "workspace_files",
+  {
+    folder: text("folder").notNull(),
+    name: text("name").notNull(),
+    /** email | follow_up_n | thanks | reply | contact | summary | other */
+    kind: text("kind"),
+    mtimeMs: integer("mtime_ms"),
+    size: integer("size"),
+    subject: text("subject"),
+    /** Same algorithm as gmail_drafts.content_hash when To is known. */
+    contentHash: text("content_hash"),
+    /** contact.md: { recommended, candidates } */
+    metaJson: text("meta_json"),
+  },
+  (t) => [primaryKey({ columns: [t.folder, t.name] })],
+);
+
+export const workspaceFolders = sqliteTable("workspace_folders", {
+  folder: text("folder").primaryKey(),
+  present: integer("present").notNull(),
+  scannedAt: text("scanned_at"),
+});

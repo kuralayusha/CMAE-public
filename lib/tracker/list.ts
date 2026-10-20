@@ -18,13 +18,50 @@ import { reconcileDraftFlagsForRow } from "./pending-draft";
 import { loadRecipientsForItem } from "./recipients";
 import { getSyncState } from "./sync";
 import {
+  indexedDraftContentHash,
+  isWorkspaceFolderPresent,
+} from "./workspace-index";
+import {
   STATUS_ORDER,
+  type DraftKind,
   type TrackerListItem,
+  type TrackerRowWarning,
   type TrackerSection,
   type TrackerSentiment,
   type TrackerStatus,
   type WaitingOn,
 } from "./types";
+
+function rowWarnings(
+  row: typeof trackerItems.$inferSelect,
+  liveKind: DraftKind | null,
+  liveContentHash: string | null,
+): TrackerRowWarning[] {
+  const out: TrackerRowWarning[] = [];
+  if (row.workspaceFolder) {
+    const present = isWorkspaceFolderPresent(row.workspaceFolder);
+    if (present === false) {
+      out.push({
+        code: "folderMissing",
+        message: t("tracker.warning.folderMissing"),
+      });
+    }
+  }
+  if (liveKind && liveContentHash) {
+    const indexed = indexedDraftContentHash(
+      row.workspaceFolder,
+      liveKind,
+      row.followUpCount,
+    );
+    if (indexed && indexed !== liveContentHash) {
+      out.push({
+        code: "draftContentMismatch",
+        message: t("tracker.warning.draftContentMismatch"),
+      });
+    }
+  }
+  return out;
+}
 
 function statusTitle(status: TrackerStatus): string {
   return t(`tracker.section.${status}`);
@@ -76,6 +113,12 @@ function mapRow(
       .at(-1) || row.createdAt;
 
   const recipients = loadRecipientsForItem(row);
+  const live = getLiveDraftAnyKind(row.id);
+  const warnings = rowWarnings(
+    row,
+    live ? (live.kind as DraftKind) : null,
+    live?.contentHash || null,
+  );
   return {
     id: row.id,
     company: row.company,
@@ -104,14 +147,11 @@ function mapRow(
     statusLabel: statusTitle(status),
     gmailUrls,
     waitingUntil: parseWaitingUntil(row.notesJson, row.waitingUntil),
-    pendingGmailDraft: (() => {
-      const live = getLiveDraftAnyKind(row.id);
-      if (!live) return null;
-      return toPendingInfo(live, gmailAddress);
-    })(),
+    pendingGmailDraft: live ? toPendingInfo(live, gmailAddress) : null,
     recipientOptions: recipients.candidates,
     recommendedTo: recipients.recommended,
     userVersion: row.userVersion || 1,
+    warnings: warnings.length ? warnings : undefined,
   };
 }
 
@@ -194,7 +234,7 @@ export function listTrackerSections(opts?: { now?: number }): {
     .all()
     .filter((row) => !row.deletedAt)
     .map((row) => {
-      // Read-only: never persist flag repairs on GET.
+      // Index-derived flags only — no fs, never persist on GET.
       const flags = reconcileDraftFlagsForRow(row, { persist: false });
       return mapRow(
         row,

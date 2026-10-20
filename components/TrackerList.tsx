@@ -203,6 +203,7 @@ type TrackerItem = {
   recipientOptions?: RecipientOption[];
   recommendedTo?: string | null;
   userVersion?: number;
+  warnings?: { code: string; message: string }[];
 };
 
 /** Open tab under the click gesture, then navigate after async work (avoids popup block).
@@ -1459,6 +1460,20 @@ export function TrackerList() {
         </span>
         <span className="cmae-tracker-company" role="cell">
           <TruncateTip text={item.company} />
+          {item.warnings?.length ? (
+            <span className="cmae-tracker-warnings" role="status">
+              {item.warnings.map((w) => (
+                <span
+                  key={w.code}
+                  className="cmae-tracker-warning"
+                  data-warning={w.code}
+                  title={w.message}
+                >
+                  {w.message}
+                </span>
+              ))}
+            </span>
+          ) : null}
         </span>
         <span className="cmae-tracker-muted" role="cell">
           <TruncateTip text={item.position || "—"} />
