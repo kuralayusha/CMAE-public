@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTrackerRevision } from "@/lib/db/revision";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
+import { computeTrackerFreshness } from "@/lib/sync/freshness";
 import { listTrackerSections } from "@/lib/tracker/list";
 
 export const runtime = "nodejs";
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
         rev,
         serverNow: serverNow.toISOString(),
         validUntil: validUntil.toISOString(),
-        freshness: { state: "unknown" as const },
+        freshness: computeTrackerFreshness(serverNow),
       },
       {
         headers: {

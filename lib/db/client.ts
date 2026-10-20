@@ -87,7 +87,15 @@ export function wipeDatabaseContents() {
       VALUES (1, 5, 'en');
     INSERT INTO app_meta (key, value) VALUES ('tracker_revision', '0');
     INSERT INTO app_meta (key, value) VALUES ('db_epoch', '0');
+    INSERT INTO app_meta (key, value) VALUES ('credentials_version', '0');
+    INSERT INTO app_meta (key, value) VALUES ('account_id', '');
+    INSERT INTO app_meta (key, value) VALUES ('maintenance_until', '');
   `);
+  try {
+    sqlite.exec(`DELETE FROM sync_jobs`);
+  } catch {
+    /* table may not exist on very old DBs mid-upgrade */
+  }
   try {
     sqlite.pragma("wal_checkpoint(TRUNCATE)");
   } catch {

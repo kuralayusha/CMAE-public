@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { clearMaintenance, prepareResetFencing } from "@/lib/sync/engine";
 import {
   getDb,
   wipeDatabaseContents,
@@ -14,20 +15,18 @@ import { clearUserPack } from "@/lib/i18n/pack";
 import { clearAllResearchJobs } from "@/lib/research/persist";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
 import { emitTrackerEvent } from "@/lib/tracker/events-bus";
-import {
-  cancelTrackerSyncSession,
-  waitForSyncSessionIdle,
-} from "@/lib/tracker/session";
 
 /**
  * Full local wipe — app should behave like a fresh install.
- * Clears DB rows (and tries to delete db files), search jobs, workspace,
- * then verifies onboarding flag is gone.
- * Cancels any running sync first so it cannot write into the wiped DB.
+ * Cancels jobs under maintenance, waits for lease release, bumps db_epoch
+ * so any in-flight writer is fenced out before wipe.
  */
 export async function resetAppForOnboarding(): Promise<void> {
-  cancelTrackerSyncSession();
-  await waitForSyncSessionIdle(5_000);
+  try {
+    await prepareResetFencing();
+  } catch {
+    /* best-effort if DB not ready */
+  }
 
   clearAllResearchJobs();
   wipeWorkspaceContents();
@@ -40,6 +39,7 @@ export async function resetAppForOnboarding(): Promise<void> {
   // 1) Always clear while connected (reliable)
   wipeDatabaseContents();
   clearOnboardingCompleteMarker();
+  clearMaintenance();
 
   // 2) Best-effort cold recreate (ignores lock failures; contents already empty)
   try {

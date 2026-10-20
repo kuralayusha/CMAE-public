@@ -1,10 +1,11 @@
 import { EventEmitter } from "events";
 import { getSqlite } from "@/lib/db/client";
+import {
+  computeTrackerFreshness,
+  type TrackerFreshness,
+} from "@/lib/sync/freshness";
 
-export type TrackerFreshness = {
-  /** Minimal stub until Faz 2 freshness calculator. */
-  state: "unknown" | "fresh" | "syncing" | "stale_offline" | "never_synced";
-};
+export type { TrackerFreshness };
 
 export type TrackerEvent =
   | {
@@ -240,6 +241,6 @@ export function trackerHelloEvent(): Extract<TrackerEvent, { type: "hello" }> {
     type: "hello",
     rev: readRevision(),
     serverNow: new Date().toISOString(),
-    freshness: { state: "unknown" },
+    freshness: computeTrackerFreshness(),
   };
 }

@@ -1,7 +1,12 @@
 import { eq } from "drizzle-orm";
 import { decryptOptional, encryptOptional } from "@/lib/crypto/encryption";
-import { getDb } from "@/lib/db/client";
+import {
+  normalizeAccountId,
+  setAppMeta,
+} from "@/lib/db/app-meta";
+import { getDb, getSqlite } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
+import { notifyCredentialsChanged } from "@/lib/sync/credentials";
 import {
   type JobPreferences,
   parseJobPreferences,
@@ -147,6 +152,12 @@ export function updateSettings(input: {
     updatedAt: new Date().toISOString(),
   };
 
+  const credsChanged =
+    (input.gmailAppPassword !== undefined && input.gmailAppPassword !== "") ||
+    (input.gmailAddress !== undefined &&
+      normalizeAccountId(input.gmailAddress) !==
+        normalizeAccountId(current?.gmailAddress));
+
   const result = db
     .update(settings)
     .set(next)
@@ -165,6 +176,14 @@ export function updateSettings(input: {
         set: next,
       })
       .run();
+  }
+
+  if (credsChanged) {
+    const accountId = normalizeAccountId(next.gmailAddress);
+    if (accountId) {
+      setAppMeta("account_id", accountId, getSqlite());
+    }
+    notifyCredentialsChanged();
   }
 
   return getPublicSettings();

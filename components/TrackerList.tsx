@@ -353,6 +353,7 @@ export function TrackerList() {
   const sync = store.sync as SyncMeta | null;
   const total = store.total;
   const loading = store.loading;
+  const freshness = store.freshness;
   const [syncing, setSyncing] = useState(false);
   const [syncLines, setSyncLines] = useState<SyncLogLine[]>([]);
   const [syncTermStatus, setSyncTermStatus] = useState<SyncTermStatus | null>(
@@ -1545,6 +1546,53 @@ export function TrackerList() {
 
       {error ? <p className="cmae-tracker-banner is-error">{error}</p> : null}
       {toast ? <p className="cmae-tracker-banner">{toast}</p> : null}
+      {!loading && freshness && freshness.state !== "fresh" ? (
+        <div
+          className={`cmae-tracker-banner cmae-tracker-freshness is-${freshness.state === "auth_failed" ? "error" : freshness.state === "syncing" || freshness.state === "never_synced" ? "info" : "warn"}`}
+        >
+          <span>
+            {t(
+              freshness.messageKey || `tracker.freshness.${freshness.state}`,
+              {
+                minutes: Number(freshness.messageParams?.minutes ?? 0),
+                when: freshness.dataAsOf
+                  ? formatWhen(freshness.dataAsOf, locale)
+                  : String(freshness.messageParams?.when ?? "—"),
+              },
+            )}
+          </span>
+          {freshness.state === "auth_failed" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => router.push("/settings")}
+            >
+              {t("tracker.freshness.authFailedSettings")}
+            </Button>
+          ) : null}
+          {freshness.state === "stale_offline" ||
+          freshness.state === "stale" ||
+          freshness.state === "never_synced" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={syncing || loading}
+              onClick={() => void runSync({ mode: "incremental" })}
+            >
+              {freshness.state === "never_synced"
+                ? t("tracker.freshness.neverSyncedCta")
+                : t("tracker.freshness.staleOfflineRetry")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {!loading && freshness?.state === "fresh" && freshness.messageKey ? (
+        <p className="cmae-tracker-freshness-meta">
+          {t(freshness.messageKey, {
+            minutes: Number(freshness.messageParams?.minutes ?? 0),
+          })}
+        </p>
+      ) : null}
       {!loading && pendingDraftCount > 0 ? (
         <div className="cmae-tracker-banner cmae-tracker-pending-banner">
           <p>{t("tracker.pendingDraft.banner")}</p>
@@ -1794,6 +1842,17 @@ export function TrackerList() {
 
       {loading ? (
         <p className="cmae-tracker-empty">{t("tracker.loading")}</p>
+      ) : total === 0 && freshness?.state === "never_synced" ? (
+        <div className="cmae-tracker-empty">
+          <p>{t("tracker.freshness.neverSynced")}</p>
+          <Button
+            type="button"
+            disabled={syncing}
+            onClick={() => void runSync({ mode: "incremental" })}
+          >
+            {t("tracker.freshness.neverSyncedCta")}
+          </Button>
+        </div>
       ) : total === 0 ? (
         <div className="cmae-tracker-empty cmae-tracker-empty-cta">
           <p>{t("tracker.empty")}</p>

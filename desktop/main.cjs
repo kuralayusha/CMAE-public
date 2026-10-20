@@ -1,4 +1,12 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  powerMonitor,
+  shell,
+} = require("electron");
 const { spawn } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs");
@@ -85,10 +93,14 @@ let mainWindow = null;
 let serverPort = null;
 /** Master key used for the current production server env. */
 let serverMasterKey = null;
+/** Shared secret for /api/internal/wake (Electron → Next). */
+let serverInternalToken = null;
 /** Restart the production server at most once after an unexpected exit. */
 let serverRestartUsed = false;
 /** True while we intentionally stop the server (quit / uninstall). */
 let serverStopping = false;
+/** Avoid double-binding powerMonitor listeners. */
+let powerMonitorBound = false;
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -302,6 +314,56 @@ function nodeBinary() {
  * Do NOT inherit developer secrets (.env / shell CURSOR_API_KEY, etc.)
  * so local DMG builds always behave like a clean install for testers.
  */
+function ensureInternalToken() {
+  if (!serverInternalToken) {
+    serverInternalToken = crypto.randomBytes(32).toString("hex");
+  }
+  return serverInternalToken;
+}
+
+function postInternalWake(reason) {
+  const port = serverPort || (isDev ? 3000 : null);
+  const token = serverInternalToken || process.env.CMAE_INTERNAL_TOKEN;
+  if (!port || !token) return;
+
+  const body = JSON.stringify({ reason });
+  const req = http.request(
+    {
+      host: "127.0.0.1",
+      port,
+      path: "/api/internal/wake",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+        "x-cmae-internal-token": token,
+      },
+      timeout: 4000,
+    },
+    (res) => {
+      res.resume();
+    },
+  );
+  req.on("error", () => {
+    /* server may be restarting */
+  });
+  req.on("timeout", () => {
+    req.destroy();
+  });
+  req.end(body);
+}
+
+function bindPowerMonitorWake() {
+  if (powerMonitorBound) return;
+  powerMonitorBound = true;
+  try {
+    powerMonitor.on("resume", () => postInternalWake("resume"));
+    powerMonitor.on("unlock-screen", () => postInternalWake("unlock"));
+  } catch (err) {
+    console.error("[desktop] powerMonitor bind failed", err);
+  }
+}
+
 function buildProductionServerEnv(port, masterKey) {
   const keepExact = new Set([
     "PATH",
@@ -343,6 +405,7 @@ function buildProductionServerEnv(port, masterKey) {
   env.HOSTNAME = "127.0.0.1";
   env.CMAE_USER_DATA = userDataRoot();
   env.CMAE_MASTER_KEY = masterKey;
+  env.CMAE_INTERNAL_TOKEN = ensureInternalToken();
   // Explicitly absent: CURSOR_API_KEY, CMAE_I18N_URL, project .env vars
   return env;
 }
@@ -480,7 +543,10 @@ async function boot() {
   const dataRoot = userDataRoot();
   process.env.CMAE_USER_DATA = dataRoot;
   process.env.CMAE_MASTER_KEY = masterKey;
+  ensureInternalToken();
+  process.env.CMAE_INTERNAL_TOKEN = serverInternalToken;
   writeStickyAppRoot(dataRoot);
+  bindPowerMonitorWake();
 
   if (isDev) {
     await createWindow(DEV_URL);

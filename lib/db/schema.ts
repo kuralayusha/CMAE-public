@@ -152,3 +152,29 @@ export const schemaMigrations = sqliteTable("schema_migrations", {
   version: integer("version").primaryKey(),
   appliedAt: text("applied_at").notNull(),
 });
+
+/** Persistent sync / reconcile jobs with DB-level lease (partial unique on running). */
+export const syncJobs = sqliteTable("sync_jobs", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  mode: text("mode").notNull().default("incremental"),
+  state: text("state").notNull(),
+  phase: text("phase"),
+  reasons: text("reasons").notNull().default("[]"),
+  rerunRequested: integer("rerun_requested").notNull().default(0),
+  rerunMode: text("rerun_mode"),
+  attempt: integer("attempt").notNull().default(1),
+  owner: text("owner"),
+  dbEpoch: integer("db_epoch").notNull(),
+  credentialsVersion: integer("credentials_version").notNull(),
+  accountId: text("account_id").notNull(),
+  errorKind: text("error_kind"),
+  errorMessage: text("error_message"),
+  statsJson: text("stats_json"),
+  queuedAt: text("queued_at").notNull(),
+  startedAt: text("started_at"),
+  heartbeatAt: text("heartbeat_at"),
+  progressAt: text("progress_at"),
+  finishedAt: text("finished_at"),
+  nextRetryAt: text("next_retry_at"),
+});

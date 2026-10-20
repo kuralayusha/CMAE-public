@@ -8,6 +8,16 @@ export type TrackerStoreSyncMeta = {
   windowDays: number;
 };
 
+export type TrackerFreshnessClient = {
+  state: string;
+  dataAsOf?: string | null;
+  lastErrorKind?: string | null;
+  lastErrorMessage?: string | null;
+  activeIntervalMs?: number;
+  messageKey?: string;
+  messageParams?: Record<string, string | number>;
+};
+
 export type TrackerStoreSnapshot = {
   rev: number;
   etag: string | null;
@@ -18,6 +28,7 @@ export type TrackerStoreSnapshot = {
   error: string | null;
   serverNow: string | null;
   validUntil: string | null;
+  freshness: TrackerFreshnessClient | null;
 };
 
 type TrackerClientEvent = {
@@ -27,6 +38,7 @@ type TrackerClientEvent = {
   itemId?: number;
   fromId?: number;
   intoId?: number;
+  freshness?: TrackerFreshnessClient;
 };
 
 const empty: TrackerStoreSnapshot = {
@@ -39,6 +51,7 @@ const empty: TrackerStoreSnapshot = {
   error: null,
   serverNow: null,
   validUntil: null,
+  freshness: null,
 };
 
 let snapshot: TrackerStoreSnapshot = empty;
@@ -83,6 +96,7 @@ export function applyTrackerListPayload(data: {
   etag?: string | null;
   serverNow?: string | null;
   validUntil?: string | null;
+  freshness?: TrackerFreshnessClient | null;
 }): boolean {
   if (typeof data.rev === "number" && data.rev < snapshot.rev) {
     return false;
@@ -100,8 +114,21 @@ export function applyTrackerListPayload(data: {
       data.serverNow !== undefined ? data.serverNow : snapshot.serverNow,
     validUntil:
       data.validUntil !== undefined ? data.validUntil : snapshot.validUntil,
+    freshness:
+      data.freshness !== undefined ? data.freshness : snapshot.freshness,
   });
   return true;
+}
+
+function nudgeServer(body: Record<string, unknown>): void {
+  if (typeof window === "undefined") return;
+  void fetch("/api/tracker/sync/nudge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => {
+    /* ignore */
+  });
 }
 
 export async function refreshTrackerList(opts?: {
@@ -139,6 +166,7 @@ export async function refreshTrackerList(opts?: {
         rev?: number;
         serverNow?: string;
         validUntil?: string;
+        freshness?: TrackerFreshnessClient | null;
       };
       if (seq !== fetchSeq) return;
 
@@ -164,6 +192,7 @@ export async function refreshTrackerList(opts?: {
         error: null,
         serverNow: data.serverNow ?? null,
         validUntil: data.validUntil ?? null,
+        freshness: data.freshness ?? snapshot.freshness,
       });
     } catch (err) {
       if (seq !== fetchSeq) return;
@@ -200,7 +229,15 @@ function stopStalePoll() {
 function dispatchClientEvent(data: TrackerClientEvent) {
   for (const l of eventListeners) l(data);
 
+  if (data.type === "freshness" && data.freshness) {
+    setSnapshot({ ...snapshot, freshness: data.freshness });
+    return;
+  }
+
   if (data.type === "hello" && typeof data.rev === "number") {
+    if (data.freshness) {
+      setSnapshot({ ...snapshot, freshness: data.freshness });
+    }
     if (data.rev > snapshot.rev) {
       void refreshTrackerList({ force: true });
     } else {
@@ -210,6 +247,10 @@ function dispatchClientEvent(data: TrackerClientEvent) {
   }
   if (data.type === "reset") {
     void refreshTrackerList({ force: true });
+    return;
+  }
+  if (data.type === "job") {
+    void refreshTrackerList();
     return;
   }
   if (
@@ -283,18 +324,35 @@ export function useTrackerListSync(opts?: { enabled?: boolean }) {
     const release = retainTrackerEvents();
 
     const onVis = () => {
-      if (document.visibilityState === "hidden") return;
+      const visible = document.visibilityState === "visible";
+      nudgeServer({
+        visibility: visible ? "visible" : "hidden",
+        reason: visible ? "focus" : undefined,
+      });
+      if (!visible) return;
+      void refreshTrackerList().catch(() => {
+        /* keep prior */
+      });
+    };
+    const onOnline = () => {
+      nudgeServer({ reason: "online" });
       void refreshTrackerList().catch(() => {
         /* keep prior */
       });
     };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("focus", onVis);
+    window.addEventListener("online", onOnline);
+    nudgeServer({
+      visibility:
+        document.visibilityState === "visible" ? "visible" : "hidden",
+    });
 
     return () => {
       release();
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("focus", onVis);
+      window.removeEventListener("online", onOnline);
     };
   }, [enabled]);
 

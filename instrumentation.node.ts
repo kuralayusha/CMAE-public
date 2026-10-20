@@ -20,3 +20,10 @@ if (!process.env.CMAE_USER_DATA?.trim() && !process.env.VERCEL && !process.env.V
     /* ignore */
   }
 }
+
+/** Non-blocking: scheduler must not delay server ready (see Next instrumentation docs). */
+void import("./lib/sync/scheduler")
+  .then((s) => s.start())
+  .catch((err) => {
+    console.error("[instrumentation] sync scheduler failed to start", err);
+  });

@@ -271,6 +271,21 @@
     "metaCount": "{count} applications",
     "metaLastSync": "Last sync:",
     "metaNoneYet": "not yet",
+    "freshness": {
+      "neverSynced": "First sync in progress — scanning recent mail. The list is not empty yet; it is still loading.",
+      "neverSyncedCta": "Sync now",
+      "fresh": "Updated {minutes} min ago",
+      "syncing": "Updating…",
+      "stale": "List may be outdated ({minutes} min since last update).",
+      "veryStale": "Last successful update was more than a day ago.",
+      "staleOffline": "Cannot reach Gmail. The list was last correct at {when}; newer replies may be missing.",
+      "staleOfflineRetry": "Try again",
+      "authFailed": "Gmail sign-in was rejected — renew your app password. Automatic sync is paused.",
+      "authFailedSettings": "Settings",
+      "partial": "Mail is up to date; some sources (e.g. Gmail drafts) could not be verified.",
+      "throttled": "Gmail temporarily limited requests; sync will retry shortly.",
+      "aiDegraded": "Some mail is not classified yet — status on those rows may be temporary."
+    },
     "unknownCompany": "Unknown",
     "col": {
       "select": "Select",
