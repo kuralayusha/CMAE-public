@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 /** Full wipe: SQLite + workspace + search jobs → fresh install → onboarding. */
 export async function POST() {
   try {
-    resetAppForOnboarding();
+    await resetAppForOnboarding();
     if (isOnboardingFlagSet() || isOnboardingComplete()) {
       return NextResponse.json(
         { error: "Onboarding still appears complete after reset" },

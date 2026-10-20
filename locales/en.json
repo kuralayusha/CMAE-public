@@ -196,7 +196,8 @@
   },
   "errors": {
     "cursorKeyMissing": "Cursor API key missing — add it in Settings or set CURSOR_API_KEY",
-    "llmNoResponse": "AI did not respond (status={status})"
+    "llmNoResponse": "AI did not respond (status={status})",
+    "llmTimeout": "AI timed out after {seconds}s"
   },
   "mail": {
     "folder": {

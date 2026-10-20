@@ -353,7 +353,45 @@ export function TrackerList() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  /** Per-row busy keys (itemId:op) — multiple rows can be busy at once. */
+  const [busyKeys, setBusyKeys] = useState<Set<string>>(() => new Set());
+  const loadSeqRef = useRef(0);
+
+  function addBusyKey(key: string) {
+    setBusyKeys((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  }
+
+  function removeBusyKey(key: string) {
+    setBusyKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  function isBusyKey(key: string): boolean {
+    return busyKeys.has(key);
+  }
+
+  function isBusyItem(itemId: number): boolean {
+    const prefix = `${itemId}:`;
+    for (const k of busyKeys) {
+      if (k.startsWith(prefix)) return true;
+    }
+    return false;
+  }
+
+  function isBusyItemPrefix(itemId: number, prefix: string): boolean {
+    const full = `${itemId}:${prefix}`;
+    for (const k of busyKeys) {
+      if (k.startsWith(full)) return true;
+    }
+    return false;
+  }
   const [toast, setToast] = useState<string | null>(null);
   const [gmailModal, setGmailModal] = useState<GmailModalState | null>(null);
   const [prepareModal, setPrepareModal] = useState<PrepareModalState | null>(
@@ -528,12 +566,16 @@ export function TrackerList() {
   }, [prepareModalItemId, prepareModalKind, prepareModalFollowUpCount]);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     const res = await fetch("/api/tracker");
     const data = await res.json();
+    // Latest request wins — ignore stale responses from focus/SSE races.
+    if (seq !== loadSeqRef.current) return;
     if (!res.ok) throw new Error(data.error || t("tracker.error.loadList"));
     setSections(data.sections || []);
     setSync(data.sync || null);
     setTotal(data.total || 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable load(); t is for errors only
   }, []);
 
   const pendingDraftCount = useMemo(
@@ -816,7 +858,7 @@ export function TrackerList() {
   async function changeRecipient(item: TrackerItem, email: string) {
     if (!email || email === item.primaryTo) return;
     const key = `${item.id}:recipient`;
-    setBusyId(key);
+    addBusyKey(key);
     setError(null);
     try {
       const res = await fetch(`/api/tracker/${item.id}`, {
@@ -842,7 +884,7 @@ export function TrackerList() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusyId(null);
+      removeBusyKey(key);
     }
   }
 
@@ -888,7 +930,7 @@ export function TrackerList() {
             <select
               className="cmae-tracker-recipient-select"
               value={value}
-              disabled={busyId === `${item.id}:recipient`}
+              disabled={isBusyKey(`${item.id}:recipient`)}
               aria-label={t("tracker.recipient.aria", {
                 company: item.company,
               })}
@@ -922,7 +964,7 @@ export function TrackerList() {
     eventKinds: string[],
   ) {
     const key = `${item.id}:prep:${kind}`;
-    setBusyId(key);
+    addBusyKey(key);
     setError(null);
     setPrepareModal(null);
     try {
@@ -943,7 +985,7 @@ export function TrackerList() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusyId(null);
+      removeBusyKey(key);
     }
   }
 
@@ -952,7 +994,7 @@ export function TrackerList() {
     kind: "application" | "follow_up" | "thanks" | "reply",
   ) {
     const key = `${item.id}:draft:${kind}`;
-    setBusyId(key);
+    addBusyKey(key);
     setError(null);
     try {
       const res = await fetch(`/api/tracker/${item.id}/draft`, {
@@ -975,7 +1017,7 @@ export function TrackerList() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusyId(null);
+      removeBusyKey(key);
     }
   }
 
@@ -984,7 +1026,7 @@ export function TrackerList() {
     const pending = item.pendingGmailDraft;
     if (!pending) return;
     const key = `${item.id}:draft:${pending.kind}`;
-    setBusyId(key);
+    addBusyKey(key);
     setError(null);
     const popup = openTabForAsyncUrl();
     try {
@@ -1008,7 +1050,7 @@ export function TrackerList() {
       popup?.close();
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusyId(null);
+      removeBusyKey(key);
     }
   }
 
@@ -1086,18 +1128,18 @@ export function TrackerList() {
   function renderPrimaryMenuItem(item: TrackerItem) {
     if (item.status === "inactive") return null;
 
-    const busy = busyId?.startsWith(`${item.id}:`);
-    const spinning = Boolean(busy);
+    const spinning = isBusyItem(item.id);
 
     if (item.pendingGmailDraft) {
       return renderMenuItem({
         label: t("tracker.action.pendingSend"),
-        icon:
-          busyId === `${item.id}:draft:${item.pendingGmailDraft.kind}` ? (
-            <IconSpinner />
-          ) : (
-            <IconWait />
-          ),
+        icon: isBusyKey(
+          `${item.id}:draft:${item.pendingGmailDraft.kind}`,
+        ) ? (
+          <IconSpinner />
+        ) : (
+          <IconWait />
+        ),
         disabled: spinning,
         onClick: () => void openPendingDraft(item),
       });
@@ -1106,12 +1148,11 @@ export function TrackerList() {
     if (item.status === "ready_to_send") {
       return renderMenuItem({
         label: t("tracker.action.createDraft"),
-        icon:
-          busyId === `${item.id}:draft:application` ? (
-            <IconSpinner />
-          ) : (
-            <IconDraft />
-          ),
+        icon: isBusyKey(`${item.id}:draft:application`) ? (
+          <IconSpinner />
+        ) : (
+          <IconDraft />
+        ),
         disabled: spinning,
         onClick: () => void draft(item, "application"),
       });
@@ -1121,24 +1162,22 @@ export function TrackerList() {
       if (!item.hasFollowUpDraft) {
         return renderMenuItem({
           label: t("tracker.action.prepareFollowUp"),
-          icon:
-            busyId === `${item.id}:prep:follow_up` ? (
-              <IconSpinner />
-            ) : (
-              <IconPrepare />
-            ),
+          icon: isBusyKey(`${item.id}:prep:follow_up`) ? (
+            <IconSpinner />
+          ) : (
+            <IconPrepare />
+          ),
           disabled: spinning,
           onClick: () => openPrepareModal(item, "follow_up"),
         });
       }
       return renderMenuItem({
         label: t("tracker.action.draftFollowUp"),
-        icon:
-          busyId === `${item.id}:draft:follow_up` ? (
-            <IconSpinner />
-          ) : (
-            <IconDraft />
-          ),
+        icon: isBusyKey(`${item.id}:draft:follow_up`) ? (
+          <IconSpinner />
+        ) : (
+          <IconDraft />
+        ),
         disabled: spinning,
         onClick: () => void draft(item, "follow_up"),
       });
@@ -1159,20 +1198,22 @@ export function TrackerList() {
       if (!item.hasReplyDraft) {
         return renderMenuItem({
           label: t("tracker.action.prepareReply"),
-          icon:
-            busyId === `${item.id}:prep:reply` ? (
-              <IconSpinner />
-            ) : (
-              <IconPrepare />
-            ),
+          icon: isBusyKey(`${item.id}:prep:reply`) ? (
+            <IconSpinner />
+          ) : (
+            <IconPrepare />
+          ),
           disabled: spinning,
           onClick: () => openPrepareModal(item, "reply"),
         });
       }
       return renderMenuItem({
         label: t("tracker.action.draftReply"),
-        icon:
-          busyId === `${item.id}:draft:reply` ? <IconSpinner /> : <IconDraft />,
+        icon: isBusyKey(`${item.id}:draft:reply`) ? (
+          <IconSpinner />
+        ) : (
+          <IconDraft />
+        ),
         disabled: spinning,
         onClick: () => void draft(item, "reply"),
       });
@@ -1182,24 +1223,22 @@ export function TrackerList() {
       if (!item.hasThanksDraft) {
         return renderMenuItem({
           label: t("tracker.action.prepareThanks"),
-          icon:
-            busyId === `${item.id}:prep:thanks` ? (
-              <IconSpinner />
-            ) : (
-              <IconPrepare />
-            ),
+          icon: isBusyKey(`${item.id}:prep:thanks`) ? (
+            <IconSpinner />
+          ) : (
+            <IconPrepare />
+          ),
           disabled: spinning,
           onClick: () => openPrepareModal(item, "thanks"),
         });
       }
       return renderMenuItem({
         label: t("tracker.action.draftThanks"),
-        icon:
-          busyId === `${item.id}:draft:thanks` ? (
-            <IconSpinner />
-          ) : (
-            <IconDraft />
-          ),
+        icon: isBusyKey(`${item.id}:draft:thanks`) ? (
+          <IconSpinner />
+        ) : (
+          <IconDraft />
+        ),
         disabled: spinning,
         onClick: () => void draft(item, "thanks"),
       });
@@ -1743,8 +1782,9 @@ export function TrackerList() {
                   </Button>
                   <Button
                     type="button"
-                    disabled={Boolean(
-                      busyId?.startsWith(`${prepareModal.item.id}:prep:`),
+                    disabled={isBusyItemPrefix(
+                      prepareModal.item.id,
+                      "prep:",
                     )}
                     onClick={() =>
                       void prepare(
@@ -1756,7 +1796,7 @@ export function TrackerList() {
                       )
                     }
                   >
-                    {busyId?.startsWith(`${prepareModal.item.id}:prep:`)
+                    {isBusyItemPrefix(prepareModal.item.id, "prep:")
                       ? t("tracker.variantNote.preparing")
                       : t("tracker.variantNote.prepare")}
                   </Button>

@@ -420,7 +420,10 @@ export async function matchMailsToGroups(
             t("sync.batchOk", { n: i + 1, groups: part.length }),
           );
         } else {
+          // Never drop mails silently — fall this batch to heuristic grouping.
           log?.("system", t("sync.batchParseFailed", { n: i + 1 }));
+          const heuristicPart = heuristicGroups(batch, []);
+          all.push(...heuristicPart);
         }
       }
       if (all.length) {

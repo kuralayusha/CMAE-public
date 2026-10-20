@@ -7,8 +7,12 @@ import { runTrackerSync } from "./run";
 import type { SyncMode } from "./sync";
 import type { SyncLogKind, SyncLogLine } from "./types";
 
-/** If no progress for this long, treat the session as stuck and allow a new one. */
-const STUCK_SYNC_MS = 45_000;
+/**
+ * Stuck detection uses phase budget / lack of progress — not "no log for 45s".
+ * IMAP batch budget is 180s (FETCH_BATCH_MS); LLM is 90s. Use the larger ceiling
+ * so a healthy long LLM call is never force-killed by a second click.
+ */
+const PHASE_BUDGET_MS = 180_000;
 
 export type SyncSessionStatus = "running" | "done" | "error" | "canceled";
 
@@ -31,6 +35,8 @@ export type SyncSession = {
   error: string | null;
   result: SyncSessionResult | null;
   createdAt: number;
+  /** Last progress (log line / phase advance). Used for stuck detection. */
+  progressAt: number;
   cancelRequested: boolean;
   abort: AbortController;
 };
@@ -120,6 +126,7 @@ function appendLine(session: SyncSession, kind: SyncLogKind, text: string) {
     text,
     at: Date.now(),
   };
+  session.progressAt = line.at;
   session.lines.push(line);
   if (session.lines.length > 500) {
     session.lines.splice(0, session.lines.length - 500);
@@ -144,9 +151,14 @@ function finish(
   emit(session.id, { type: "done", status });
 }
 
+function isSessionStuck(session: SyncSession): boolean {
+  return Date.now() - session.progressAt >= PHASE_BUDGET_MS;
+}
+
 /**
- * Start a new sync, or return the already-running one.
- * Stuck sessions (no log lines for STUCK_SYNC_MS) are force-killed first.
+ * Start a new sync, or join the already-running one.
+ * A healthy in-budget session is never killed by a second click — only joined.
+ * Force-reset only when progress has stalled past the phase budget.
  */
 export function startTrackerSyncSession(opts?: {
   skipImap?: boolean;
@@ -154,16 +166,12 @@ export function startTrackerSyncSession(opts?: {
 }): SyncSessionPublic {
   const existing = getActiveSyncSession();
   if (existing) {
-    const lastAt = existing.lines.at(-1)?.at ?? existing.createdAt;
-    if (Date.now() - lastAt < STUCK_SYNC_MS) {
+    if (!isSessionStuck(existing)) {
+      // Join healthy job — do not abort.
       return toPublic(existing);
     }
-    // Hung IMAP (often large source / signature image) — kill child + session
-    appendLine(
-      existing,
-      "err",
-      t("sync.forceResetStuck"),
-    );
+    // Past phase budget with no progress — treat as stuck and replace.
+    appendLine(existing, "err", t("sync.forceResetStuck"));
     try {
       existing.cancelRequested = true;
       existing.abort.abort();
@@ -175,13 +183,15 @@ export function startTrackerSyncSession(opts?: {
 
   const mode: SyncMode = opts?.mode ?? "incremental";
   const abort = new AbortController();
+  const now = Date.now();
   const session: SyncSession = {
     id: randomUUID(),
     status: "running",
     lines: [],
     error: null,
     result: null,
-    createdAt: Date.now(),
+    createdAt: now,
+    progressAt: now,
     cancelRequested: false,
     abort,
   };
@@ -255,6 +265,18 @@ export function cancelTrackerSyncSession(id?: string): SyncSessionPublic | null 
     }
   }, 1500);
   return toPublic(session);
+}
+
+/** Wait until no sync session is running (used by onboarding reset). */
+export async function waitForSyncSessionIdle(
+  maxMs = 5_000,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    if (!getActiveSyncSession()) return true;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return !getActiveSyncSession();
 }
 
 export function syncSessionHello(id: string): SyncSessionEvent | null {

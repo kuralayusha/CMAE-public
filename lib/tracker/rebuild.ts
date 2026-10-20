@@ -1,6 +1,6 @@
 import path from "path";
 import { eq } from "drizzle-orm";
-import { getDb } from "@/lib/db/client";
+import { getDb, getSqlite } from "@/lib/db/client";
 import {
   mailMessages,
   trackerItemMails,
@@ -159,20 +159,23 @@ export async function rebuildTrackerItems(opts?: {
     if (email) prefer(prevByPrimary, email, p);
   }
   const inactivePrev = prev.filter((p) => p.status === "inactive");
-  const rematchedInactive = new Set<number>();
   type InsertedRef = {
     id: number;
     company: string;
     primaryTo: string | null;
   };
-  const insertedRefs: InsertedRef[] = [];
-
-  db.delete(trackerItemMails).run();
-  db.delete(trackerItems).run();
 
   const mailById = new Map(allMails.map((m) => [m.id, m]));
   const root = getWorkspaceRoot();
   let itemCount = 0;
+
+  // DELETE+INSERT must be atomic — crash mid-write must not leave an empty list.
+  getSqlite().transaction(() => {
+  const rematchedInactive = new Set<number>();
+  const insertedRefs: InsertedRef[] = [];
+
+  db.delete(trackerItemMails).run();
+  db.delete(trackerItems).run();
 
   for (const g of groups) {
     const linkedMails = g.mailIds
@@ -516,6 +519,7 @@ export async function rebuildTrackerItems(opts?: {
 
   // Collapse leftover inactive+active twins (same identity) if any slipped through.
   itemCount -= collapseInactiveActiveTwins();
+  })();
 
   return { itemCount };
 }

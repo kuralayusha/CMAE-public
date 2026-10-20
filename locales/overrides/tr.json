@@ -76,5 +76,8 @@
     "cvFamilyHint": "Aynı CV’nin dil varyantları için aynı id (ör. general). Bu dosya ayrı bir rolse boş bırak.",
     "cvFamilyPlaceholder": "ör. general, frontend",
     "cvTagsHint": "İlan başlığıyla eşleşen rol kelimeleri — ör. odoo, frontend. Pozisyon eşleşmesi dili ezer."
+  },
+  "errors": {
+    "llmTimeout": "AI {seconds} sn içinde yanıt vermedi"
   }
 }

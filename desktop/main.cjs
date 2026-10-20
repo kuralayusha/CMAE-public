@@ -81,6 +81,30 @@ function blockDevToolsShortcuts(webContents) {
 let serverProcess = null;
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
+/** Port of the running production Next server (packaged only). */
+let serverPort = null;
+/** Master key used for the current production server env. */
+let serverMasterKey = null;
+/** Restart the production server at most once after an unexpected exit. */
+let serverRestartUsed = false;
+/** True while we intentionally stop the server (quit / uninstall). */
+let serverStopping = false;
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    } else if (serverProcess && serverPort) {
+      createWindow(`http://127.0.0.1:${serverPort}/`).catch((err) => {
+        console.error(err);
+      });
+    }
+  });
+}
 
 /**
  * Per-OS user data (never hardcoded to a username):
@@ -162,14 +186,16 @@ ${appLine}
 }
 
 function stopServer() {
+  serverStopping = true;
   if (serverProcess && !serverProcess.killed) {
     try {
       serverProcess.kill("SIGTERM");
     } catch {
       /* ignore */
     }
-    serverProcess = null;
   }
+  serverProcess = null;
+  serverPort = null;
 }
 
 ipcMain.handle("cmae:uninstall", async () => {
@@ -334,6 +360,9 @@ function startProductionServer(port, masterKey) {
   }
 
   const env = buildProductionServerEnv(port, masterKey);
+  serverStopping = false;
+  serverPort = port;
+  serverMasterKey = masterKey;
 
   serverProcess = spawn(nodeBin, [serverJs], {
     cwd: root,
@@ -350,8 +379,56 @@ function startProductionServer(port, masterKey) {
   });
   serverProcess.on("exit", (code, signal) => {
     console.error(`[next] exited code=${code} signal=${signal}`);
+    const wasStopping = serverStopping;
     serverProcess = null;
+    if (wasStopping || isDev) return;
+
+    if (!serverRestartUsed && serverPort && serverMasterKey) {
+      serverRestartUsed = true;
+      const port = serverPort;
+      const key = serverMasterKey;
+      console.error("[next] restarting server once after unexpected exit");
+      try {
+        startProductionServer(port, key);
+        waitForServer(port)
+          .then(() => {
+            dialog.showMessageBox({
+              type: "warning",
+              title: "CMAE",
+              message: "The local server restarted after a crash.",
+              detail:
+                "If the window looks stuck, use View → Reload. If problems continue, quit and reopen CMAE.",
+            });
+            if (BrowserWindow.getAllWindows().length === 0) {
+              return createWindow(`http://127.0.0.1:${port}/`);
+            }
+          })
+          .catch((err) => {
+            console.error(err);
+            dialog.showErrorBox(
+              "CMAE server failed",
+              err instanceof Error ? err.message : String(err),
+            );
+          });
+      } catch (err) {
+        console.error(err);
+        dialog.showErrorBox(
+          "CMAE server failed",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+      return;
+    }
+
+    dialog.showErrorBox(
+      "CMAE server stopped",
+      `The local server exited (code=${code}, signal=${signal}). Quit and reopen CMAE.`,
+    );
   });
+}
+
+function isProductionServerRunning() {
+  return Boolean(serverProcess && !serverProcess.killed && serverPort);
 }
 
 function createWindow(url) {
@@ -410,40 +487,49 @@ async function boot() {
     return;
   }
 
+  // Server already running (e.g. macOS activate after closing the window) —
+  // only recreate the window; never spawn a second Next process on the same DB.
+  if (isProductionServerRunning()) {
+    await createWindow(`http://127.0.0.1:${serverPort}/`);
+    return;
+  }
+
   const port = await getFreePort();
   startProductionServer(port, masterKey);
   await waitForServer(port);
   await createWindow(`http://127.0.0.1:${port}/`);
 }
 
-app.whenReady().then(() => {
-  installAppMenu();
-  initAutoUpdater(broadcastUpdateEvent);
-  boot().catch((err) => {
-    console.error(err);
-    dialog.showErrorBox(
-      "CMAE failed to start",
-      err instanceof Error ? err.message : String(err),
-    );
-    app.quit();
-  });
-});
-
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+if (gotSingleInstanceLock) {
+  app.whenReady().then(() => {
+    installAppMenu();
+    initAutoUpdater(broadcastUpdateEvent);
     boot().catch((err) => {
       console.error(err);
       dialog.showErrorBox(
         "CMAE failed to start",
         err instanceof Error ? err.message : String(err),
       );
+      app.quit();
     });
-  }
-});
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      boot().catch((err) => {
+        console.error(err);
+        dialog.showErrorBox(
+          "CMAE failed to start",
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+    }
+  });
+}
 
 app.on("before-quit", () => {
   stopServer();

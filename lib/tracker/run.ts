@@ -9,7 +9,14 @@ import {
 import { pruneOrphanReadyToSendItems } from "./orphans";
 import { reconcilePendingAgainstLiveDrafts } from "./pending-draft";
 import { rebuildTrackerItems } from "./rebuild";
-import { syncMailsFromGmail, type SyncMode } from "./sync";
+import {
+  listPendingDeriveMailIds,
+  markAllPendingDeriveDone,
+  markMailsDeriveState,
+  setSyncState,
+  syncMailsFromGmail,
+  type SyncMode,
+} from "./sync";
 import type { SyncProgressFn } from "./types";
 
 export async function runTrackerSync(opts?: {
@@ -24,6 +31,7 @@ export async function runTrackerSync(opts?: {
   itemCount: number;
   mode: SyncMode;
   keptOutsideWindow: number;
+  partial: boolean;
 }> {
   const log = opts?.onProgress;
   const signal = opts?.signal;
@@ -32,7 +40,8 @@ export async function runTrackerSync(opts?: {
   let skipReason: string | undefined;
   let upserted = 0;
   let keptOutsideWindow = 0;
-  let insertedIds: number[] = [];
+  let partial = false;
+  let partialError: string | null = null;
 
   throwIfSyncCanceled(signal);
   log?.(
@@ -46,12 +55,16 @@ export async function runTrackerSync(opts?: {
     skipReason = sync.reason;
     upserted = sync.upserted;
     keptOutsideWindow = sync.keptOutsideWindow;
-    insertedIds = sync.insertedIds;
+    partial = sync.partial;
+    partialError = sync.partialError;
   } else {
     log?.("think", t("sync.imapSkipped"));
   }
 
   throwIfSyncCanceled(signal);
+
+  // Prefer dirty queue over "just inserted" so a failed patch/rebuild retries.
+  const pendingIds = listPendingDeriveMailIds();
 
   const existingRows = getDb().select().from(trackerItems).all().length;
   const canPatch =
@@ -59,26 +72,35 @@ export async function runTrackerSync(opts?: {
     !opts?.skipImap &&
     !skippedImap &&
     existingRows > 0 &&
-    insertedIds.length <= INCREMENTAL_PATCH_MAX;
+    pendingIds.length <= INCREMENTAL_PATCH_MAX;
 
   let itemCount: number;
-  if (canPatch) {
-    log?.("think", t("sync.rebuildingListIncremental"));
-    const patch = await patchTrackerWithNewMails(insertedIds, {
-      onProgress: log,
-      signal,
-    });
-    itemCount = patch.itemCount;
-  } else {
-    if (mode === "incremental" && insertedIds.length > INCREMENTAL_PATCH_MAX) {
-      log?.(
-        "system",
-        t("sync.incrementalFallbackFull", { count: insertedIds.length }),
-      );
+  try {
+    if (canPatch) {
+      log?.("think", t("sync.rebuildingListIncremental"));
+      const patch = await patchTrackerWithNewMails(pendingIds, {
+        onProgress: log,
+        signal,
+      });
+      itemCount = patch.itemCount;
+      markMailsDeriveState(pendingIds, "done");
+    } else {
+      if (mode === "incremental" && pendingIds.length > INCREMENTAL_PATCH_MAX) {
+        log?.(
+          "system",
+          t("sync.incrementalFallbackFull", { count: pendingIds.length }),
+        );
+      }
+      log?.("think", t("sync.rebuildingList"));
+      const rebuilt = await rebuildTrackerItems({ onProgress: log, signal });
+      itemCount = rebuilt.itemCount;
+      markAllPendingDeriveDone();
     }
-    log?.("think", t("sync.rebuildingList"));
-    const rebuilt = await rebuildTrackerItems({ onProgress: log, signal });
-    itemCount = rebuilt.itemCount;
+  } catch (err) {
+    // Leave derive_state=pending so the next sync retries these mails.
+    const msg = err instanceof Error ? err.message : String(err);
+    setSyncState({ lastError: msg });
+    throw err;
   }
 
   throwIfSyncCanceled(signal);
@@ -87,6 +109,12 @@ export async function runTrackerSync(opts?: {
 
   // Folders deleted outside rebuild (or soft-unlinked) leave ghost ready_to_send rows.
   itemCount -= pruneOrphanReadyToSendItems();
+
+  // lastSyncAt only after derivation (+ draft reconcile) finishes.
+  setSyncState({
+    lastSyncAt: new Date().toISOString(),
+    lastError: partial ? partialError : null,
+  });
 
   log?.(
     "ok",
@@ -99,5 +127,6 @@ export async function runTrackerSync(opts?: {
     itemCount,
     mode,
     keptOutsideWindow,
+    partial,
   };
 }

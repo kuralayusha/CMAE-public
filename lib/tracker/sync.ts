@@ -1,14 +1,17 @@
-import { eq } from "drizzle-orm";
-import { getDb } from "@/lib/db/client";
+import { eq, inArray, ne } from "drizzle-orm";
+import { getDb, getSqlite } from "@/lib/db/client";
 import { mailMessages, syncState } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getGmailCredentials } from "@/lib/settings/service";
+import { setFolderCursor } from "./folder-cursors";
 import { fetchRecentMail, WINDOW_DAYS, type ImapSyncMode } from "./imap";
 import { SyncCanceledError, throwIfSyncCanceled } from "./cancel";
 import { normalizeMailText } from "./signals";
 import type { FetchedMail, SyncProgressFn } from "./types";
 
 export type SyncMode = ImapSyncMode;
+
+export type DeriveState = "pending" | "done";
 
 export function isSyncDisabled(): boolean {
   return process.env.CMAE_DISABLE_SYNC === "1";
@@ -24,7 +27,7 @@ export function getSyncState() {
   };
 }
 
-function setSyncState(patch: {
+export function setSyncState(patch: {
   lastSyncAt?: string | null;
   lastError?: string | null;
 }) {
@@ -51,6 +54,7 @@ export type UpsertMailsResult = {
 /**
  * Upsert by messageId — duplicates yok.
  * Hard/incremental never deletes mail_messages (31+ day records are kept).
+ * New rows are marked derive_state=pending until tracker derivation succeeds.
  */
 export function upsertMails(mails: FetchedMail[]): UpsertMailsResult {
   const db = getDb();
@@ -97,6 +101,7 @@ export function upsertMails(mails: FetchedMail[]): UpsertMailsResult {
           snippet: normalizeMailText(m.snippet).slice(0, 240),
           bodyText: normalizeMailText(m.bodyText),
           headersHash: m.headersHash,
+          deriveState: "pending",
         })
         .returning({ id: mailMessages.id })
         .get();
@@ -105,6 +110,38 @@ export function upsertMails(mails: FetchedMail[]): UpsertMailsResult {
     upserted += 1;
   }
   return { upserted, insertedIds };
+}
+
+/** Mail ids still waiting for tracker derivation after a failed patch/rebuild. */
+export function listPendingDeriveMailIds(): number[] {
+  const db = getDb();
+  return db
+    .select({ id: mailMessages.id })
+    .from(mailMessages)
+    .where(eq(mailMessages.deriveState, "pending"))
+    .all()
+    .map((r) => r.id);
+}
+
+export function markMailsDeriveState(
+  ids: number[],
+  state: DeriveState,
+): void {
+  if (!ids.length) return;
+  const db = getDb();
+  db.update(mailMessages)
+    .set({ deriveState: state })
+    .where(inArray(mailMessages.id, ids))
+    .run();
+}
+
+/** After a full rebuild, every pending mail has been considered. */
+export function markAllPendingDeriveDone(): void {
+  const db = getDb();
+  db.update(mailMessages)
+    .set({ deriveState: "done" })
+    .where(ne(mailMessages.deriveState, "done"))
+    .run();
 }
 
 export async function syncMailsFromGmail(opts?: {
@@ -118,6 +155,8 @@ export async function syncMailsFromGmail(opts?: {
   insertedIds: number[];
   mode: SyncMode;
   keptOutsideWindow: number;
+  partial: boolean;
+  partialError: string | null;
 }> {
   const log = opts?.onProgress;
   const signal = opts?.signal;
@@ -133,6 +172,8 @@ export async function syncMailsFromGmail(opts?: {
       insertedIds: [],
       mode,
       keptOutsideWindow: 0,
+      partial: false,
+      partialError: null,
     };
   }
 
@@ -148,6 +189,8 @@ export async function syncMailsFromGmail(opts?: {
       insertedIds: [],
       mode,
       keptOutsideWindow: 0,
+      partial: false,
+      partialError: null,
     };
   }
 
@@ -179,7 +222,18 @@ export async function syncMailsFromGmail(opts?: {
       "think",
       t("sync.writingUpsert", { count: fetched.mails.length }),
     );
-    const { upserted, insertedIds } = upsertMails(fetched.mails);
+
+    let upserted = 0;
+    let insertedIds: number[] = [];
+    // Atomically commit mails + folder cursors (cursor must not advance without upsert).
+    getSqlite().transaction(() => {
+      const result = upsertMails(fetched.mails);
+      upserted = result.upserted;
+      insertedIds = result.insertedIds;
+      for (const cursor of fetched.cursors) {
+        setFolderCursor(cursor);
+      }
+    })();
 
     // Safety: row count must never drop after sync (no deletes)
     const afterRows = db
@@ -200,7 +254,7 @@ export async function syncMailsFromGmail(opts?: {
       );
     }
 
-    setSyncState({ lastSyncAt: new Date().toISOString(), lastError: null });
+    // lastSyncAt is written by run.ts only after derivation finishes.
     log?.(
       "ok",
       t("sync.upsertSummary", {
@@ -212,12 +266,17 @@ export async function syncMailsFromGmail(opts?: {
     if (mode === "hard") {
       log?.("system", t("sync.hardSyncNote"));
     }
+    if (fetched.partial && fetched.partialError) {
+      log?.("err", fetched.partialError);
+    }
     return {
       skipped: false,
       upserted,
       insertedIds,
       mode,
       keptOutsideWindow,
+      partial: fetched.partial,
+      partialError: fetched.partialError,
     };
   } catch (err) {
     if (err instanceof SyncCanceledError) {

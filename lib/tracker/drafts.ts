@@ -23,20 +23,68 @@ import {
 } from "./parse-mail-md";
 import {
   parsePendingGmailDraft,
+  reconcilePendingAgainstLiveDrafts,
   withPendingGmailDraft,
 } from "./pending-draft";
 import { replySubject, resolveThreadReplyTarget } from "./reply-thread";
 import type { DraftKind } from "./types";
 
+declare global {
+  // eslint-disable-next-line no-var
+  var __cmaeDraftItemLocks: Map<string, Promise<unknown>> | undefined;
+}
+
+function getDraftItemLocks(): Map<string, Promise<unknown>> {
+  if (!globalThis.__cmaeDraftItemLocks) {
+    globalThis.__cmaeDraftItemLocks = new Map();
+  }
+  return globalThis.__cmaeDraftItemLocks;
+}
+
+/** Temporary in-memory single-flight lock per (itemId, kind). */
+async function withDraftItemLock<T>(
+  itemId: number,
+  kind: DraftKind,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const locks = getDraftItemLocks();
+  const key = `${itemId}:${kind}`;
+  const previous = locks.get(key) ?? Promise.resolve();
+  let unlock!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    unlock = resolve;
+  });
+  const tail = previous.then(
+    () => gate,
+    () => gate,
+  );
+  locks.set(key, tail);
+  try {
+    await previous.catch(() => undefined);
+    return await fn();
+  } finally {
+    unlock();
+    if (locks.get(key) === tail) locks.delete(key);
+  }
+}
+
 function markPendingOnItem(
-  item: typeof trackerItems.$inferSelect,
+  itemId: number,
   kind: DraftKind,
   subject: string,
   draftsUrl: string,
   at?: string,
 ): void {
+  const db = getDb();
+  // Re-read so concurrent notesJson mutations are not overwritten with stale data.
+  const fresh = db
+    .select()
+    .from(trackerItems)
+    .where(eq(trackerItems.id, itemId))
+    .get();
+  if (!fresh) return;
   const patch: Partial<typeof trackerItems.$inferInsert> = {
-    notesJson: withPendingGmailDraft(item.notesJson, {
+    notesJson: withPendingGmailDraft(fresh.notesJson, {
       kind,
       at: at || new Date().toISOString(),
       subject,
@@ -46,10 +94,9 @@ function markPendingOnItem(
   if (kind === "follow_up") patch.hasFollowUpDraft = 0;
   if (kind === "thanks") patch.hasThanksDraft = 0;
   if (kind === "reply") patch.hasReplyDraft = 0;
-  getDb()
-    .update(trackerItems)
+  db.update(trackerItems)
     .set(patch)
-    .where(eq(trackerItems.id, item.id))
+    .where(eq(trackerItems.id, itemId))
     .run();
 }
 
@@ -144,124 +191,133 @@ export async function createGmailDraftForItem(
   /** true when an existing Drafts message was reused (ensure mode) */
   reused?: boolean;
 }> {
-  const creds = getGmailCredentials();
-  if (!creds) {
-    throw new Error(t("tracker.error.gmailCredentialsMissing"));
-  }
+  return withDraftItemLock(itemId, kind, async () => {
+    const creds = getGmailCredentials();
+    if (!creds) {
+      throw new Error(t("tracker.error.gmailCredentialsMissing"));
+    }
 
-  const db = getDb();
-  const item = db
-    .select()
-    .from(trackerItems)
-    .where(eq(trackerItems.id, itemId))
-    .get();
-  if (!item) throw new Error(t("tracker.error.notFound"));
-  assertItemActiveForDrafts(itemId);
+    const db = getDb();
+    const item = db
+      .select()
+      .from(trackerItems)
+      .where(eq(trackerItems.id, itemId))
+      .get();
+    if (!item) throw new Error(t("tracker.error.notFound"));
+    assertItemActiveForDrafts(itemId);
 
-  const pending = parsePendingGmailDraft(item.notesJson);
-  // Pending reopen may run ensure while still on follow_up_due / rejected / needs_reply
-  if (
-    kind === "follow_up" &&
-    item.status !== "follow_up_due" &&
-    !(opts?.ensure && pending?.kind === "follow_up")
-  ) {
-    throw new Error(t("tracker.error.followUpLocked"));
-  }
+    const pending = parsePendingGmailDraft(item.notesJson);
+    // Pending reopen may run ensure while still on follow_up_due / rejected / needs_reply
+    if (
+      kind === "follow_up" &&
+      item.status !== "follow_up_due" &&
+      !(opts?.ensure && pending?.kind === "follow_up")
+    ) {
+      throw new Error(t("tracker.error.followUpLocked"));
+    }
 
-  const settings = getSettingsRow();
-  const content = resolveDraftContent(
-    {
-      id: item.id,
-      workspaceFolder: item.workspaceFolder,
-      primaryTo: item.primaryTo,
-      company: item.company,
-      followUpCount: item.followUpCount,
-    },
-    kind,
-    settings?.preferredLanguage || "en",
-  );
-
-  const draftsUrl = gmailDraftsFolderUrl(creds.address);
-
-  // Source of truth: live Gmail Drafts. Never duplicate; clock only after match.
-  const alreadyThere = await draftExistsBySubject(
-    creds.address,
-    creds.appPassword,
-    content.subject,
-  );
-  if (alreadyThere) {
-    markPendingOnItem(
-      item,
+    const settings = getSettingsRow();
+    const content = resolveDraftContent(
+      {
+        id: item.id,
+        workspaceFolder: item.workspaceFolder,
+        primaryTo: item.primaryTo,
+        company: item.company,
+        followUpCount: item.followUpCount,
+      },
       kind,
-      content.subject,
-      draftsUrl,
-      pending?.at,
+      settings?.preferredLanguage || "en",
     );
+
+    const draftsUrl = gmailDraftsFolderUrl(creds.address);
+
+    // Source of truth: live Gmail Drafts. Never duplicate; clock only after match.
+    const alreadyThere = await draftExistsBySubject(
+      creds.address,
+      creds.appPassword,
+      content.subject,
+    );
+    if (alreadyThere) {
+      markPendingOnItem(
+        item.id,
+        kind,
+        content.subject,
+        draftsUrl,
+        pending?.at,
+      );
+      await reconcilePendingAgainstLiveDrafts({ force: true }).catch(() => {
+        /* best-effort */
+      });
+      return {
+        gmailUrl: draftsUrl,
+        subject: content.subject,
+        to: content.to,
+        reused: true,
+      };
+    }
+
+    // Missing in Drafts — append, then confirm before marking pending/clock.
+    let attachedCv: string | null = null;
+    let cvWarning: string | null = null;
+    const attachments =
+      kind === "application" || kind === "follow_up"
+        ? await (async () => {
+            const folder = folderPathForItem(item);
+            const siteLang = detectSiteLanguageFromFolder(folder);
+            const pick = await pickBestCv({
+              language: siteLang,
+              preferredLanguage: settings?.preferredLanguage || "en",
+              position: item.position,
+              fullName: settings?.fullName,
+            });
+            if (!pick) {
+              cvWarning = "CV not attached — workspace/cvs/ is empty";
+              return undefined;
+            }
+            attachedCv = pick.entry.label || pick.entry.fileName;
+            return [
+              {
+                filename: pick.attachFileName,
+                contentType: "application/pdf",
+                buffer: pick.buffer,
+              },
+            ];
+          })()
+        : undefined;
+
+    const result = await appendDraft(creds.address, creds.appPassword, {
+      from: creds.address,
+      to: content.to,
+      subject: content.subject,
+      body: content.body,
+      inReplyTo: content.inReplyTo,
+      references: content.references,
+      attachments,
+    });
+
+    const visible = await waitForDraftSubject(
+      creds.address,
+      creds.appPassword,
+      content.subject,
+    );
+    if (!visible) {
+      throw new Error(t("tracker.error.gmailDraftNotInFolder"));
+    }
+
+    // Gmail Drafts ≠ sent: keep status until SENT sync. Clock from live match only.
+    markPendingOnItem(item.id, kind, content.subject, result.draftsUrl);
+
+    await reconcilePendingAgainstLiveDrafts({ force: true }).catch(() => {
+      /* best-effort */
+    });
+
     return {
-      gmailUrl: draftsUrl,
+      gmailUrl: result.draftsUrl,
       subject: content.subject,
       to: content.to,
-      reused: true,
+      attachedCv,
+      cvWarning,
+      reused: false,
     };
-  }
-
-  // Missing in Drafts — append, then confirm before marking pending/clock.
-  let attachedCv: string | null = null;
-  let cvWarning: string | null = null;
-  const attachments =
-    kind === "application" || kind === "follow_up"
-      ? await (async () => {
-          const folder = folderPathForItem(item);
-          const siteLang = detectSiteLanguageFromFolder(folder);
-          const pick = await pickBestCv({
-            language: siteLang,
-            preferredLanguage: settings?.preferredLanguage || "en",
-            position: item.position,
-            fullName: settings?.fullName,
-          });
-          if (!pick) {
-            cvWarning = "CV not attached — workspace/cvs/ is empty";
-            return undefined;
-          }
-          attachedCv = pick.entry.label || pick.entry.fileName;
-          return [
-            {
-              filename: pick.attachFileName,
-              contentType: "application/pdf",
-              buffer: pick.buffer,
-            },
-          ];
-        })()
-      : undefined;
-
-  const result = await appendDraft(creds.address, creds.appPassword, {
-    from: creds.address,
-    to: content.to,
-    subject: content.subject,
-    body: content.body,
-    inReplyTo: content.inReplyTo,
-    references: content.references,
-    attachments,
   });
-
-  const visible = await waitForDraftSubject(
-    creds.address,
-    creds.appPassword,
-    content.subject,
-  );
-  if (!visible) {
-    throw new Error(t("tracker.error.gmailDraftNotInFolder"));
-  }
-
-  // Gmail Drafts ≠ sent: keep status until SENT sync. Clock from live match only.
-  markPendingOnItem(item, kind, content.subject, result.draftsUrl);
-
-  return {
-    gmailUrl: result.draftsUrl,
-    subject: content.subject,
-    to: content.to,
-    attachedCv,
-    cvWarning,
-    reused: false,
-  };
 }

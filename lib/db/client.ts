@@ -26,11 +26,20 @@ export function getDb() {
   sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
+  sqlite.pragma("busy_timeout = 5000");
+  sqlite.pragma("synchronous = NORMAL");
 
   dbInstance = drizzle(sqlite, { schema });
   openedDbPath = dbPath;
   ensureSchema(sqlite);
   return dbInstance;
+}
+
+/** Live better-sqlite3 handle (same connection as getDb). For sync transactions. */
+export function getSqlite(): Database.Database {
+  getDb();
+  if (!sqlite?.open) throw new Error("SQLite handle missing");
+  return sqlite;
 }
 
 /** Close the open SQLite handle (needed before deleting db files). */
@@ -136,6 +145,7 @@ function ensureSchema(db: Database.Database) {
       snippet TEXT NOT NULL DEFAULT '',
       body_text TEXT NOT NULL DEFAULT '',
       headers_hash TEXT,
+      derive_state TEXT NOT NULL DEFAULT 'done',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE UNIQUE INDEX IF NOT EXISTS mail_messages_message_id_uq ON mail_messages(message_id);
@@ -266,6 +276,15 @@ function ensureSchema(db: Database.Database) {
   if (!syncCols.some((c) => c.name === "window_days")) {
     db.exec(
       `ALTER TABLE sync_state ADD COLUMN window_days INTEGER NOT NULL DEFAULT 30`,
+    );
+  }
+
+  const mailCols = db.prepare(`PRAGMA table_info(mail_messages)`).all() as {
+    name: string;
+  }[];
+  if (!mailCols.some((c) => c.name === "derive_state")) {
+    db.exec(
+      `ALTER TABLE mail_messages ADD COLUMN derive_state TEXT NOT NULL DEFAULT 'done'`,
     );
   }
 }

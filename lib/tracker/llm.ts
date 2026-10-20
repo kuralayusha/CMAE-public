@@ -16,19 +16,33 @@ async function resolveApiKey(): Promise<string> {
   return key;
 }
 
+const LLM_TIMEOUT_MS = 90_000;
+
 export async function askTrackerLlm(prompt: string): Promise<string> {
   const apiKey = await resolveApiKey();
-  const result = await Agent.prompt(prompt, {
-    apiKey,
-    model: { id: "composer-2.5" },
-    local: { cwd: getAgentCwd() },
-  });
-  if (result.status === "error" || !result.result) {
-    throw new Error(
-      t("errors.llmNoResponse", { status: result.status ?? "unknown" }),
-    );
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      Agent.prompt(prompt, {
+        apiKey,
+        model: { id: "composer-2.5" },
+        local: { cwd: getAgentCwd() },
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(t("errors.llmTimeout", { seconds: 90 })));
+        }, LLM_TIMEOUT_MS);
+      }),
+    ]);
+    if (result.status === "error" || !result.result) {
+      throw new Error(
+        t("errors.llmNoResponse", { status: result.status ?? "unknown" }),
+      );
+    }
+    return String(result.result).trim();
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
-  return String(result.result).trim();
 }
 
 export function extractJson<T>(text: string): T | null {

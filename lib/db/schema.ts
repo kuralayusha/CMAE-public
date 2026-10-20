@@ -38,6 +38,8 @@ export const mailMessages = sqliteTable(
     snippet: text("snippet").notNull().default(""),
     bodyText: text("body_text").notNull().default(""),
     headersHash: text("headers_hash"),
+    /** pending = needs tracker derivation; done = already applied */
+    deriveState: text("derive_state").notNull().default("done"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(datetime('now'))`),

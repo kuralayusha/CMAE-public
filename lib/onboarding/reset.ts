@@ -13,13 +13,21 @@ import {
 import { clearUserPack } from "@/lib/i18n/pack";
 import { clearAllResearchJobs } from "@/lib/research/persist";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
+import {
+  cancelTrackerSyncSession,
+  waitForSyncSessionIdle,
+} from "@/lib/tracker/session";
 
 /**
  * Full local wipe — app should behave like a fresh install.
  * Clears DB rows (and tries to delete db files), search jobs, workspace,
  * then verifies onboarding flag is gone.
+ * Cancels any running sync first so it cannot write into the wiped DB.
  */
-export function resetAppForOnboarding(): void {
+export async function resetAppForOnboarding(): Promise<void> {
+  cancelTrackerSyncSession();
+  await waitForSyncSessionIdle(5_000);
+
   clearAllResearchJobs();
   wipeWorkspaceContents();
   try {

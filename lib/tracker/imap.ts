@@ -4,7 +4,6 @@ import { t } from "@/lib/i18n/t";
 import { throwIfSyncCanceled } from "./cancel";
 import {
   getFolderCursor,
-  setFolderCursor,
   type FolderCursor,
 } from "./folder-cursors";
 import { decodeMimeBody, repairUtf8Mojibake } from "./mail-text";
@@ -367,7 +366,11 @@ async function fetchFolder(
   since: Date,
   onProgress?: SyncProgressFn,
   signal?: AbortSignal,
-): Promise<{ mails: FetchedMail[]; strategy: "incremental" | "window" }> {
+): Promise<{
+  mails: FetchedMail[];
+  strategy: "incremental" | "window";
+  cursor: FolderCursor;
+}> {
   throwIfSyncCanceled(signal);
   onProgress?.(
     "curl",
@@ -538,6 +541,7 @@ async function fetchFolder(
       .filter((n) => n > 0);
     const hw =
       connectionDied || !client.usable ? 0 : highWaterUid(client);
+    // Cursor is returned only — caller commits upsert + cursor in one transaction.
     const cursor: FolderCursor = {
       folder,
       mailboxPath: mailbox,
@@ -552,7 +556,6 @@ async function fetchFolder(
           : 0,
       ),
     };
-    setFolderCursor(cursor);
 
     onProgress?.(
       "ok",
@@ -563,7 +566,7 @@ async function fetchFolder(
         uid: cursor.lastUid,
       }),
     );
-    return { mails, strategy };
+    return { mails, strategy, cursor };
   } finally {
     try {
       lock.release();
@@ -592,6 +595,11 @@ export type FetchRecentMailResult = {
   mails: FetchedMail[];
   mode: ImapSyncMode;
   strategies: Partial<Record<MailFolder, "incremental" | "window">>;
+  /** Cursors to commit with upsert (never written during fetch). */
+  cursors: FolderCursor[];
+  /** True when INBOX ok but SENT missing/failed/skipped. */
+  partial: boolean;
+  partialError: string | null;
 };
 
 /**
@@ -631,6 +639,9 @@ export async function fetchRecentMailDirect(
     log?.("ok", t("sync.imapConnected"));
     const strategies: Partial<Record<MailFolder, "incremental" | "window">> =
       {};
+    const cursors: FolderCursor[] = [];
+    let partial = false;
+    let partialError: string | null = null;
 
     const inbox = await fetchFolder(
       client,
@@ -642,16 +653,21 @@ export async function fetchRecentMailDirect(
       signal,
     );
     strategies.INBOX = inbox.strategy;
+    cursors.push(inbox.cursor);
 
     throwIfSyncCanceled(signal);
     let sentMails: FetchedMail[] = [];
     if (!client.usable) {
-      // INBOX fetch killed the socket — skip SENT this round (cursor already advanced)
-      log?.("err", t("sync.sentSkippedDeadConnection"));
+      // INBOX fetch killed the socket — skip SENT this round (INBOX cursor not yet committed)
+      partial = true;
+      partialError = t("sync.sentSkippedDeadConnection");
+      log?.("err", partialError);
     } else {
       const sentPath = await findSpecialMailbox(client, "\\Sent");
       if (!sentPath) {
-        log?.("err", t("sync.sentNotFound"));
+        partial = true;
+        partialError = t("sync.sentNotFound");
+        log?.("err", partialError);
         console.warn(
           "[tracker/imap] Sent mailbox not found (SPECIAL-USE \\Sent)",
         );
@@ -668,10 +684,13 @@ export async function fetchRecentMailDirect(
           );
           sentMails = sent.mails;
           strategies.SENT = sent.strategy;
+          cursors.push(sent.cursor);
         } catch (err) {
           throwIfSyncCanceled(signal);
           const msg = err instanceof Error ? err.message : String(err);
-          log?.("err", t("sync.sentReadFailed", { path: sentPath, msg }));
+          partial = true;
+          partialError = t("sync.sentReadFailed", { path: sentPath, msg });
+          log?.("err", partialError);
           console.warn(
             `[tracker/imap] Sent mailbox fetch failed (${sentPath}):`,
             err,
@@ -684,6 +703,9 @@ export async function fetchRecentMailDirect(
       mails: [...inbox.mails, ...sentMails],
       mode,
       strategies,
+      cursors,
+      partial,
+      partialError,
     };
   },
     signal,
