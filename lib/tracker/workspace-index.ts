@@ -21,10 +21,7 @@ import { emitTrackerLive } from "@/lib/tracker/live";
 import { WS, WS_LEGACY } from "@/lib/workspace/filenames";
 import { contentHashForDraft } from "./gmail-drafts-store";
 import { parseSubjectBody } from "./parse-mail-md";
-import {
-  parseContactRecipientsFromText,
-  type WorkspaceRecipients,
-} from "./recipients";
+import { parseContactRecipientsFromText } from "./recipients";
 import type { DraftKind } from "./types";
 
 export type WorkspaceFileKind =
@@ -494,46 +491,7 @@ export function draftFlagsFromIndex(
   return { hasFollowUpDraft, hasThanksDraft, hasReplyDraft };
 }
 
-export function loadRecipientsFromIndex(
-  workspaceFolder: string | null,
-): WorkspaceRecipients {
-  if (!workspaceFolder) return { recommended: null, candidates: [] };
-  const present = getDb()
-    .select()
-    .from(workspaceFolders)
-    .where(eq(workspaceFolders.folder, workspaceFolder))
-    .get();
-  if (present && !present.present) {
-    return { recommended: null, candidates: [] };
-  }
-
-  const contactNames = [WS.contact, ...WS_LEGACY.contact];
-  for (const name of contactNames) {
-    const row = getDb()
-      .select()
-      .from(workspaceFiles)
-      .where(
-        and(
-          eq(workspaceFiles.folder, workspaceFolder),
-          eq(workspaceFiles.name, name),
-        ),
-      )
-      .get();
-    if (!row?.metaJson) continue;
-    try {
-      const parsed = JSON.parse(row.metaJson) as WorkspaceRecipients;
-      if (parsed && typeof parsed === "object") {
-        return {
-          recommended: parsed.recommended ?? null,
-          candidates: Array.isArray(parsed.candidates) ? parsed.candidates : [],
-        };
-      }
-    } catch {
-      /* continue */
-    }
-  }
-  return { recommended: null, candidates: [] };
-}
+export { loadRecipientsFromIndex } from "./recipients-from-index";
 
 export function isWorkspaceFolderPresent(
   workspaceFolder: string | null,

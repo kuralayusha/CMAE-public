@@ -8,6 +8,7 @@ import fs from "fs";
 import path from "path";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
 import { WS, WS_LEGACY } from "@/lib/workspace/filenames";
+import { loadRecipientsFromIndex } from "./recipients-from-index";
 
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
@@ -176,10 +177,6 @@ export function loadRecipientsForItem(item: {
   workspaceFolder: string | null;
 }): WorkspaceRecipients {
   // Faz 7: index only — never touch disk on list/GET.
-  // Lazy import avoids cycle with workspace-index → parseContactRecipientsFromText.
-  const { loadRecipientsFromIndex } =
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    require("./workspace-index") as typeof import("./workspace-index");
   return loadRecipientsFromIndex(item.workspaceFolder);
 }
 
