@@ -47,11 +47,13 @@ function mapRow(
   },
 ): TrackerListItem {
   const status = row.status as TrackerStatus;
+  // Only real mail counts as activity — draft/prepare/notes must not bump this.
+  // Fallback to createdAt when nothing has been sent or received yet.
   const lastActivityAt =
     [row.lastInboundAt, row.lastOutboundAt]
       .filter(Boolean)
       .sort()
-      .at(-1) || row.updatedAt;
+      .at(-1) || row.createdAt;
 
   const recipients = loadRecipientsForItem(row);
   return {

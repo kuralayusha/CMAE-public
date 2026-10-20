@@ -866,6 +866,24 @@ export async function draftExistsBySubject(
   return keys.some((k) => subjectsMatch(k, needle));
 }
 
+/** Poll Drafts until subject appears (IMAP lag after append). */
+export async function waitForDraftSubject(
+  address: string,
+  appPassword: string,
+  subject: string,
+  opts?: { attempts?: number; delayMs?: number },
+): Promise<boolean> {
+  const attempts = opts?.attempts ?? 5;
+  const delayMs = opts?.delayMs ?? 450;
+  for (let i = 0; i < attempts; i++) {
+    if (await draftExistsBySubject(address, appPassword, subject)) return true;
+    if (i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  return false;
+}
+
 export function draftSubjectMatchesAny(
   subject: string,
   draftKeys: string[],

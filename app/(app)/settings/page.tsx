@@ -44,6 +44,7 @@ type CvItem = {
   fileName: string;
   label: string;
   language: string;
+  family: string;
   tags: string[];
   isDefault: boolean;
   hasText: boolean;
@@ -267,7 +268,13 @@ export default function SettingsPage() {
 
   async function patchCv(
     id: string,
-    patch: Partial<{ label: string; language: string; tags: string[]; isDefault: boolean }>,
+    patch: Partial<{
+      label: string;
+      language: string;
+      family: string;
+      tags: string[];
+      isDefault: boolean;
+    }>,
   ) {
     if (formLocked) return;
     setBusy(true);
@@ -683,6 +690,23 @@ export default function SettingsPage() {
                             </option>
                           ))}
                         </select>
+                      </Field>
+                      <Field
+                        label={t("fields.cvFamily")}
+                        hint={t("fields.cvFamilyHint")}
+                      >
+                        <input
+                          className="cmae-input"
+                          defaultValue={cv.family || ""}
+                          disabled={busy || formLocked}
+                          placeholder={t("fields.cvFamilyPlaceholder")}
+                          onBlur={(e) => {
+                            const family = e.target.value.trim();
+                            if (family !== (cv.family || "")) {
+                              void patchCv(cv.id, { family });
+                            }
+                          }}
+                        />
                       </Field>
                       <Field label={t("fields.cvTags")} hint={t("fields.cvTagsHint")}>
                         <input

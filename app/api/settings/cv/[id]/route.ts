@@ -30,12 +30,14 @@ export async function PATCH(
     const body = (await req.json().catch(() => ({}))) as {
       label?: string;
       language?: string;
+      family?: string;
       tags?: string[];
       isDefault?: boolean;
     };
     const entry = updateCvMeta(id, {
       label: body.label,
       language: body.language,
+      family: body.family,
       tags: body.tags,
       isDefault: body.isDefault,
     });

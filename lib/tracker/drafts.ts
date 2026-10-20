@@ -13,6 +13,7 @@ import {
   appendDraft,
   draftExistsBySubject,
   gmailDraftsFolderUrl,
+  waitForDraftSubject,
 } from "./imap";
 import { assertItemActiveForDrafts } from "./inactive";
 import {
@@ -26,6 +27,31 @@ import {
 } from "./pending-draft";
 import { replySubject, resolveThreadReplyTarget } from "./reply-thread";
 import type { DraftKind } from "./types";
+
+function markPendingOnItem(
+  item: typeof trackerItems.$inferSelect,
+  kind: DraftKind,
+  subject: string,
+  draftsUrl: string,
+  at?: string,
+): void {
+  const patch: Partial<typeof trackerItems.$inferInsert> = {
+    notesJson: withPendingGmailDraft(item.notesJson, {
+      kind,
+      at: at || new Date().toISOString(),
+      subject,
+      draftsUrl,
+    }),
+  };
+  if (kind === "follow_up") patch.hasFollowUpDraft = 0;
+  if (kind === "thanks") patch.hasThanksDraft = 0;
+  if (kind === "reply") patch.hasReplyDraft = 0;
+  getDb()
+    .update(trackerItems)
+    .set(patch)
+    .where(eq(trackerItems.id, item.id))
+    .run();
+}
 
 function folderPathForItem(item: {
   workspaceFolder: string | null;
@@ -157,37 +183,29 @@ export async function createGmailDraftForItem(
 
   const draftsUrl = gmailDraftsFolderUrl(creds.address);
 
-  if (opts?.ensure) {
-    const exists = await draftExistsBySubject(
-      creds.address,
-      creds.appPassword,
+  // Source of truth: live Gmail Drafts. Never duplicate; clock only after match.
+  const alreadyThere = await draftExistsBySubject(
+    creds.address,
+    creds.appPassword,
+    content.subject,
+  );
+  if (alreadyThere) {
+    markPendingOnItem(
+      item,
+      kind,
       content.subject,
+      draftsUrl,
+      pending?.at,
     );
-    if (exists) {
-      if (kind === "follow_up" || kind === "thanks" || kind === "reply") {
-        db.update(trackerItems)
-          .set({
-            notesJson: withPendingGmailDraft(item.notesJson, {
-              kind,
-              at: pending?.at || new Date().toISOString(),
-              subject: content.subject,
-              draftsUrl,
-            }),
-            updatedAt: new Date().toISOString(),
-          })
-          .where(eq(trackerItems.id, itemId))
-          .run();
-      }
-      return {
-        gmailUrl: draftsUrl,
-        subject: content.subject,
-        to: content.to,
-        reused: true,
-      };
-    }
-    // Missing in Drafts — fall through and recreate from workspace .md
+    return {
+      gmailUrl: draftsUrl,
+      subject: content.subject,
+      to: content.to,
+      reused: true,
+    };
   }
 
+  // Missing in Drafts — append, then confirm before marking pending/clock.
   let attachedCv: string | null = null;
   let cvWarning: string | null = null;
   const attachments =
@@ -226,23 +244,17 @@ export async function createGmailDraftForItem(
     attachments,
   });
 
-  // Gmail Drafts ≠ sent: keep status / followUpCount until SENT sync.
-  const patch: Partial<typeof trackerItems.$inferInsert> = {
-    updatedAt: new Date().toISOString(),
-  };
-  if (kind === "follow_up" || kind === "thanks" || kind === "reply") {
-    patch.notesJson = withPendingGmailDraft(item.notesJson, {
-      kind,
-      at: new Date().toISOString(),
-      subject: content.subject,
-      draftsUrl: result.draftsUrl,
-    });
-    if (kind === "follow_up") patch.hasFollowUpDraft = 0;
-    if (kind === "thanks") patch.hasThanksDraft = 0;
-    if (kind === "reply") patch.hasReplyDraft = 0;
+  const visible = await waitForDraftSubject(
+    creds.address,
+    creds.appPassword,
+    content.subject,
+  );
+  if (!visible) {
+    throw new Error(t("tracker.error.gmailDraftNotInFolder"));
   }
 
-  db.update(trackerItems).set(patch).where(eq(trackerItems.id, itemId)).run();
+  // Gmail Drafts ≠ sent: keep status until SENT sync. Clock from live match only.
+  markPendingOnItem(item, kind, content.subject, result.draftsUrl);
 
   return {
     gmailUrl: result.draftsUrl,

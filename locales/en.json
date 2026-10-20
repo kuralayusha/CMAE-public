@@ -85,8 +85,11 @@
     "cvLabel": "Label",
     "cvLanguage": "Language",
     "cvLanguageAria": "CV language",
+    "cvFamily": "Family",
+    "cvFamilyHint": "Same id for language variants of one CV (e.g. general). Leave empty if this file is its own role.",
+    "cvFamilyPlaceholder": "e.g. general, frontend",
     "cvTags": "Tags (comma-separated)",
-    "cvTagsHint": "e.g. marketing, frontend",
+    "cvTagsHint": "Role keywords matched to the job title — e.g. odoo, frontend. Position match beats language.",
     "uploadPdf": "Upload PDF"
   },
   "cvDropzone": {
@@ -318,6 +321,7 @@
       "startSync": "Could not start sync",
       "prepare": "Prepare failed",
       "gmailDraft": "Could not create Gmail draft",
+      "gmailDraftNotInFolder": "Could not confirm the message in Gmail Drafts — open Drafts or try again",
       "inactive": "Cannot prepare mail for inactive applications",
       "invalidId": "Invalid application id",
       "invalidKind": "Invalid draft kind",
@@ -455,7 +459,7 @@
       "draftReply": "Reply Gmail draft",
       "prepareThanks": "Prepare thanks",
       "draftThanks": "Thanks Gmail draft",
-      "pendingSend": "Open in Gmail Drafts — send it yourself, then sync",
+      "pendingSend": "Open in Gmail Drafts",
       "pendingRecreating": "Draft missing — recreating from your saved template…"
     },
     "pendingDraft": {
@@ -536,7 +540,7 @@
       "multiple": "Gmail sync, research, or draft preparation"
     },
     "jobWhy": "Work type and notice period can appear in application and follow-up text. Salary is only mentioned in replies when the employer asks.",
-    "cvHint": "Up to {max} PDFs. Drop a file into the area below or click to browse — drafts pick the best match by language and tags.",
+    "cvHint": "Up to {max} PDFs. Drafts pick by role tags first, then language within a family (same family = language variants of one CV).",
     "cvEmpty": "No CVs yet.",
     "cvLimit": "Limit reached ({max}). Delete one to add another.",
     "cvAdded": "CV added: {name}",

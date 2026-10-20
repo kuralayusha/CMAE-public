@@ -21,7 +21,8 @@
     },
     "action": {
       "more": "İşlemler",
-      "waiting": "Beklemede"
+      "waiting": "Beklemede",
+      "pendingSend": "Gmail Taslaklar'da aç"
     },
     "sentiment": {
       "positive": "olumlu",
@@ -67,6 +68,13 @@
     },
     "error": {
       "opsBusy": "Gmail senkronizasyonu, araştırma veya taslak hazırlama çalışırken ayarlar değiştirilemez"
-    }
+    },
+    "cvHint": "En fazla {max} PDF. Taslaklar önce rol etiketine, sonra aile içindeki dile göre seçer (aynı aile = bir CV’nin dil varyantları)."
+  },
+  "fields": {
+    "cvFamily": "Aile",
+    "cvFamilyHint": "Aynı CV’nin dil varyantları için aynı id (ör. general). Bu dosya ayrı bir rolse boş bırak.",
+    "cvFamilyPlaceholder": "ör. general, frontend",
+    "cvTagsHint": "İlan başlığıyla eşleşen rol kelimeleri — ör. odoo, frontend. Pozisyon eşleşmesi dili ezer."
   }
 }

@@ -185,7 +185,7 @@ type TrackerItem = {
   gmailUrls?: string[];
   waitingUntil?: string | null;
   pendingGmailDraft?: {
-    kind: "follow_up" | "thanks" | "reply";
+    kind: "application" | "follow_up" | "thanks" | "reply";
     at: string;
     subject: string;
     draftsUrl?: string;
@@ -954,7 +954,6 @@ export function TrackerList() {
     const key = `${item.id}:draft:${kind}`;
     setBusyId(key);
     setError(null);
-    const popup = openTabForAsyncUrl();
     try {
       const res = await fetch(`/api/tracker/${item.id}/draft`, {
         method: "POST",
@@ -963,23 +962,17 @@ export function TrackerList() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("tracker.error.gmailDraft"));
+      // Stay in Tracker — Gmail opens only when the user clicks the clock.
       const bits = [
-        kind === "application"
-          ? t("tracker.toast.gmailDraft", { subject: data.subject })
-          : t("tracker.toast.gmailDraftPending", { subject: data.subject }),
+        t("tracker.toast.gmailDraftPending", { subject: data.subject }),
       ];
       if (data.attachedCv) {
         bits.push(t("tracker.toast.attachment", { name: data.attachedCv }));
       }
       if (data.cvWarning) bits.push(String(data.cvWarning));
-      const opened = await navigateOpenedTab(popup, data.gmailUrl);
-      if (!opened && data.gmailUrl) {
-        bits.push(t("tracker.pendingDraft.popupBlocked"));
-      }
       setToast(bits.join(" · "));
       await load();
     } catch (err) {
-      popup?.close();
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyId(null);

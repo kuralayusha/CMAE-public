@@ -331,13 +331,14 @@ ${toWrite}
     }
   }
 
-  const patch: Partial<typeof trackerItems.$inferInsert> = {
-    updatedAt: new Date().toISOString(),
-  };
+  // Prepare writes .md only — not activity; lastActivityAt uses mail timestamps.
+  const patch: Partial<typeof trackerItems.$inferInsert> = {};
   if (kind === "follow_up") patch.hasFollowUpDraft = 1;
   if (kind === "thanks") patch.hasThanksDraft = 1;
   if (kind === "reply") patch.hasReplyDraft = 1;
-  db.update(trackerItems).set(patch).where(eq(trackerItems.id, itemId)).run();
+  if (Object.keys(patch).length) {
+    db.update(trackerItems).set(patch).where(eq(trackerItems.id, itemId)).run();
+  }
 
   const workspaceFolder =
     db

@@ -205,9 +205,11 @@ export async function rankEmailsWithAi(
   companyName: string,
   items: { email: string; page: string; pageRole?: string }[],
   targetUrl?: string,
+  preferredLang = "en",
 ): Promise<RankedEmail[]> {
   if (!items.length) return [];
 
+  const pref = preferredLang.trim() || "en";
   const allowed = new Set(items.map((e) => e.email.toLowerCase()));
   const list = items
     .map(
@@ -228,6 +230,7 @@ ${list}
 Prefer (in order): recruiting/HR/careers mailbox → role-relevant team → general company contact.
 Deprioritize: noreply, newsletter, privacy, support ticket bots, personal random if clearly unrelated.
 HARD RULE: Rank only from the candidate list above. Do not invent addresses for a different employer/domain. The outreach target is the entity at Target URL, not companies merely mentioned on the page.
+CRITICAL LANGUAGE RULE: Write every "reason" in preferred language code "${pref}" (natural tone for that language). Do not write reasons in English unless "${pref}" is English.
 
 Return ONLY JSON:
 {
@@ -237,7 +240,7 @@ Return ONLY JSON:
       "page": "",
       "role": "careers|hr|contact|info|other",
       "priority": 1,
-      "reason": "English one-liner"
+      "reason": "one-liner why this address, in language ${pref}"
     }
   ]
 }`,

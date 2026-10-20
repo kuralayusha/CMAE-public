@@ -32,6 +32,7 @@ export async function runContact(ctx: RunContext) {
     ctx.companyName || "Company",
     hits,
     ctx.url,
+    ctx.user.preferredLang || "en",
   );
   ctx.emails = [
     ...new Map(ranked.map((e) => [e.email.toLowerCase(), e])).values(),

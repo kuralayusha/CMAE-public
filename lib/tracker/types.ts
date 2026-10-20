@@ -74,7 +74,7 @@ export type TrackerItemRow = {
 };
 
 export type PendingGmailDraftInfo = {
-  kind: Exclude<DraftKind, "application">;
+  kind: DraftKind;
   at: string;
   subject: string;
   draftsUrl?: string;

@@ -50,6 +50,7 @@ export async function POST(req: Request) {
 
     const language = String(form.get("language") || "en");
     const label = String(form.get("label") || "").trim() || undefined;
+    const family = String(form.get("family") || "").trim() || undefined;
     const tagsRaw = String(form.get("tags") || "");
     const tags = tagsRaw
       .split(/[,;]+/)
@@ -61,6 +62,7 @@ export async function POST(req: Request) {
     const entry = await addCvFromBuffer(buffer, file.name, {
       label,
       language,
+      family,
       tags,
       isDefault,
     });

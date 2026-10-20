@@ -11,6 +11,12 @@ export type CvEntry = {
   fileName: string;
   label: string;
   language: string;
+  /**
+   * Groups language variants of the same CV (e.g. "general").
+   * Empty/missing ⇒ each file is its own family (id).
+   */
+  family: string;
+  /** Role/position keywords matched against the job title */
   tags: string[];
   isDefault: boolean;
   /** Parsed plain text for agents */
@@ -86,17 +92,31 @@ function writeIndex(index: CvIndex): void {
   fs.writeFileSync(indexPath(), `${JSON.stringify(index, null, 2)}\n`, "utf8");
 }
 
-function toPublic(e: CvEntry): CvPublic {
+function normalizeEntry(e: CvEntry): CvEntry {
   return {
-    id: e.id,
-    fileName: e.fileName,
-    label: e.label,
-    language: e.language,
-    tags: e.tags,
-    isDefault: e.isDefault,
-    updatedAt: e.updatedAt,
-    hasText: Boolean(e.text?.trim()),
-    textPreview: (e.text || "").slice(0, 240),
+    ...e,
+    family: normalizeFamily(e.family),
+    tags: Array.isArray(e.tags) ? e.tags : [],
+    language: langKey(e.language) || "en",
+    isDefault: Boolean(e.isDefault),
+    text: typeof e.text === "string" ? e.text : "",
+    label: e.label || e.fileName,
+  };
+}
+
+function toPublic(e: CvEntry): CvPublic {
+  const n = normalizeEntry(e);
+  return {
+    id: n.id,
+    fileName: n.fileName,
+    label: n.label,
+    language: n.language,
+    family: n.family,
+    tags: n.tags,
+    isDefault: n.isDefault,
+    updatedAt: n.updatedAt,
+    hasText: Boolean(n.text?.trim()),
+    textPreview: (n.text || "").slice(0, 240),
   };
 }
 
@@ -114,7 +134,7 @@ export function syncCvLibrary(): CvEntry[] {
   for (const fileName of files) {
     const existing = byFile.get(fileName.toLowerCase());
     if (existing) {
-      next.push({ ...existing, fileName });
+      next.push(normalizeEntry({ ...existing, fileName }));
       continue;
     }
     // New file dropped into folder — text parsed lazily on pick/upload
@@ -123,6 +143,7 @@ export function syncCvLibrary(): CvEntry[] {
       fileName,
       label: path.basename(fileName, ".pdf"),
       language: "en",
+      family: "",
       tags: [],
       isDefault: false,
       text: "",
@@ -173,6 +194,7 @@ export async function addCvFromBuffer(
   meta?: {
     label?: string;
     language?: string;
+    family?: string;
     tags?: string[];
     isDefault?: boolean;
   },
@@ -207,6 +229,7 @@ export async function addCvFromBuffer(
     fileName,
     label: meta?.label?.trim() || path.basename(originalName, ".pdf"),
     language: (meta?.language || "en").toLowerCase().slice(0, 8),
+    family: normalizeFamily(meta?.family),
     tags: normalizeTags(meta?.tags || []),
     isDefault: makeDefault,
     text,
@@ -222,6 +245,7 @@ export function updateCvMeta(
   patch: {
     label?: string;
     language?: string;
+    family?: string;
     tags?: string[];
     isDefault?: boolean;
   },
@@ -236,6 +260,7 @@ export function updateCvMeta(
   if (patch.language !== undefined) {
     cur.language = patch.language.toLowerCase().slice(0, 8) || cur.language;
   }
+  if (patch.family !== undefined) cur.family = normalizeFamily(patch.family);
   if (patch.tags !== undefined) cur.tags = normalizeTags(patch.tags);
   if (patch.isDefault === true) {
     next = next.map((e) => ({ ...e, isDefault: e.id === id }));
@@ -295,6 +320,15 @@ function normalizeTags(tags: string[]): string[] {
   return out;
 }
 
+function normalizeFamily(family: string | null | undefined): string {
+  return String(family || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "")
+    .slice(0, 48);
+}
+
 function langKey(code: string | null | undefined): string {
   return String(code || "")
     .trim()
@@ -302,8 +336,47 @@ function langKey(code: string | null | undefined): string {
     .split(/[-_]/)[0] || "";
 }
 
+function familyKey(entry: CvEntry): string {
+  return normalizeFamily(entry.family) || entry.id;
+}
+
+/** How well CV role tags match the job position title. */
+function positionScore(entry: CvEntry, positionBlob: string): number {
+  if (!positionBlob || !entry.tags?.length) return 0;
+  let n = 0;
+  for (const tag of entry.tags) {
+    if (tag && positionBlob.includes(tag)) n += 1;
+  }
+  return n;
+}
+
+/** 2 = site language, 1 = preferred language, 0 = other. */
+function languageRank(
+  entry: CvEntry,
+  siteLang: string,
+  preferredLang: string,
+): number {
+  const lang = langKey(entry.language);
+  if (siteLang && lang === siteLang) return 2;
+  if (preferredLang && lang === preferredLang) return 1;
+  return 0;
+}
+
+function compareCvPick(
+  a: { e: CvEntry; pos: number; lang: number },
+  b: { e: CvEntry; pos: number; lang: number },
+): number {
+  if (b.pos !== a.pos) return b.pos - a.pos;
+  if (b.lang !== a.lang) return b.lang - a.lang;
+  if (a.e.isDefault !== b.e.isDefault) return a.e.isDefault ? -1 : 1;
+  return a.e.label.localeCompare(b.e.label);
+}
+
 /**
- * Pick best CV by language then position/tag overlap.
+ * Pick best CV:
+ * 1) Prefer families whose tags match the job position (position beats language).
+ * 2) Within the winning family, prefer site language → preferred → default.
+ * Same-CV language variants should share a `family` id in Settings.
  */
 export async function pickBestCv(opts: {
   language?: string | null;
@@ -317,29 +390,56 @@ export async function pickBestCv(opts: {
   // Fill missing text for scoring agents (attachment only needs PDF)
   entries = await Promise.all(entries.map((e) => ensureEntryText(e)));
 
-  const target = langKey(opts.language);
-  const preferred = langKey(opts.preferredLanguage);
-  const blob = `${opts.position || ""}`.toLowerCase();
+  const siteLang = langKey(opts.language);
+  const preferredLang = langKey(opts.preferredLanguage);
+  const positionBlob = `${opts.position || ""}`.toLowerCase();
 
-  const scored = entries.map((e) => {
-    let score = 0;
-    const lang = langKey(e.language);
-    if (target && lang === target) score += 100;
-    else if (preferred && lang === preferred) score += 40;
-    if (e.isDefault) score += 10;
-    for (const tag of e.tags) {
-      if (tag && blob.includes(tag)) score += 20;
+  const scored = entries.map((e) => ({
+    e,
+    pos: positionScore(e, positionBlob),
+    lang: languageRank(e, siteLang, preferredLang),
+    fam: familyKey(e),
+  }));
+
+  // Best family = highest position match; then best language available in family
+  type FamAgg = {
+    key: string;
+    pos: number;
+    lang: number;
+    hasDefault: boolean;
+    label: string;
+  };
+  const families = new Map<string, FamAgg>();
+  for (const row of scored) {
+    const prev = families.get(row.fam);
+    if (!prev) {
+      families.set(row.fam, {
+        key: row.fam,
+        pos: row.pos,
+        lang: row.lang,
+        hasDefault: row.e.isDefault,
+        label: row.e.label,
+      });
+      continue;
     }
-    return { e, score };
-  });
+    if (row.pos > prev.pos) prev.pos = row.pos;
+    if (row.lang > prev.lang) prev.lang = row.lang;
+    if (row.e.isDefault) prev.hasDefault = true;
+    if (row.e.label.localeCompare(prev.label) < 0) prev.label = row.e.label;
+  }
 
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    if (a.e.isDefault !== b.e.isDefault) return a.e.isDefault ? -1 : 1;
-    return a.e.label.localeCompare(b.e.label);
-  });
+  const bestFam = [...families.values()].sort((a, b) => {
+    if (b.pos !== a.pos) return b.pos - a.pos;
+    if (b.lang !== a.lang) return b.lang - a.lang;
+    if (a.hasDefault !== b.hasDefault) return a.hasDefault ? -1 : 1;
+    return a.label.localeCompare(b.label);
+  })[0]!;
 
-  const best = scored[0]!.e;
+  const inFamily = scored
+    .filter((r) => r.fam === bestFam.key)
+    .sort(compareCvPick);
+
+  const best = inFamily[0]!.e;
   const absolutePath = path.join(cvsDir(), best.fileName);
   if (!fs.existsSync(absolutePath)) return null;
   const buffer = fs.readFileSync(absolutePath);
@@ -376,6 +476,7 @@ export function detectSiteLanguageFromFolder(
     "ozet.md",
     "email_original.md",
     "email_site_language.md",
+    "routes.md",
   ];
   for (const name of tryFiles) {
     const full = path.join(/*turbopackIgnore: true*/ folderPath, name);
@@ -385,8 +486,11 @@ export function detectSiteLanguageFromFolder(
         .readFileSync(/*turbopackIgnore: true*/ full, "utf8")
         .slice(0, 2000);
       const m =
+        text.match(/Site language:\s*([a-zA-Z]{2,8})/i) ||
+        text.match(/site language\s*\(([^)]+)\)/i) ||
         text.match(/Site dili:\s*([a-zA-Z]{2,8})/i) ||
         text.match(/site dili\s*\(([^)]+)\)/i) ||
+        text.match(/Language:\s*([a-zA-Z]{2,8})/i) ||
         text.match(/dil[≈~=]\s*([a-zA-Z]{2,8})/i);
       if (m?.[1]) return langKey(m[1]);
     } catch {
