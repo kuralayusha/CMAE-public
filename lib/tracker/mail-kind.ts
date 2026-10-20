@@ -23,6 +23,7 @@ export const MAIL_INTENTS = [
   "click_action",
   "optional_portal",
   "non_job",
+  "bounce",
   "unknown",
 ] as const;
 
@@ -117,6 +118,7 @@ export function mergeMailIntent(
   };
 
   return (
+    pick("bounce") ||
     pick("rejection") ||
     pick("ooo") ||
     pick("click_action") ||

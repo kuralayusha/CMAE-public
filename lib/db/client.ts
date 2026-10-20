@@ -91,10 +91,21 @@ export function wipeDatabaseContents() {
     INSERT INTO app_meta (key, value) VALUES ('account_id', '');
     INSERT INTO app_meta (key, value) VALUES ('maintenance_until', '');
   `);
-  try {
-    sqlite.exec(`DELETE FROM sync_jobs`);
-  } catch {
-    /* table may not exist on very old DBs mid-upgrade */
+  for (const table of [
+    "sync_jobs",
+    "mail_assignments",
+    "mail_unassigned",
+    "mail_intents",
+    "merge_proposals",
+    "item_lineage",
+    "mail_sources",
+    "mail_fetch_failures",
+  ]) {
+    try {
+      sqlite.exec(`DELETE FROM ${table}`);
+    } catch {
+      /* table may not exist mid-upgrade */
+    }
   }
   try {
     sqlite.pragma("wal_checkpoint(TRUNCATE)");

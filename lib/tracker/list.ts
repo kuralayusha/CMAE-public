@@ -1,12 +1,14 @@
 import { inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import {
+  mailAssignments,
   mailMessages,
   trackerItemMails,
   trackerItems,
 } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
+import { effective, factsFromItemRow } from "./derive/effective";
 import { buildGmailThreadUrls } from "./gmail-links";
 import {
   parsePendingGmailDraft,
@@ -27,7 +29,11 @@ function statusTitle(status: TrackerStatus): string {
   return t(`tracker.section.${status}`);
 }
 
-function parseWaitingUntil(notesJson: string | null): string | null {
+function parseWaitingUntil(
+  notesJson: string | null,
+  columnWaitingUntil: string | null,
+): string | null {
+  if (columnWaitingUntil) return columnWaitingUntil.slice(0, 10);
   if (!notesJson) return null;
   try {
     const parsed = JSON.parse(notesJson) as { waitingUntil?: string | null };
@@ -45,8 +51,20 @@ function mapRow(
     hasThanksDraft: boolean;
     hasReplyDraft: boolean;
   },
+  followUpDays: number,
+  nowMs?: number,
 ): TrackerListItem {
-  const status = row.status as TrackerStatus;
+  // Computed-on-read: follow-up / OOO transitions without waiting for sync.
+  const facts = factsFromItemRow(row);
+  const userState =
+    row.userState || (row.status === "inactive" ? "inactive" : "active");
+  const resolved = effective({
+    facts,
+    userState,
+    followUpDays,
+    now: nowMs,
+  });
+  const status = resolved.status;
   // Only real mail counts as activity — draft/prepare/notes must not bump this.
   // Fallback to createdAt when nothing has been sent or received yet.
   const lastActivityAt =
@@ -61,16 +79,19 @@ function mapRow(
     company: row.company,
     position: row.position,
     status,
-    sentiment: (row.sentiment as TrackerSentiment | null) || null,
-    waitingOn: (row.waitingOn as WaitingOn | null) || null,
+    sentiment:
+      (resolved.sentiment as TrackerSentiment | null) ||
+      (row.sentiment as TrackerSentiment | null) ||
+      null,
+    waitingOn: (resolved.waitingOn as WaitingOn | null) || null,
     followUpCount: row.followUpCount,
     lastOutboundAt: row.lastOutboundAt,
     lastInboundAt: row.lastInboundAt,
-    nextFollowUpAt: row.nextFollowUpAt,
-    ignored: Boolean(row.ignored),
+    nextFollowUpAt: resolved.nextFollowUpAt,
+    ignored: resolved.ignored,
     workspaceFolder: row.workspaceFolder,
     researchJobId: row.researchJobId,
-    primaryTo: row.primaryTo,
+    primaryTo: row.selectedRecipient || row.primaryTo,
     notesJson: row.notesJson,
     hasFollowUpDraft: flags.hasFollowUpDraft,
     hasThanksDraft: flags.hasThanksDraft,
@@ -80,7 +101,7 @@ function mapRow(
     lastActivityAt,
     statusLabel: statusTitle(status),
     gmailUrls,
-    waitingUntil: parseWaitingUntil(row.notesJson),
+    waitingUntil: parseWaitingUntil(row.notesJson, row.waitingUntil),
     pendingGmailDraft: parsePendingGmailDraft(row.notesJson),
     recipientOptions: recipients.candidates,
     recommendedTo: recipients.recommended,
@@ -89,7 +110,13 @@ function mapRow(
 
 function gmailUrlsByItemId(): Map<number, string[]> {
   const db = getDb();
-  const links = db.select().from(trackerItemMails).all();
+  const assigns = db.select().from(mailAssignments).all();
+  const legacy = assigns.length
+    ? []
+    : db.select().from(trackerItemMails).all();
+  const links = assigns.length
+    ? assigns.map((a) => ({ itemId: a.itemId, mailId: a.mailId }))
+    : legacy.map((l) => ({ itemId: l.itemId, mailId: l.mailId }));
   if (!links.length) return new Map();
 
   const mailIds = [...new Set(links.map((l) => l.mailId))];
@@ -144,21 +171,29 @@ function sortWithinSection(a: TrackerListItem, b: TrackerListItem): number {
   return tb.localeCompare(ta);
 }
 
-export function listTrackerSections(): {
+export function listTrackerSections(opts?: { now?: number }): {
   sections: TrackerSection[];
   sync: ReturnType<typeof getSyncState>;
   total: number;
 } {
   const db = getDb();
   const urlsMap = gmailUrlsByItemId();
+  const followUpDays = getSettingsRow()?.followUpDays ?? 5;
   const rows = db
     .select()
     .from(trackerItems)
     .all()
+    .filter((row) => !row.deletedAt)
     .map((row) => {
       // Read-only: never persist flag repairs on GET.
       const flags = reconcileDraftFlagsForRow(row, { persist: false });
-      return mapRow(row, urlsMap.get(row.id) || [], flags);
+      return mapRow(
+        row,
+        urlsMap.get(row.id) || [],
+        flags,
+        followUpDays,
+        opts?.now,
+      );
     });
   const byStatus = new Map<TrackerStatus, TrackerListItem[]>();
   for (const s of STATUS_ORDER) byStatus.set(s, []);

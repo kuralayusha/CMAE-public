@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -108,6 +109,7 @@ export const trackerItems = sqliteTable("tracker_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   company: text("company").notNull(),
   position: text("position"),
+  /** Cached status for legacy readers; list uses effective() on read. */
   status: text("status").notNull().default("ready_to_send"),
   sentiment: text("sentiment"), // positive | negative | neutral
   waitingOn: text("waiting_on"), // us | them | null
@@ -123,6 +125,22 @@ export const trackerItems = sqliteTable("tracker_items", {
   hasFollowUpDraft: integer("has_follow_up_draft").notNull().default(0),
   hasThanksDraft: integer("has_thanks_draft").notNull().default(0),
   hasReplyDraft: integer("has_reply_draft").notNull().default(0),
+  /** active | inactive | dismissed — user overlay; derivation never writes */
+  userState: text("user_state").notNull().default("active"),
+  selectedRecipient: text("selected_recipient"),
+  userVersion: integer("user_version").notNull().default(1),
+  aiStatus: text("ai_status"),
+  lastMeaningfulInboundAt: text("last_meaningful_inbound_at"),
+  waitingUntil: text("waiting_until"),
+  lastIntent: text("last_intent"),
+  flagsJson: text("flags_json"),
+  needsClassification: integer("needs_classification").notNull().default(0),
+  derivedVersion: integer("derived_version").notNull().default(1),
+  derivedAt: text("derived_at"),
+  originResearchJobId: text("origin_research_job_id"),
+  deletedAt: text("deleted_at"),
+  deletedReason: text("deleted_reason"),
+  mergedIntoId: integer("merged_into_id"),
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -131,6 +149,7 @@ export const trackerItems = sqliteTable("tracker_items", {
     .default(sql`(datetime('now'))`),
 });
 
+/** Legacy junction — dual-written with mail_assignments in Faz 4. */
 export const trackerItemMails = sqliteTable(
   "tracker_item_mails",
   {
@@ -145,6 +164,65 @@ export const trackerItemMails = sqliteTable(
   },
   (t) => [uniqueIndex("tracker_item_mails_uq").on(t.itemId, t.mailId)],
 );
+
+/** One mail → at most one item (replaces multi-link tracker_item_mails). */
+export const mailAssignments = sqliteTable("mail_assignments", {
+  mailId: integer("mail_id")
+    .primaryKey()
+    .references(() => mailMessages.id, { onDelete: "cascade" }),
+  itemId: integer("item_id")
+    .notNull()
+    .references(() => trackerItems.id),
+  source: text("source").notNull(),
+  confidence: real("confidence"),
+  locked: integer("locked").notNull().default(0),
+  assignedRev: integer("assigned_rev").notNull().default(0),
+});
+
+export const mailUnassigned = sqliteTable("mail_unassigned", {
+  mailId: integer("mail_id")
+    .primaryKey()
+    .references(() => mailMessages.id, { onDelete: "cascade" }),
+  reason: text("reason").notNull(),
+  since: text("since").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+});
+
+export const mailIntents = sqliteTable("mail_intents", {
+  mailId: integer("mail_id")
+    .primaryKey()
+    .references(() => mailMessages.id, { onDelete: "cascade" }),
+  intent: text("intent").notNull(),
+  waitingUntil: text("waiting_until"),
+  confidence: real("confidence"),
+  source: text("source").notNull(),
+  model: text("model").notNull(),
+  promptVersion: integer("prompt_version").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const mergeProposals = sqliteTable("merge_proposals", {
+  id: text("id").primaryKey(),
+  winnerId: integer("winner_id")
+    .notNull()
+    .references(() => trackerItems.id),
+  loserId: integer("loser_id")
+    .notNull()
+    .references(() => trackerItems.id),
+  origin: text("origin").notNull(),
+  conflictsJson: text("conflicts_json").notNull(),
+  state: text("state").notNull(),
+  createdRev: integer("created_rev").notNull(),
+  createdAt: text("created_at").notNull(),
+  resolvedAt: text("resolved_at"),
+});
+
+export const itemLineage = sqliteTable("item_lineage", {
+  oldId: integer("old_id").notNull(),
+  newId: integer("new_id").notNull(),
+  kind: text("kind").notNull(),
+  at: text("at").notNull(),
+});
 
 export const syncState = sqliteTable("sync_state", {
   id: integer("id").primaryKey().default(1),

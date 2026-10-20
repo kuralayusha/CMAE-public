@@ -220,6 +220,49 @@ export function computeTrackerFreshness(now = new Date()): TrackerFreshness {
   const ageMs = now.getTime() - Date.parse(dataAsOf);
   const mins = formatRelativeMinutes(dataAsOf, now) ?? 0;
 
+  // Faz 4: visible degrade when classify / unassigned / merge queues are non-empty.
+  try {
+    const db = getSqlite();
+    const mergePending = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM merge_proposals WHERE state = 'pending'`,
+      )
+      .get() as { n: number } | undefined;
+    if ((mergePending?.n || 0) > 0) {
+      return {
+        state: "merge_pending",
+        dataAsOf,
+        lastErrorKind: null,
+        lastErrorMessage: null,
+        activeIntervalMs: intervalMs,
+        messageKey: "tracker.freshness.mergePending",
+        messageParams: { count: mergePending!.n },
+      };
+    }
+    const needsClass = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM mail_messages WHERE derive_state = 'needs_classification'`,
+      )
+      .get() as { n: number } | undefined;
+    const unassigned = db
+      .prepare(`SELECT COUNT(*) AS n FROM mail_unassigned`)
+      .get() as { n: number } | undefined;
+    const degraded = (needsClass?.n || 0) + (unassigned?.n || 0);
+    if (degraded > 0) {
+      return {
+        state: "ai_degraded",
+        dataAsOf,
+        lastErrorKind: null,
+        lastErrorMessage: null,
+        activeIntervalMs: intervalMs,
+        messageKey: "tracker.freshness.aiDegraded",
+        messageParams: { count: degraded },
+      };
+    }
+  } catch {
+    /* tables may not exist mid-upgrade */
+  }
+
   if (!Number.isFinite(ageMs) || ageMs > VERY_STALE_MS) {
     return {
       state: "stale",

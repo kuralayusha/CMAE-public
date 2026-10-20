@@ -31,7 +31,7 @@ import {
   emailDomain,
   parseEmailAddr,
 } from "./identity";
-import { collapseInactiveActiveTwins } from "./inactive";
+import { suggestTwinMerges } from "./derive/merge-suggestions";
 import {
   parsePendingGmailDraft,
   shouldClearPendingGmailDraft,
@@ -39,8 +39,11 @@ import {
 import { isNonJobMail, normalizeMailText } from "./signals";
 import { resolveStatus } from "./status";
 import type { SyncProgressFn } from "./types";
-/** Above this, fall back to full rebuild (too many to patch safely). */
-export const INCREMENTAL_PATCH_MAX = 25;
+/**
+ * @deprecated Faz 4: normal sync always uses derivePendingMails (chunks of 200).
+ * Kept so older imports compile; run.ts no longer uses this threshold.
+ */
+export const INCREMENTAL_PATCH_MAX = Number.POSITIVE_INFINITY;
 
 function countFollowUps(
   mails: { folder: string; subject: string; bodyText: string }[],
@@ -646,11 +649,12 @@ export async function patchTrackerWithNewMails(
     refreshItemStatus(itemId, mailIntents, followUpDays, userEmail);
   }
 
-  const collapsed = collapseInactiveActiveTwins();
-  if (collapsed > 0) {
+  // K3: never auto-collapse twins — emit merge_proposals only.
+  const proposals = suggestTwinMerges();
+  if (proposals > 0) {
     log?.(
       "system",
-      t("sync.collapsedTwins", { count: collapsed }),
+      t("sync.collapsedTwins", { count: proposals }),
     );
   }
 

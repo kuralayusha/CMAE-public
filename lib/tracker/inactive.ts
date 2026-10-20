@@ -1,34 +1,23 @@
 /**
  * Bulk inactive / active for tracker rows.
- * Inactive survives sync rebuild; activate restores prior status until next sync reclassifies.
+ * Faz 4: user_state overlay; status comes from effective() on read.
+ * Auto twin collapse disabled (K3) — see suggestTwinMerges.
  */
 
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { bumpTrackerRevision } from "@/lib/db/revision";
-import { trackerItemMails, trackerItems } from "@/lib/db/schema";
+import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
-import { sameCompanyIdentity, samePrimaryEmail } from "./identity";
-import type { TrackerStatus } from "./types";
-import { TRACKER_STATUSES } from "./types";
+import { suggestTwinMerges } from "./derive/merge-suggestions";
+import { effective, factsFromItemRow } from "./derive/effective";
+import { getSettingsRow } from "@/lib/settings/service";
 
-function parseNotes(raw: string | null): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    const v = JSON.parse(raw) as unknown;
-    return v && typeof v === "object" && !Array.isArray(v)
-      ? (v as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function isStatus(v: unknown): v is TrackerStatus {
-  return (
-    typeof v === "string" &&
-    (TRACKER_STATUSES as readonly string[]).includes(v)
-  );
+function isInactiveRow(row: {
+  userState: string | null;
+  status: string;
+}): boolean {
+  return row.userState === "inactive" || row.status === "inactive";
 }
 
 export function setItemsInactive(ids: number[]): { updated: number } {
@@ -44,26 +33,23 @@ export function setItemsInactive(ids: number[]): { updated: number } {
 
   let updated = 0;
   const now = new Date().toISOString();
+  const touched: number[] = [];
   for (const row of rows) {
-    if (row.status === "inactive") continue;
-    const notes = parseNotes(row.notesJson);
-    notes.statusBeforeInactive = row.status;
+    if (isInactiveRow(row)) continue;
     db.update(trackerItems)
       .set({
+        userState: "inactive",
+        userVersion: (row.userVersion || 1) + 1,
         status: "inactive",
-        notesJson: JSON.stringify(notes),
         updatedAt: now,
       })
-      .where(inArray(trackerItems.id, [row.id]))
+      .where(eq(trackerItems.id, row.id))
       .run();
+    touched.push(row.id);
     updated += 1;
   }
   if (updated) {
-    bumpTrackerRevision(
-      "mutation",
-      "upsert",
-      rows.filter((r) => r.status !== "inactive").map((r) => r.id),
-    );
+    bumpTrackerRevision("mutation", "upsert", touched);
   }
   return { updated };
 }
@@ -79,95 +65,57 @@ export function setItemsActive(ids: number[]): { updated: number } {
     .where(inArray(trackerItems.id, uniq))
     .all();
 
+  const followUpDays = getSettingsRow()?.followUpDays ?? 5;
   let updated = 0;
   const now = new Date().toISOString();
+  const touched: number[] = [];
   for (const row of rows) {
-    if (row.status !== "inactive") continue;
-    const notes = parseNotes(row.notesJson);
-    const prior = notes.statusBeforeInactive;
-    const restored: TrackerStatus =
-      isStatus(prior) && prior !== "inactive" ? prior : "in_progress";
-    delete notes.statusBeforeInactive;
+    if (!isInactiveRow(row)) continue;
+    const facts = factsFromItemRow(row);
+    const resolved = effective({
+      facts,
+      userState: "active",
+      followUpDays,
+    });
     db.update(trackerItems)
       .set({
-        status: restored,
-        notesJson: JSON.stringify(notes),
+        userState: "active",
+        userVersion: (row.userVersion || 1) + 1,
+        status: resolved.status,
+        waitingOn: resolved.waitingOn,
+        nextFollowUpAt: resolved.nextFollowUpAt,
+        ignored: resolved.ignored ? 1 : 0,
         updatedAt: now,
       })
-      .where(inArray(trackerItems.id, [row.id]))
+      .where(eq(trackerItems.id, row.id))
       .run();
+    touched.push(row.id);
     updated += 1;
   }
   if (updated) {
-    bumpTrackerRevision(
-      "mutation",
-      "upsert",
-      rows.filter((r) => r.status === "inactive").map((r) => r.id),
-    );
+    bumpTrackerRevision("mutation", "upsert", touched);
   }
   return { updated };
 }
 
 export function assertItemActiveForDrafts(itemId: number): void {
   const row = getDb()
-    .select({ status: trackerItems.status })
+    .select({
+      status: trackerItems.status,
+      userState: trackerItems.userState,
+    })
     .from(trackerItems)
     .where(eq(trackerItems.id, itemId))
     .get();
-  if (row?.status === "inactive") {
+  if (row && isInactiveRow(row)) {
     throw new Error(t("tracker.error.inactive"));
   }
 }
 
 /**
- * Keep inactive, absorb mails from active twin (same company/email), delete active.
- * Fixes sync duplicates like ExampleCo (needs_action) + ExampleCo (inactive).
+ * @deprecated Auto-collapse removed (K3). Emits merge_proposals only; returns 0.
  */
 export function collapseInactiveActiveTwins(): number {
-  const db = getDb();
-  const rows = db.select().from(trackerItems).all();
-  const inactive = rows.filter((r) => r.status === "inactive");
-  const active = rows.filter((r) => r.status !== "inactive");
-  let deleted = 0;
-
-  for (const inv of inactive) {
-    const twins = active.filter(
-      (a) =>
-        sameCompanyIdentity(a.company, inv.company) ||
-        samePrimaryEmail(a.primaryTo, inv.primaryTo),
-    );
-    for (const twin of twins) {
-      const twinLinks = db
-        .select()
-        .from(trackerItemMails)
-        .where(eq(trackerItemMails.itemId, twin.id))
-        .all();
-      const invMailIds = new Set(
-        db
-          .select()
-          .from(trackerItemMails)
-          .where(eq(trackerItemMails.itemId, inv.id))
-          .all()
-          .map((l) => l.mailId),
-      );
-      for (const link of twinLinks) {
-        if (invMailIds.has(link.mailId)) continue;
-        db.insert(trackerItemMails)
-          .values({
-            itemId: inv.id,
-            mailId: link.mailId,
-            role: link.role,
-          })
-          .run();
-        invMailIds.add(link.mailId);
-      }
-      db.delete(trackerItemMails)
-        .where(eq(trackerItemMails.itemId, twin.id))
-        .run();
-      db.delete(trackerItems).where(eq(trackerItems.id, twin.id)).run();
-      deleted += 1;
-    }
-  }
-  // Caller (rebuild/sync) bumps revision once for the whole write.
-  return deleted;
+  suggestTwinMerges();
+  return 0;
 }

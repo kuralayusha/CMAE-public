@@ -50,6 +50,8 @@ export function setTrackerItemRecipient(
   db.update(trackerItems)
     .set({
       primaryTo: canonical,
+      selectedRecipient: canonical,
+      userVersion: (item.userVersion || 1) + 1,
       notesJson: withSelectedRecipient(item.notesJson, canonical),
       updatedAt: new Date().toISOString(),
     })

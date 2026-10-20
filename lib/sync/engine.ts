@@ -12,6 +12,7 @@ import { t } from "@/lib/i18n/t";
 import { emitTrackerEvent } from "@/lib/tracker/events-bus";
 import { SyncCanceledError } from "@/lib/tracker/cancel";
 import { listTrackerSections } from "@/lib/tracker/list";
+import { runClassifyRetry } from "@/lib/tracker/derive/classify-retry";
 import { runTrackerSync } from "@/lib/tracker/run";
 import { getGmailCredentials } from "@/lib/settings/service";
 import type { SyncMode } from "@/lib/tracker/sync";
@@ -36,7 +37,7 @@ const STALE_LEASE_MS = 30_000;
 const NON_MANUAL_DEBOUNCE_MS = 3_000;
 const JOB_HISTORY_KEEP = 200;
 
-export type SyncJobKind = "mail_sync";
+export type SyncJobKind = "mail_sync" | "classify_retry";
 export type SyncJobState =
   | "queued"
   | "running"
@@ -299,6 +300,41 @@ function getQueuedJob(kind: SyncJobKind = "mail_sync"): JobRow | null {
       )
       .get(kind) as JobRow | undefined) ?? null
   );
+}
+
+/** Next queued job: mail_sync first, then classify_retry. */
+function getQueuedJobAny(): JobRow | null {
+  return getQueuedJob("mail_sync") || getQueuedJob("classify_retry");
+}
+
+/** Enqueue classify_retry when provisional regex intents remain (Faz 4). */
+export function enqueueClassifyRetry(reason: SyncTriggerReason = "post_mutation"): string | null {
+  if (getRunningJob("classify_retry") || getQueuedJob("classify_retry")) {
+    return getQueuedJob("classify_retry")?.id || getRunningJob("classify_retry")?.id || null;
+  }
+  const db = getSqlite();
+  const fencing = getFencingTokens(db);
+  const accountId = ensureAccountIdMeta() || fencing.accountId;
+  const id = randomUUID();
+  const now = isoNow();
+  db.prepare(
+    `INSERT INTO sync_jobs (
+      id, kind, mode, state, phase, reasons, rerun_requested, rerun_mode,
+      attempt, owner, db_epoch, credentials_version, account_id,
+      queued_at, progress_at
+    ) VALUES (?, 'classify_retry', 'incremental', 'queued', NULL, ?, 0, NULL, 1, NULL, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    JSON.stringify([reason]),
+    fencing.dbEpoch,
+    fencing.credentialsVersion,
+    accountId,
+    now,
+    now,
+  );
+  emitJobEvent({ id, kind: "classify_retry", state: "queued" });
+  pumpJobs();
+  return id;
 }
 
 function isSessionStuck(session: SyncSession): boolean {
@@ -587,7 +623,7 @@ function pumpJobs(): void {
     } finally {
       globalThis.__cmaeSyncPumpRunning = false;
       // A job may have been queued while we were finishing — pick it up.
-      if (getQueuedJob()) pumpJobs();
+      if (getQueuedJobAny()) pumpJobs();
     }
   })();
 }
@@ -601,15 +637,15 @@ function claimNextJob(): JobRow | null {
       interruptStaleLeases(db);
       if (isMaintenanceActive(db)) return null;
 
-      // Re-queue interrupted jobs for this kind.
+      // Re-queue interrupted jobs.
       db.prepare(
         `UPDATE sync_jobs
          SET state = 'queued', owner = NULL, started_at = NULL, heartbeat_at = NULL,
              finished_at = NULL, error_kind = NULL, error_message = NULL
-         WHERE kind = 'mail_sync' AND state = 'interrupted'`,
+         WHERE kind IN ('mail_sync', 'classify_retry') AND state = 'interrupted'`,
       ).run();
 
-      const queued = getQueuedJob();
+      const queued = getQueuedJobAny();
       if (!queued) return null;
       if (
         isAutoSyncBlockedByAuth() &&
@@ -721,6 +757,42 @@ async function runClaimedJob(job: JobRow): Promise<void> {
   try {
     assertFencing(job);
 
+    if (job.kind === "classify_retry") {
+      const result = await runClassifyRetry({
+        signal: abort.signal,
+        onProgress: (kind, text) => {
+          if (session.cancelRequested || abort.signal.aborted) return;
+          appendLine(session, kind, text);
+        },
+      });
+      assertFencing(job);
+      finishJob(job, "succeeded", {
+        stats: {
+          classified: result.classified,
+          stillPending: result.stillPending,
+        },
+      });
+      if (result.stillPending > 0) {
+        const delay = retryDelayMs(job.attempt || 1);
+        setTimeout(() => {
+          if (isAutoSyncBlockedByAuth() || isMaintenanceActive()) return;
+          enqueueClassifyRetry("retry");
+        }, delay).unref?.();
+      }
+      const list = listTrackerSections();
+      finishSession(session, "done", {
+        result: {
+          skippedImap: true,
+          upserted: 0,
+          itemCount: list.total,
+          sections: list.sections,
+          sync: list.sync,
+          total: list.total,
+        },
+      });
+      return;
+    }
+
     const run = await runTrackerSync({
       mode,
       signal: abort.signal,
@@ -772,6 +844,18 @@ async function runClaimedJob(job: JobRow): Promise<void> {
     }
 
     assertFencing(job);
+
+    // If regex intents still provisional, enqueue dedicated retry job.
+    try {
+      const pending = getSqlite()
+        .prepare(
+          `SELECT COUNT(*) AS n FROM mail_messages WHERE derive_state = 'needs_classification'`,
+        )
+        .get() as { n: number };
+      if (pending?.n > 0) enqueueClassifyRetry("post_mutation");
+    } catch {
+      /* ignore */
+    }
 
     const list = listTrackerSections();
     const terminal: SyncJobState = run.partial ? "partial" : "succeeded";

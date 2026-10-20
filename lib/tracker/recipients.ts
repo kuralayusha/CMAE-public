@@ -39,7 +39,12 @@ function parseNotes(raw: string | null | undefined): Record<string, unknown> {
 
 export function parseSelectedRecipient(
   notesJson: string | null | undefined,
+  columnValue?: string | null,
 ): string | null {
+  if (columnValue) {
+    const m = columnValue.trim().match(EMAIL_RE);
+    if (m) return m[0];
+  }
   const notes = parseNotes(notesJson);
   const raw = notes.selectedRecipient;
   if (typeof raw !== "string") return null;
