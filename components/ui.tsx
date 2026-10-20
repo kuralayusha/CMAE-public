@@ -20,11 +20,11 @@ export function PageShell({
   return (
     <main className="cmae-shell">
       <div className="cmae-shell-head">
-        <div className="cmae-shell-head-title">
+        <div className="cmae-shell-head-copy">
           <h1>{title}</h1>
-          {helpPageId ? <PageHelp pageId={helpPageId} /> : null}
+          {subtitle ? <p>{subtitle}</p> : null}
         </div>
-        {subtitle ? <p>{subtitle}</p> : null}
+        {helpPageId ? <PageHelp pageId={helpPageId} /> : null}
       </div>
       {children}
     </main>

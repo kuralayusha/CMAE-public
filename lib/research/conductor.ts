@@ -1,19 +1,21 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
+import { t } from "@/lib/i18n/t";
 import { runContact } from "./agents/contact";
 import { runJobFit } from "./agents/jobfit";
 import { runResearch } from "./agents/research";
 import { runReviewer } from "./agents/reviewer";
 import { runScout } from "./agents/scout";
 import { runWriter } from "./agents/writer";
+import { clearJobAbort, resetJobAbort } from "./abort";
 import { JobCanceledError, isCanceled, throwIfCanceled } from "./cancel";
 import { createRunContext, type RunContext } from "./context";
 import { getJob, setJobStatus } from "./events";
+import { hasFolderStatusSuffix } from "./folder-status";
 import { speak } from "./speak";
 import { SPECIALISTS, type SpecialistId } from "./types";
 import { markFolderError, writeFile } from "./workspace";
-import { hasFolderStatusSuffix } from "./folder-status";
 
 const PIPELINE: Exclude<SpecialistId, "reviewer">[] = [
   "scout",
@@ -40,6 +42,7 @@ export async function runConductor(jobId: string) {
   const job = getJob(jobId);
   if (!job) return;
 
+  resetJobAbort(jobId);
   setJobStatus(jobId, "running");
   speak(
     jobId,
@@ -173,8 +176,16 @@ export async function runConductor(jobId: string) {
     speak(jobId, "conductor", "ok", `done · ${ctx.folderName}/`);
   } catch (err) {
     if (err instanceof JobCanceledError || isCanceled(jobId)) {
-      // cancelJob already set status + renamed folder
       speak(jobId, "conductor", "err", "pipeline aborted (canceled)");
+      // Re-assert canceled if a specialist revived status to "running".
+      const live = getJob(jobId);
+      if (live && live.status !== "canceled") {
+        live.cancelRequested = true;
+        setJobStatus(jobId, "canceled", {
+          folderName: live.folderName,
+          error: t("research.error.canceledByUser"),
+        });
+      }
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
@@ -205,7 +216,13 @@ export async function runConductor(jobId: string) {
       }
     }
 
+    if (isCanceled(jobId)) {
+      speak(jobId, "conductor", "err", "pipeline aborted (canceled)");
+      return;
+    }
     setJobStatus(jobId, "error", { error: message, folderName });
+  } finally {
+    clearJobAbort(jobId);
   }
 }
 

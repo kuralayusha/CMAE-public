@@ -19,6 +19,11 @@ import {
 } from "./mail-kind";
 import { matchMailsToGroups, type MailBrief } from "./match";
 import { extractPrimaryEmailFromWorkspace } from "./parse-mail-md";
+import {
+  parseContactRecipients,
+  preserveSelectedRecipientInNotes,
+  resolveEffectiveRecipient,
+} from "./recipients";
 import { normalizeMailText } from "./signals";
 import { resolveStatus } from "./status";
 import { t } from "@/lib/i18n/t";
@@ -254,8 +259,12 @@ export async function rebuildTrackerItems(opts?: {
         )
       : "unknown";
 
-    const primaryTo =
+    const contactRecipients = folderPath
+      ? parseContactRecipients(folderPath)
+      : { recommended: null, candidates: [] };
+    const fallbackPrimaryTo =
       search?.primaryTo ||
+      contactRecipients.recommended ||
       extractPrimaryEmailFromWorkspace(folderPath || "") ||
       outbounds
         .map((m) => m.toAddr.split(",")[0]?.trim())
@@ -265,12 +274,13 @@ export async function rebuildTrackerItems(opts?: {
         .find((a) => a && a.toLowerCase() !== userEmail) ||
       null;
 
-    const primaryEmail = parseEmailAddr(primaryTo);
+    // Match previous row before applying user recipient preference (lookup uses AI/mail addr)
+    const lookupEmail = parseEmailAddr(fallbackPrimaryTo);
     const old =
       (g.researchJobId && prevByJob.get(g.researchJobId)) ||
       prevByCompany.get(g.company.toLowerCase()) ||
       prevByCompanyNorm.get(normalizeCompanyKey(g.company)) ||
-      (primaryEmail ? prevByPrimary.get(primaryEmail) : undefined) ||
+      (lookupEmail ? prevByPrimary.get(lookupEmail) : undefined) ||
       null;
 
     const followUpCount = Math.max(
@@ -369,6 +379,18 @@ export async function rebuildTrackerItems(opts?: {
         /* ignore */
       }
     }
+
+    const preservedSelected = preserveSelectedRecipientInNotes(
+      notesObj,
+      old?.notesJson,
+      contactRecipients.candidates,
+    );
+    const primaryTo = resolveEffectiveRecipient({
+      selected: preservedSelected,
+      recommended: contactRecipients.recommended,
+      candidates: contactRecipients.candidates,
+      fallback: fallbackPrimaryTo,
+    });
 
     const inserted = db
       .insert(trackerItems)
@@ -476,19 +498,20 @@ export async function rebuildTrackerItems(opts?: {
     itemCount += 1;
   }
 
-  // Drop empty ready_to_send without draft? Keep all search candidates with drafts or folders.
-  // Remove orphan ready_to_send with no workspace and no mails (shouldn't happen).
+  // Drop empty ready_to_send without a live workspace folder and no mails.
+  // researchJobId alone must not keep ghosts after folder delete.
   const leftovers = db.select().from(trackerItems).all();
   for (const row of leftovers) {
-    if (
-      row.status === "ready_to_send" &&
-      !row.workspaceFolder &&
-      !row.researchJobId
-    ) {
-      db.delete(trackerItemMails).where(eq(trackerItemMails.itemId, row.id)).run();
-      db.delete(trackerItems).where(eq(trackerItems.id, row.id)).run();
-      itemCount -= 1;
-    }
+    if (row.status !== "ready_to_send" || row.workspaceFolder) continue;
+    const linked = db
+      .select({ id: trackerItemMails.id })
+      .from(trackerItemMails)
+      .where(eq(trackerItemMails.itemId, row.id))
+      .get();
+    if (linked) continue;
+    db.delete(trackerItemMails).where(eq(trackerItemMails.itemId, row.id)).run();
+    db.delete(trackerItems).where(eq(trackerItems.id, row.id)).run();
+    itemCount -= 1;
   }
 
   // Collapse leftover inactive+active twins (same identity) if any slipped through.

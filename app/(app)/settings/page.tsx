@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { CvDropzone } from "@/components/CvDropzone";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
+import {
+  useOperations,
+  type OperationsReason,
+} from "@/components/OperationsProvider";
 import { Button, Field, PageShell } from "@/components/ui";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
 import { formatVersionLabel } from "@/lib/version/semver";
@@ -79,9 +83,21 @@ function SettingsAcc({
   );
 }
 
+function opsReasonLabel(
+  t: (key: string) => string,
+  reasons: OperationsReason[],
+): string {
+  if (reasons.length === 1) {
+    const r = reasons[0]!;
+    return t(`settings.opsReason.${r}`);
+  }
+  return t("settings.opsReason.multiple");
+}
+
 export default function SettingsPage() {
   const t = useT();
   const upper = useLocaleUpper();
+  const ops = useOperations();
   const [form, setForm] = useState({
     fullName: "",
     gmailAddress: "",
@@ -96,6 +112,7 @@ export default function SettingsPage() {
   const [cvs, setCvs] = useState<CvItem[]>([]);
   const [cvMax, setCvMax] = useState(4);
   const [status, setStatus] = useState<string | null>(null);
+  const [statusTone, setStatusTone] = useState<"ok" | "err" | null>(null);
   const [busy, setBusy] = useState(false);
   const [wipeOpen, setWipeOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
@@ -107,6 +124,8 @@ export default function SettingsPage() {
     prev: string;
   } | null>(null);
   const localeLocked = Boolean(localePrep);
+  const opsLocked = ops.busy;
+  const formLocked = localeLocked || opsLocked;
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cmaeDesktop?.isDesktop));
@@ -185,11 +204,16 @@ export default function SettingsPage() {
     });
   }
 
+  function flash(text: string | null, tone: "ok" | "err" | null = null) {
+    setStatus(text);
+    setStatusTone(text ? tone : null);
+  }
+
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (localeLocked) return;
+    if (formLocked) return;
     setBusy(true);
-    setStatus(null);
+    flash(null);
     const prevLang = (meta?.preferredLanguage || "en").toLowerCase();
     const nextLang = form.preferredLanguage.trim().toLowerCase();
     try {
@@ -209,17 +233,18 @@ export default function SettingsPage() {
         setLocalePrep({ next: nextLang, prev: prevLang });
         return;
       }
-      setStatus(t("settings.saved"));
+      flash(t("settings.saved"), "ok");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      flash(err instanceof Error ? err.message : String(err), "err");
     } finally {
       setBusy(false);
     }
   }
 
   async function uploadCv(file: File) {
+    if (formLocked) return;
     setBusy(true);
-    setStatus(null);
+    flash(null);
     try {
       const fd = new FormData();
       fd.append("file", file);
@@ -228,12 +253,13 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("settings.error.uploadCv"));
       setCvs(data.cvs || []);
-      setStatus(
+      flash(
         t("settings.cvAdded", { name: data.entry?.label || file.name }),
+        "ok",
       );
       await load();
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      flash(err instanceof Error ? err.message : String(err), "err");
     } finally {
       setBusy(false);
     }
@@ -243,8 +269,9 @@ export default function SettingsPage() {
     id: string,
     patch: Partial<{ label: string; language: string; tags: string[]; isDefault: boolean }>,
   ) {
+    if (formLocked) return;
     setBusy(true);
-    setStatus(null);
+    flash(null);
     try {
       const res = await fetch(`/api/settings/cv/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -254,18 +281,19 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("settings.error.updateCv"));
       setCvs(data.cvs || []);
-      setStatus(t("settings.cvUpdated"));
+      flash(t("settings.cvUpdated"), "ok");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      flash(err instanceof Error ? err.message : String(err), "err");
     } finally {
       setBusy(false);
     }
   }
 
   async function removeCv(id: string) {
+    if (formLocked) return;
     if (!window.confirm(t("settings.cvConfirmDelete"))) return;
     setBusy(true);
-    setStatus(null);
+    flash(null);
     try {
       const res = await fetch(`/api/settings/cv/${encodeURIComponent(id)}`, {
         method: "DELETE",
@@ -273,17 +301,18 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("settings.error.deleteCv"));
       setCvs(data.cvs || []);
-      setStatus(t("settings.cvDeleted"));
+      flash(t("settings.cvDeleted"), "ok");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      flash(err instanceof Error ? err.message : String(err), "err");
     } finally {
       setBusy(false);
     }
   }
 
   async function confirmWipe() {
+    if (formLocked) return;
     setBusy(true);
-    setStatus(null);
+    flash(null);
     try {
       const res = await fetch("/api/onboarding/reset", { method: "POST" });
       const data = await res.json();
@@ -306,19 +335,20 @@ export default function SettingsPage() {
       // Hard navigation — soft router can keep stale (app) layout / RSC cache
       window.location.assign(data.redirectTo || "/onboarding");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      flash(err instanceof Error ? err.message : String(err), "err");
       setBusy(false);
     }
   }
 
   async function confirmUninstall() {
+    if (formLocked) return;
     if (!window.cmaeDesktop?.uninstallApp) {
-      setStatus(t("settings.uninstallDesktopOnly"));
+      flash(t("settings.uninstallDesktopOnly"), "err");
       setUninstallOpen(false);
       return;
     }
     setBusy(true);
-    setStatus(null);
+    flash(null);
     try {
       try {
         for (const k of Object.keys(localStorage)) {
@@ -329,9 +359,9 @@ export default function SettingsPage() {
       }
       await window.cmaeDesktop.uninstallApp();
       // App exits; if it somehow stays open:
-      setStatus(t("settings.uninstalling"));
+      flash(t("settings.uninstalling"));
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : String(err));
+      flash(err instanceof Error ? err.message : String(err), "err");
       setBusy(false);
     }
   }
@@ -341,13 +371,20 @@ export default function SettingsPage() {
       <PageShell
         title={t("help.settings.title")}
         subtitle={t("help.settings.subtitle")}
-        helpPageId={localeLocked ? undefined : "settings"}
+        helpPageId={formLocked ? undefined : "settings"}
       >
+        {opsLocked && !localeLocked ? (
+          <p className="cmae-form-hint" role="status">
+            {t("settings.opsLocked", {
+              reason: opsReasonLabel(t, ops.reasons),
+            })}
+          </p>
+        ) : null}
         <form
           className="cmae-form"
           onSubmit={save}
-          {...(localeLocked ? { inert: true } : {})}
-          aria-busy={localeLocked || busy}
+          {...(formLocked ? { inert: true } : {})}
+          aria-busy={formLocked || busy}
         >
           <SettingsAcc title={t("settings.accProfile")}>
             <Field
@@ -624,7 +661,7 @@ export default function SettingsPage() {
                         <input
                           className="cmae-input"
                           defaultValue={cv.label}
-                          disabled={busy}
+                          disabled={busy || formLocked}
                           onBlur={(e) => {
                             const v = e.target.value.trim();
                             if (v && v !== cv.label) void patchCv(cv.id, { label: v });
@@ -635,7 +672,7 @@ export default function SettingsPage() {
                         <select
                           className="cmae-input"
                           value={cv.language}
-                          disabled={busy}
+                          disabled={busy || formLocked}
                           onChange={(e) =>
                             void patchCv(cv.id, { language: e.target.value })
                           }
@@ -651,7 +688,7 @@ export default function SettingsPage() {
                         <input
                           className="cmae-input"
                           defaultValue={cv.tags.join(", ")}
-                          disabled={busy}
+                          disabled={busy || formLocked}
                           onBlur={(e) => {
                             const tags = e.target.value
                               .split(/[,;]+/)
@@ -669,7 +706,7 @@ export default function SettingsPage() {
                           type="radio"
                           name="cv-default"
                           checked={cv.isDefault}
-                          disabled={busy}
+                          disabled={busy || formLocked}
                           onChange={() => void patchCv(cv.id, { isDefault: true })}
                         />
                         {t("common.default")}
@@ -678,7 +715,7 @@ export default function SettingsPage() {
                       <Button
                         type="button"
                         variant="ghost"
-                        disabled={busy}
+                        disabled={busy || formLocked}
                         onClick={() => void removeCv(cv.id)}
                       >
                         {t("common.delete")}
@@ -691,9 +728,9 @@ export default function SettingsPage() {
 
             {cvs.length < cvMax ? (
               <CvDropzone
-                busy={busy}
+                busy={busy || formLocked}
                 onFile={(file) => void uploadCv(file)}
-                onInvalid={(msg) => setStatus(msg)}
+                onInvalid={(msg) => flash(msg, "err")}
               />
             ) : (
               <p className="cmae-form-hint">
@@ -703,10 +740,23 @@ export default function SettingsPage() {
           </SettingsAcc>
 
           <div className="cmae-form-actions">
-            <Button type="submit" disabled={busy || localeLocked}>
+            <Button type="submit" disabled={busy || formLocked}>
               {busy ? t("common.saving") : t("common.save")}
             </Button>
-            {status ? <span className="cmae-form-status">{status}</span> : null}
+            {status ? (
+              <span
+                className={[
+                  "cmae-form-status",
+                  statusTone === "ok" ? "is-ok" : "",
+                  statusTone === "err" ? "is-err" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                role={statusTone === "err" ? "alert" : "status"}
+              >
+                {status}
+              </span>
+            ) : null}
           </div>
 
           <SettingsAcc title={t("settings.accDanger")} danger>
@@ -714,7 +764,7 @@ export default function SettingsPage() {
             <Button
               type="button"
               variant="danger"
-              disabled={busy}
+              disabled={busy || formLocked}
               onClick={() => setWipeOpen(true)}
             >
               {t("settings.dangerWipeBtn")}
@@ -728,7 +778,7 @@ export default function SettingsPage() {
                 <Button
                   type="button"
                   variant="danger"
-                  disabled={busy}
+                  disabled={busy || formLocked}
                   onClick={() => setUninstallOpen(true)}
                 >
                   {t("settings.dangerUninstallBtn")}
@@ -755,13 +805,13 @@ export default function SettingsPage() {
           failKey="settings.localePrepFail"
           onComplete={() => {
             setLocalePrep(null);
-            setStatus(t("settings.languageUpdated"));
+            flash(t("settings.languageUpdated"), "ok");
             void load();
           }}
           onError={(message) => {
             const prev = localePrep.prev;
             setLocalePrep(null);
-            setStatus(message || t("settings.languageFailed"));
+            flash(message || t("settings.languageFailed"), "err");
             setForm((f) => ({ ...f, preferredLanguage: prev }));
             void (async () => {
               try {
@@ -792,8 +842,21 @@ export default function SettingsPage() {
             aria-labelledby="wipe-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="wipe-title">{t("settings.wipeTitle")}</h3>
-            <p>{t("settings.wipeBody")}</p>
+            <header className="term-modal-head">
+              <h3 id="wipe-title">{t("settings.wipeTitle")}</h3>
+              <button
+                type="button"
+                className="term-modal-close"
+                onClick={() => setWipeOpen(false)}
+                disabled={busy}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+            <div className="term-modal-body">
+              <p>{t("settings.wipeBody")}</p>
+            </div>
             <div className="term-modal-actions">
               <button
                 type="button"
@@ -829,8 +892,21 @@ export default function SettingsPage() {
             aria-labelledby="uninstall-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="uninstall-title">{t("settings.uninstallTitle")}</h3>
-            <p>{t("settings.uninstallBody")}</p>
+            <header className="term-modal-head">
+              <h3 id="uninstall-title">{t("settings.uninstallTitle")}</h3>
+              <button
+                type="button"
+                className="term-modal-close"
+                onClick={() => setUninstallOpen(false)}
+                disabled={busy}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+            <div className="term-modal-body">
+              <p>{t("settings.uninstallBody")}</p>
+            </div>
             <div className="term-modal-actions">
               <button
                 type="button"

@@ -56,6 +56,19 @@
   color: var(--ink-faint);
 }
 
+.cmae-td-recipient-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, 100%);
+}
+
+.cmae-td-recipient-label .cmae-tracker-recipient-select {
+  min-width: 180px;
+  max-width: 280px;
+  color: var(--ink-muted);
+}
+
 .cmae-td-section {
   display: flex;
   flex-direction: column;

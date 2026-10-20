@@ -6,6 +6,7 @@ import {
   INCREMENTAL_PATCH_MAX,
   patchTrackerWithNewMails,
 } from "./incremental";
+import { pruneOrphanReadyToSendItems } from "./orphans";
 import { reconcilePendingAgainstLiveDrafts } from "./pending-draft";
 import { rebuildTrackerItems } from "./rebuild";
 import { syncMailsFromGmail, type SyncMode } from "./sync";
@@ -83,6 +84,9 @@ export async function runTrackerSync(opts?: {
   throwIfSyncCanceled(signal);
   // Drop pending clock/banner if user deleted the draft in Gmail
   await reconcilePendingAgainstLiveDrafts({ force: true });
+
+  // Folders deleted outside rebuild (or soft-unlinked) leave ghost ready_to_send rows.
+  itemCount -= pruneOrphanReadyToSendItems();
 
   log?.(
     "ok",

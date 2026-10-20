@@ -1,3 +1,4 @@
+import { throwIfCanceled } from "../cancel";
 import type { RunContext } from "../context";
 import { askLlm, extractJson } from "../llm";
 import { speak } from "../speak";
@@ -10,6 +11,7 @@ const REDOABLE = ["scout", "jobfit", "contact", "research", "writer"] as const;
 export async function runReviewer(ctx: RunContext): Promise<ReviewVerdict> {
   const { jobId } = ctx;
   speak(jobId, "reviewer", "system", "── reviewer online · quality & consistency");
+  throwIfCanceled(jobId);
 
   const packageBrief = `
 Company: ${ctx.companyName}
@@ -41,12 +43,14 @@ ${ctx.user.cvText.slice(0, 2000)}
 Score each specialist 0-100 and overall 0-100.
 Pass threshold = ${THRESHOLD}.
 
+TARGET LOCK: The user-given URL is the only application/research target. Company name must identify the entity that owns that URL. Never pass a package that pivoted to a different company merely mentioned on the page (e.g. researching an employer found on a personal portfolio). External research may enrich the same target only.
+
 Check:
-- scout: useful pages found? company name plausible?
-- jobfit: jobs claim match CV? cold path justified?
-- contact: best email for hiring (careers > generic)?
-- research: concrete, non-hallucinated, useful for personalization?
-- writer: email matches CV + research + job/cold intent? correct language? no fake claims? tone?
+- scout: useful pages found? company name matches the given URL host (HARD FAIL / rewindTo=scout if name is a different organization than the URL owner)?
+- jobfit: jobs claim match CV? cold path justified? (only roles on the target site)
+- contact: best email for hiring at the TARGET company (careers > generic)? Do NOT demand emails for a different company/domain than the given URL.
+- research: concrete, non-hallucinated, about the TARGET URL entity only, useful for personalization?
+- writer: email matches CV + research + job/cold intent for the TARGET company? correct language? no fake claims? tone?
 - writer craft quality (penalize heavily if missing):
   · length ~100–150 words (fail if clearly over ~200 or padded fluff)
   · 3–4 short paragraphs, scannable in ~10–15 seconds

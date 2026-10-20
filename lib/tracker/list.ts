@@ -12,6 +12,7 @@ import {
   parsePendingGmailDraft,
   reconcileDraftFlagsForRow,
 } from "./pending-draft";
+import { loadRecipientsForItem } from "./recipients";
 import { getSyncState } from "./sync";
 import {
   STATUS_ORDER,
@@ -52,6 +53,7 @@ function mapRow(
       .sort()
       .at(-1) || row.updatedAt;
 
+  const recipients = loadRecipientsForItem(row);
   return {
     id: row.id,
     company: row.company,
@@ -78,6 +80,8 @@ function mapRow(
     gmailUrls,
     waitingUntil: parseWaitingUntil(row.notesJson),
     pendingGmailDraft: parsePendingGmailDraft(row.notesJson),
+    recipientOptions: recipients.candidates,
+    recommendedTo: recipients.recommended,
   };
 }
 

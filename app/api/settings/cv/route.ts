@@ -6,6 +6,7 @@ import {
   MAX_CV_COUNT,
 } from "@/lib/cv/library";
 import { t } from "@/lib/i18n/t";
+import { settingsBusyResponse } from "@/lib/operations/status";
 import { updateSettings } from "@/lib/settings/service";
 
 export const runtime = "nodejs";
@@ -29,6 +30,8 @@ export async function GET() {
 
 /** Upload a PDF into the multi-CV library (+ keep legacy settings.cvText in sync with default). */
 export async function POST(req: Request) {
+  const busy = settingsBusyResponse();
+  if (busy) return busy;
   try {
     const form = await req.formData();
     const file = form.get("file");

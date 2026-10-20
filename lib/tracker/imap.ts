@@ -7,6 +7,7 @@ import {
   setFolderCursor,
   type FolderCursor,
 } from "./folder-cursors";
+import { decodeMimeBody, repairUtf8Mojibake } from "./mail-text";
 import type { FetchedMail, MailFolder, SyncProgressFn } from "./types";
 
 const GMAIL_HOST = "imap.gmail.com";
@@ -65,34 +66,53 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-function decodeQuotedPrintable(input: string): string {
-  return input
-    .replace(/=\r?\n/g, "")
-    .replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) =>
-      String.fromCharCode(parseInt(hex, 16)),
-    );
-}
-
-/** Same body extract as the original batch sync (aec26ba). */
+/**
+ * Extract readable body with charset-aware QP/base64 decode.
+ * Prefer text/plain; fall back to stripped HTML.
+ */
 function extractBody(source: Buffer | string | null | undefined): string {
   if (!source) return "";
-  const raw = typeof source === "string" ? source : source.toString("utf8");
-  const plain = raw.match(
-    /Content-Type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--|\r?\nContent-Type:|$)/i,
-  );
-  if (plain?.[1]) {
-    return decodeQuotedPrintable(plain[1])
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 8000);
+  // MIME wire format is ASCII-safe for headers + CTE; binary bytes kept via latin1.
+  const raw =
+    typeof source === "string" ? source : source.toString("binary");
+
+  const part =
+    matchMimePart(raw, "text/plain") || matchMimePart(raw, "text/html");
+  if (part) {
+    const decoded = repairUtf8Mojibake(
+      decodeMimeBody(part.headers, part.body),
+    );
+    const text =
+      part.kind === "html" ? stripHtml(decoded) : decoded.replace(/\s+/g, " ");
+    return text.trim().slice(0, 8000);
   }
-  const html = raw.match(
-    /Content-Type:\s*text\/html[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--|\r?\nContent-Type:|$)/i,
-  );
-  if (html?.[1]) {
-    return stripHtml(decodeQuotedPrintable(html[1])).slice(0, 8000);
+
+  // Single-part message: headers at top, body after blank line
+  const split = raw.match(/^([\s\S]*?)\r?\n\r?\n([\s\S]*)$/);
+  if (split) {
+    const decoded = repairUtf8Mojibake(
+      decodeMimeBody(split[1] || "", split[2] || ""),
+    );
+    return stripHtml(decoded).slice(0, 8000);
   }
-  return stripHtml(decodeQuotedPrintable(raw)).slice(0, 8000);
+  return stripHtml(repairUtf8Mojibake(raw)).slice(0, 8000);
+}
+
+function matchMimePart(
+  raw: string,
+  type: "text/plain" | "text/html",
+): { headers: string; body: string; kind: "plain" | "html" } | null {
+  const re = new RegExp(
+    `(Content-Type:\\s*${type.replace("/", "\\/")}[^\\r\\n]*(?:\\r?\\n[^\\r\\n]+)*)\\r?\\n\\r?\\n([\\s\\S]*?)(?=\\r?\\n--[\\w=]|\\r?\\nContent-Type:|$)`,
+    "i",
+  );
+  const m = raw.match(re);
+  if (!m?.[1] || m[2] == null) return null;
+  return {
+    headers: m[1],
+    body: m[2],
+    kind: type === "text/html" ? "html" : "plain",
+  };
 }
 
 function headersHash(from: string, to: string, subject: string, dateIso: string): string {

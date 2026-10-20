@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getAgentCwd } from "@/lib/paths";
+import { throwIfCanceled, whenJobAborted } from "./cancel";
 import { speak } from "./speak";
 import type { SpecialistId } from "./types";
 
@@ -24,6 +25,7 @@ export async function askLlm(
   label?: string,
   agent: SpecialistId | "conductor" = "conductor",
 ): Promise<string> {
+  throwIfCanceled(jobId);
   speak(
     jobId,
     agent,
@@ -32,11 +34,19 @@ export async function askLlm(
     t("terminal.plain.evaluating"),
   );
   const apiKey = await resolveApiKey();
-  const result = await Agent.prompt(prompt, {
-    apiKey,
-    model: { id: "composer-2.5" },
-    local: { cwd: getAgentCwd() },
-  });
+  throwIfCanceled(jobId);
+
+  // Agent.prompt has no abort API — race so cancel unblocks the pipeline immediately.
+  const result = await Promise.race([
+    Agent.prompt(prompt, {
+      apiKey,
+      model: { id: "composer-2.5" },
+      local: { cwd: getAgentCwd() },
+    }),
+    whenJobAborted(jobId),
+  ]);
+
+  throwIfCanceled(jobId);
 
   if (result.status === "error" || !result.result) {
     throw new Error(

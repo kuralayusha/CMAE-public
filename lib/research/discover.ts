@@ -45,11 +45,25 @@ export async function fetchPage(jobId: string, url: string): Promise<DiscoveredP
   $("script, style, noscript, svg, iframe").remove();
   const title = $("title").first().text().replace(/\s+/g, " ").trim();
   const links: { href: string; text: string }[] = [];
+  /** Many sites only expose emails via mailto: href — not as visible body text. */
+  const mailtoEmails: string[] = [];
   $("a[href]").each((_, el) => {
-    const href = $(el).attr("href");
+    const href = ($(el).attr("href") || "").trim();
     const text = $(el).text().replace(/\s+/g, " ").trim();
-    if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:"))
+    if (!href || href.startsWith("#") || href.startsWith("tel:")) return;
+    if (/^mailto:/i.test(href)) {
+      const raw = href.replace(/^mailto:/i, "").split("?")[0] || "";
+      try {
+        const decoded = decodeURIComponent(raw).trim();
+        const m = decoded.match(
+          /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+        );
+        if (m) mailtoEmails.push(m[0]);
+      } catch {
+        /* ignore bad encoding */
+      }
       return;
+    }
     try {
       const abs = new URL(href, url).toString();
       if (!/^https?:/i.test(abs)) return;
@@ -59,7 +73,12 @@ export async function fetchPage(jobId: string, url: string): Promise<DiscoveredP
     }
   });
 
-  const text = $("body").text().replace(/\s+/g, " ").trim().slice(0, 20000);
+  const bodyText = $("body").text().replace(/\s+/g, " ").trim();
+  const mailtoSuffix =
+    mailtoEmails.length > 0
+      ? ` ${[...new Set(mailtoEmails.map((e) => e.toLowerCase()))].join(" ")}`
+      : "";
+  const text = `${bodyText}${mailtoSuffix}`.trim().slice(0, 20000);
   return { url, title, text, links: dedupeLinks(links) };
 }
 
@@ -185,9 +204,11 @@ export async function rankEmailsWithAi(
   jobId: string,
   companyName: string,
   items: { email: string; page: string; pageRole?: string }[],
+  targetUrl?: string,
 ): Promise<RankedEmail[]> {
   if (!items.length) return [];
 
+  const allowed = new Set(items.map((e) => e.email.toLowerCase()));
   const list = items
     .map(
       (e, i) =>
@@ -198,13 +219,15 @@ export async function rankEmailsWithAi(
   const raw = await askLlm(
     jobId,
     `You rank company emails for a job seeker cold/application outreach.
-Company: ${companyName}
+Company (TARGET): ${companyName}
+Target URL: ${targetUrl || "(given site)"}
 
-Candidates:
+Candidates (ONLY these — never invent or add emails from other companies):
 ${list}
 
 Prefer (in order): recruiting/HR/careers mailbox → role-relevant team → general company contact.
 Deprioritize: noreply, newsletter, privacy, support ticket bots, personal random if clearly unrelated.
+HARD RULE: Rank only from the candidate list above. Do not invent addresses for a different employer/domain. The outreach target is the entity at Target URL, not companies merely mentioned on the page.
 
 Return ONLY JSON:
 {
@@ -224,9 +247,10 @@ Return ONLY JSON:
 
   const parsed = extractJson<{ ranked?: RankedEmail[] }>(raw);
   if (parsed?.ranked?.length) {
-    return parsed.ranked
-      .filter((r) => r.email)
+    const filtered = parsed.ranked
+      .filter((r) => r.email && allowed.has(String(r.email).toLowerCase()))
       .sort((a, b) => (a.priority || 99) - (b.priority || 99));
+    if (filtered.length) return filtered;
   }
 
   // fallback: preserve discovery order, no language heuristics
@@ -248,9 +272,11 @@ export async function planExternalQueriesWithAi(
 ): Promise<string[]> {
   const raw = await askLlm(
     jobId,
-    `Generate 2-3 web search queries to learn what "${companyName}" does beyond its own website (${baseUrl}).
+    `Generate 2-3 web search queries to learn more about THIS target only: "${companyName}" at ${baseUrl}.
 Site language hint: ${siteLanguage}
 Mix languages if useful (local press + English). Include platforms that make sense for THAT market (not always LinkedIn/Western sites).
+
+HARD RULE: Queries must research the entity that owns ${baseUrl} ("${companyName}"). Do not pivot to employers, clients, or partners merely mentioned on that site. External search is enrichment for the same target — never a new target.
 
 Return ONLY JSON: { "queries": ["...", "..."] }`,
     "AI external search queries…",

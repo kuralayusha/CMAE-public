@@ -4,8 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useIntlLocale, useT } from "@/components/I18nProvider";
+import { TruncateTip } from "@/components/TruncateTip";
 import { Button } from "@/components/ui";
 import "./tracker-detail.css";
+
+type RecipientOption = {
+  email: string;
+  role: string | null;
+  priority: number | null;
+  reason: string | null;
+  recommended: boolean;
+};
 
 type DetailItem = {
   id: number;
@@ -20,6 +29,8 @@ type DetailItem = {
   lastOutboundAt: string | null;
   lastInboundAt: string | null;
   updatedAt: string;
+  recipientOptions?: RecipientOption[];
+  recommendedTo?: string | null;
 };
 
 type DetailMail = {
@@ -92,6 +103,28 @@ function mailFolderLabel(
   return folder;
 }
 
+const SHOW_EMAILS_KEY = "cmae.tracker.showEmails";
+
+/** Default on; remember last choice in localStorage. */
+function readShowEmailsPref(): boolean {
+  try {
+    const v = localStorage.getItem(SHOW_EMAILS_KEY);
+    if (v === "0") return false;
+    if (v === "1") return true;
+  } catch {
+    /* private mode / blocked */
+  }
+  return true;
+}
+
+function writeShowEmailsPref(on: boolean) {
+  try {
+    localStorage.setItem(SHOW_EMAILS_KEY, on ? "1" : "0");
+  } catch {
+    /* private mode / blocked */
+  }
+}
+
 export function TrackerDetail({ itemId }: { itemId: number }) {
   const t = useT();
   const locale = useIntlLocale();
@@ -103,7 +136,8 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
   const [timelineError, setTimelineError] = useState<string | null>(null);
   const [loadingItem, setLoadingItem] = useState(true);
   const [loadingTimeline, setLoadingTimeline] = useState(true);
-  const [showEmails, setShowEmails] = useState(false);
+  const [showEmails, setShowEmails] = useState(true);
+  const [savingRecipient, setSavingRecipient] = useState(false);
 
   const mailById = useMemo(() => {
     const map = new Map<number, DetailMail>();
@@ -154,13 +188,56 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
   );
 
   useEffect(() => {
+    setShowEmails(readShowEmailsPref());
+  }, []);
+
+  useEffect(() => {
     void loadItem();
   }, [loadItem]);
 
   useEffect(() => {
     if (!item) return;
     void loadTimeline(false);
-  }, [item, loadTimeline]);
+    // Reload timeline when the application id changes, not on recipient edits
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id, loadTimeline]);
+
+  async function changeRecipient(email: string) {
+    if (!item || !email || email === item.primaryTo) return;
+    setSavingRecipient(true);
+    setLoadError(null);
+    try {
+      const res = await fetch(`/api/tracker/${itemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ primaryTo: email }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        primaryTo?: string;
+        recipientOptions?: RecipientOption[];
+        recommendedTo?: string | null;
+      };
+      if (!res.ok) throw new Error(data.error || t("tracker.error.loadList"));
+      setItem((prev) =>
+        prev
+          ? {
+              ...prev,
+              primaryTo: data.primaryTo || email,
+              recipientOptions: data.recipientOptions ?? prev.recipientOptions,
+              recommendedTo:
+                data.recommendedTo !== undefined
+                  ? data.recommendedTo
+                  : prev.recommendedTo,
+            }
+          : prev,
+      );
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingRecipient(false);
+    }
+  }
 
   if (loadingItem) {
     return (
@@ -216,7 +293,55 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
         </span>
       </header>
 
-      {item.primaryTo ? (
+      {item.recipientOptions && item.recipientOptions.length > 1 ? (
+        <p className="cmae-td-meta cmae-td-recipient">
+          <label className="cmae-td-recipient-label">
+            <span>{t("tracker.detailPage.recipient")}</span>
+            <select
+              className="cmae-tracker-recipient-select"
+              value={
+                item.primaryTo &&
+                item.recipientOptions.some(
+                  (o) =>
+                    o.email.toLowerCase() === item.primaryTo!.toLowerCase(),
+                )
+                  ? item.recipientOptions.find(
+                      (o) =>
+                        o.email.toLowerCase() ===
+                        item.primaryTo!.toLowerCase(),
+                    )!.email
+                  : item.recipientOptions.find((o) => o.recommended)?.email ||
+                    item.recipientOptions[0]?.email ||
+                    ""
+              }
+              disabled={savingRecipient}
+              aria-label={t("tracker.recipient.aria", {
+                company: item.company,
+              })}
+              onChange={(e) => {
+                void changeRecipient(e.target.value);
+              }}
+            >
+              {item.recipientOptions.map((opt) => {
+                const base = opt.role
+                  ? t("tracker.recipient.optionWithRole", {
+                      email: opt.email,
+                      role: opt.role,
+                    })
+                  : t("tracker.recipient.option", { email: opt.email });
+                const label = opt.recommended
+                  ? t("tracker.recipient.optionRecommended", { label: base })
+                  : base;
+                return (
+                  <option key={opt.email} value={opt.email}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+        </p>
+      ) : item.primaryTo ? (
         <p className="cmae-td-meta">
           {t("tracker.detailPage.recipient")}: {item.primaryTo}
         </p>
@@ -239,7 +364,13 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
                   role="switch"
                   aria-checked={showEmails}
                   aria-label={t("tracker.detailPage.showEmails")}
-                  onClick={() => setShowEmails((v) => !v)}
+                  onClick={() => {
+                    setShowEmails((v) => {
+                      const next = !v;
+                      writeShowEmailsPref(next);
+                      return next;
+                    });
+                  }}
                 >
                   <span className="cmae-tracker-switch-knob" />
                 </button>
@@ -326,18 +457,14 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
                                 <span className="cmae-td-child-mail-when">
                                   {formatMailWhen(m.dateIso, locale)}
                                 </span>
-                                <span
+                                <TruncateTip
+                                  text={m.fromAddr}
                                   className="cmae-td-child-mail-from"
-                                  title={m.fromAddr}
-                                >
-                                  {m.fromAddr}
-                                </span>
-                                <span
+                                />
+                                <TruncateTip
+                                  text={m.subject || "—"}
                                   className="cmae-td-child-mail-subject"
-                                  title={m.subject}
-                                >
-                                  {m.subject || "—"}
-                                </span>
+                                />
                                 <span className="cmae-td-child-mail-folder">
                                   {mailFolderLabel(m.folder, t)}
                                 </span>

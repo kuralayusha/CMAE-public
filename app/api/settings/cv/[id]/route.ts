@@ -5,6 +5,7 @@ import {
   listCvs,
   updateCvMeta,
 } from "@/lib/cv/library";
+import { settingsBusyResponse } from "@/lib/operations/status";
 import { updateSettings } from "@/lib/settings/service";
 
 export const runtime = "nodejs";
@@ -22,6 +23,8 @@ export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const busy = settingsBusyResponse();
+  if (busy) return busy;
   try {
     const { id } = await ctx.params;
     const body = (await req.json().catch(() => ({}))) as {
@@ -52,6 +55,8 @@ export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
+  const busy = settingsBusyResponse();
+  if (busy) return busy;
   try {
     const { id } = await ctx.params;
     deleteCv(id);

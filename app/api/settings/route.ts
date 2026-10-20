@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { settingsBusyResponse } from "@/lib/operations/status";
 import { persistEnvCursorKeyIfNeeded } from "@/lib/onboarding/verify";
 import { getPublicSettings, updateSettings } from "@/lib/settings/service";
 
@@ -9,6 +10,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
+  const busy = settingsBusyResponse();
+  if (busy) return busy;
   const body = await req.json();
   // Only forward non-empty secrets — never pass null/"" (that used to wipe keys)
   const gmailAppPassword =

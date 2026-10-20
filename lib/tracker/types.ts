@@ -80,6 +80,14 @@ export type PendingGmailDraftInfo = {
   draftsUrl?: string;
 };
 
+export type RecipientCandidateInfo = {
+  email: string;
+  role: string | null;
+  priority: number | null;
+  reason: string | null;
+  recommended: boolean;
+};
+
 export type TrackerListItem = TrackerItemRow & {
   lastActivityAt: string | null;
   statusLabel: string;
@@ -92,6 +100,13 @@ export type TrackerListItem = TrackerItemRow & {
    * Status stays put until sync finds the outbound.
    */
   pendingGmailDraft: PendingGmailDraftInfo | null;
+  /**
+   * Contact.md candidates (research). Length > 1 → UI shows recipient select.
+   * Empty for mail-only rows without a company folder contact list.
+   */
+  recipientOptions: RecipientCandidateInfo[];
+  /** AI recommended address from contact.md (may differ from primaryTo). */
+  recommendedTo: string | null;
 };
 
 export type TrackerSection = {

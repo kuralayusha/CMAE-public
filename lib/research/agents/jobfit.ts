@@ -1,5 +1,6 @@
 import { t } from "@/lib/i18n/t";
 import { WS } from "@/lib/workspace/filenames";
+import { throwIfCanceled } from "../cancel";
 import type { RunContext } from "../context";
 import { askLlm, extractJson } from "../llm";
 import { speak } from "../speak";
@@ -8,6 +9,7 @@ import { writeFile } from "../workspace";
 export async function runJobFit(ctx: RunContext) {
   const { jobId, user } = ctx;
   speak(jobId, "jobfit", "system", "── jobfit online · CV ↔ job matching");
+  throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.jobfit) {
     speak(jobId, "jobfit", "think", `Reviewer feedback: ${ctx.redoFeedback.jobfit}`);
@@ -22,6 +24,8 @@ export async function runJobFit(ctx: RunContext) {
   const raw = await askLlm(
     jobId,
     `You are a JobFit specialist. Match open roles on this site to the candidate CV.
+Target site URL: ${ctx.url} — only roles published on THIS site. Do not invent jobs at other companies mentioned in the page copy.
+
 Site language may be anything.
 
 CRITICAL LANGUAGE RULE: Write "whyFit", "notes", and any prose fields in preferred language code "${pref}". Keep job "title" as shown on the site (original wording/script).

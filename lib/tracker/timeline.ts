@@ -161,7 +161,7 @@ function toBriefs(mails: LinkedTimelineMail[]): TimelineMailBrief[] {
     role: m.role,
     fromAddr: m.fromAddr,
     toAddr: m.toAddr,
-    subject: m.subject,
+    subject: normalizeMailText(m.subject || ""),
     dateIso: m.dateIso,
     snippet: normalizeMailText(m.snippet || "").slice(0, 240),
     bodyPreview: normalizeMailText(m.bodyText || m.snippet || "").slice(0, 800),

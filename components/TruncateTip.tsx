@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
+/** Native `title` tooltips usually appear ~1s; use half of that for hover. */
+const SHOW_DELAY_MS = 500;
 
 /** Collapse newlines / multi-space so table cells never break visually. */
 function flatText(text: string): string {
@@ -23,9 +26,19 @@ export function TruncateTip({
 }) {
   const display = flatText(text);
   const ref = useRef<HTMLSpanElement | null>(null);
+  const delayRef = useRef<number | null>(null);
   const tipId = useId();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
+
+  function clearDelay() {
+    if (delayRef.current != null) {
+      window.clearTimeout(delayRef.current);
+      delayRef.current = null;
+    }
+  }
+
+  useEffect(() => () => clearDelay(), []);
 
   const isTruncated = useCallback(() => {
     const el = ref.current;
@@ -33,7 +46,7 @@ export function TruncateTip({
     return el.scrollWidth > el.clientWidth + 1;
   }, []);
 
-  function show() {
+  function placeAndShow() {
     const el = ref.current;
     if (!el || !isTruncated()) {
       setOpen(false);
@@ -47,15 +60,25 @@ export function TruncateTip({
     setOpen(true);
   }
 
+  function showDelayed() {
+    clearDelay();
+    delayRef.current = window.setTimeout(placeAndShow, SHOW_DELAY_MS);
+  }
+
+  function hide() {
+    clearDelay();
+    setOpen(false);
+  }
+
   return (
     <>
       <span
         ref={ref}
         className={`cmae-truncate${className ? ` ${className}` : ""}`}
-        onMouseEnter={show}
-        onMouseLeave={() => setOpen(false)}
-        onFocus={show}
-        onBlur={() => setOpen(false)}
+        onMouseEnter={showDelayed}
+        onMouseLeave={hide}
+        onFocus={placeAndShow}
+        onBlur={hide}
         tabIndex={-1}
         aria-describedby={open ? tipId : undefined}
       >

@@ -1,0 +1,72 @@
+{
+  "research": {
+    "inPanel": "Açık"
+  },
+  "tracker": {
+    "chip": {
+      "ready_to_send": "Hazır",
+      "needs_reply": "Yanıt",
+      "closed": "Kapalı",
+      "waiting": "Beklemede",
+      "in_progress": "Aktif",
+      "ignored": "Yoksayılan"
+    },
+    "detail": {
+      "waitingOnUs": "Sizde bekliyor",
+      "waitingOnThem": "Onlarda bekliyor"
+    },
+    "sel": {
+      "markInactive": "Pasife al",
+      "markActive": "Aktife al"
+    },
+    "action": {
+      "more": "İşlemler",
+      "waiting": "Beklemede"
+    },
+    "sentiment": {
+      "positive": "olumlu",
+      "negative": "olumsuz",
+      "neutral": "nötr"
+    },
+    "recipient": {
+      "recommended": "AI önerisi",
+      "optionRecommended": "{label} · AI önerisi",
+      "saved": "Alıcı güncellendi — taslaklar {email} adresine gidecek"
+    }
+  },
+  "terminal": {
+    "detail": "Detaylı",
+    "logMode": "Log görünümü",
+    "pendingFolder": "(beklemede)",
+    "status": {
+      "queued": "sırada",
+      "running": "çalışıyor",
+      "done": "tamamlandı",
+      "error": "hata",
+      "canceled": "iptal"
+    }
+  },
+  "folders": {
+    "empty": "Boş"
+  },
+  "workspaceFiles": {
+    "jobLinksFit": "Neden uyuyor"
+  },
+  "mail": {
+    "folder": {
+      "sent": "Gönderilen"
+    }
+  },
+  "settings": {
+    "opsLocked": "Ayarlar, {reason} çalışırken değiştirilemez. İşlem bitince otomatik açılır.",
+    "opsReason": {
+      "gmailSync": "Gmail senkronizasyonu",
+      "research": "araştırma",
+      "trackerDraft": "mail taslağı hazırlama",
+      "multiple": "Gmail senkronizasyonu, araştırma veya taslak hazırlama"
+    },
+    "error": {
+      "opsBusy": "Gmail senkronizasyonu, araştırma veya taslak hazırlama çalışırken ayarlar değiştirilemez"
+    }
+  }
+}

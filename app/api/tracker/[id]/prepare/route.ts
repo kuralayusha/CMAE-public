@@ -3,6 +3,10 @@ import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { prepareDraftForItem } from "@/lib/tracker/agents/followup";
 import {
+  beginDraftOperation,
+  endDraftOperation,
+} from "@/lib/tracker/draft-inflight";
+import {
   getVariantDef,
   normalizeUserNote,
   type DraftPrepareKind,
@@ -53,12 +57,17 @@ export async function POST(
     const eventKinds = Array.isArray(body.eventKinds)
       ? body.eventKinds.filter((k): k is string => typeof k === "string")
       : undefined;
-    const result = await prepareDraftForItem(id, kind, {
-      variant: body.variant,
-      userNote,
-      eventKinds,
-    });
-    return NextResponse.json(result);
+    beginDraftOperation();
+    try {
+      const result = await prepareDraftForItem(id, kind, {
+        variant: body.variant,
+        userNote,
+        eventKinds,
+      });
+      return NextResponse.json(result);
+    } finally {
+      endDraftOperation();
+    }
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

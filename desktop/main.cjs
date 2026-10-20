@@ -373,8 +373,12 @@ function createWindow(url) {
 
   blockDevToolsShortcuts(mainWindow.webContents);
 
+  // Only http(s) — about:blank from popup-blocker workarounds must not hit
+  // shell.openExternal (Windows has no handler for the about: protocol).
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
-    shell.openExternal(target);
+    if (/^https?:\/\//i.test(String(target || ""))) {
+      void shell.openExternal(target);
+    }
     return { action: "deny" };
   });
 

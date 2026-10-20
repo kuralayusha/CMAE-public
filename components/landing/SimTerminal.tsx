@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { TruncateTip } from "@/components/TruncateTip";
 
 export type SimLine = {
   kind: "think" | "curl" | "python" | "system" | "ok" | "err";
@@ -128,8 +129,8 @@ export function SimTerminal({
               : "DONE"}
         </div>
       </div>
-      <div className="term-url" title={url}>
-        {url}
+      <div className="term-url">
+        <TruncateTip text={url} />
       </div>
       <div className="term-body term-body-simple" ref={scroller}>
         {lines.length === 0 ? (

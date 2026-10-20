@@ -8,6 +8,7 @@ import {
   getLocaleMetaPath,
   getUserPackPath,
 } from "./paths";
+import { applyLocaleOverrides } from "./overrides";
 import { countMissingLeaves, mergeShape } from "./shape";
 import type { LocaleMeta, LocalePack } from "./types";
 import { APP_LANGUAGE } from "./types";
@@ -85,7 +86,7 @@ export function loadActivePack(): { code: string; pack: LocalePack } {
   const user = loadUserPack();
   const en = loadEnPack();
   if (user && meta?.code) {
-    const pack = mergeShape(en, user);
+    let pack = mergeShape(en, user);
     // en.json changed but no missing keys — stamp new hash without LLM
     const hash = hashEnPack(en);
     if (
@@ -98,12 +99,14 @@ export function loadActivePack(): { code: string; pack: LocalePack } {
         /* ignore disk errors on read path */
       }
     }
+    pack = applyLocaleOverrides(meta.code, pack);
     return { code: meta.code, pack };
   }
   if (user) {
+    const code = meta?.code || APP_LANGUAGE;
     return {
-      code: meta?.code || APP_LANGUAGE,
-      pack: mergeShape(en, user),
+      code,
+      pack: applyLocaleOverrides(code, mergeShape(en, user)),
     };
   }
   return { code: APP_LANGUAGE, pack: en };

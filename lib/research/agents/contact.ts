@@ -1,3 +1,4 @@
+import { throwIfCanceled } from "../cancel";
 import { extractEmails, rankEmailsWithAi } from "../discover";
 import type { RunContext } from "../context";
 import { speak } from "../speak";
@@ -6,6 +7,7 @@ import { writeFile } from "../workspace";
 export async function runContact(ctx: RunContext) {
   const { jobId } = ctx;
   speak(jobId, "contact", "system", "── contact online · hiring email hunt");
+  throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.contact) {
     speak(jobId, "contact", "think", `Reviewer feedback: ${ctx.redoFeedback.contact}`);
@@ -17,6 +19,7 @@ export async function runContact(ctx: RunContext) {
 
   const hits: { email: string; page: string; pageRole?: string }[] = [];
   for (const p of ctx.pages) {
+    throwIfCanceled(jobId);
     const found = await extractEmails(jobId, `${p.title}\n${p.text}`, p.url);
     const pageRole = roleByUrl.get(p.url.replace(/\/$/, ""));
     for (const email of found) {
@@ -24,7 +27,12 @@ export async function runContact(ctx: RunContext) {
     }
   }
 
-  const ranked = await rankEmailsWithAi(jobId, ctx.companyName || "Company", hits);
+  const ranked = await rankEmailsWithAi(
+    jobId,
+    ctx.companyName || "Company",
+    hits,
+    ctx.url,
+  );
   ctx.emails = [
     ...new Map(ranked.map((e) => [e.email.toLowerCase(), e])).values(),
   ].sort((a, b) => a.priority - b.priority);

@@ -1,5 +1,6 @@
 "use client";
 
+import { HoverTip } from "@/components/HoverTip";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
 
 export type ResearchHistoryJob = {
@@ -46,15 +47,17 @@ export function ResearchHistory({
   ];
   return (
     <aside className="cmae-hist" aria-label={t("research.historyAria")}>
+      <header className="cmae-hist-head">
+        <span className="cmae-hist-head-mark" aria-hidden />
+        <h2>{t("research.historyTitle")}</h2>
+      </header>
       <div className="cmae-hist-scroll">
         {loading && items.length === 0 ? (
           <div className="cmae-hist-empty" role="status">
-            <span className="cmae-hist-empty-mark" aria-hidden />
             <p>{t("common.loading")}</p>
           </div>
         ) : items.length === 0 ? (
           <div className="cmae-hist-empty">
-            <span className="cmae-hist-empty-mark" aria-hidden />
             <p>{t("research.historyEmpty")}</p>
             <span className="cmae-hist-empty-hint">
               {t("research.historyEmptyHint")}
@@ -81,39 +84,40 @@ export function ResearchHistory({
 
               return (
                 <li key={job.id}>
-                  <button
-                    type="button"
-                    className={[
-                      "cmae-hist-row",
-                      `tone-${tone}`,
-                      inPanel ? "is-open" : "",
-                      selected ? "is-selected" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => onSelect(job)}
-                    title={job.url}
-                    aria-current={selected ? "true" : undefined}
-                    aria-pressed={inPanel}
-                  >
-                    <span
-                      className={`cmae-hist-dot tone-${tone}`}
-                      aria-hidden
-                    />
-                    <span className="cmae-hist-body">
-                      <span className="cmae-hist-name">{name}</span>
-                      <span className="cmae-hist-meta">
-                        <span className={`cmae-hist-badge tone-${tone}`}>
-                          {label}
-                        </span>
-                        {inPanel ? (
-                          <span className="cmae-hist-open">
-                            {upper(t("common.open"))}
+                  <HoverTip label={job.url} className="is-fill">
+                    <button
+                      type="button"
+                      className={[
+                        "cmae-hist-row",
+                        `tone-${tone}`,
+                        inPanel ? "is-open" : "",
+                        selected ? "is-selected" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => onSelect(job)}
+                      aria-current={selected ? "true" : undefined}
+                      aria-pressed={inPanel}
+                    >
+                      <span
+                        className={`cmae-hist-dot tone-${tone}`}
+                        aria-hidden
+                      />
+                      <span className="cmae-hist-body">
+                        <span className="cmae-hist-name">{name}</span>
+                        <span className="cmae-hist-meta">
+                          <span className={`cmae-hist-badge tone-${tone}`}>
+                            {label}
                           </span>
-                        ) : null}
+                          {inPanel ? (
+                            <span className="cmae-hist-open">
+                              {upper(t("research.inPanel"))}
+                            </span>
+                          ) : null}
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+                  </HoverTip>
                 </li>
               );
             })}

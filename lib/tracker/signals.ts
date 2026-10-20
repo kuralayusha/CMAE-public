@@ -3,6 +3,12 @@
  * Used to override weak AI labels.
  */
 
+import {
+  decodeBase64Body,
+  decodeQuotedPrintable,
+  repairUtf8Mojibake,
+} from "./mail-text";
+
 /** Strip HTML tags/entities when a body was stored as raw markup. */
 function stripHtmlish(html: string): string {
   if (!/<[a-zA-Z!?][\s\S]*?>/.test(html)) return html;
@@ -14,9 +20,13 @@ function stripHtmlish(html: string): string {
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
+    .replace(/&#x([0-9A-Fa-f]+);/g, (_, hex: string) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
+    })
     .replace(/&#(\d+);/g, (_, n: string) => {
       const code = Number(n);
-      return Number.isFinite(code) ? String.fromCharCode(code) : "";
+      return Number.isFinite(code) ? String.fromCodePoint(code) : "";
     })
     .replace(/\s+/g, " ")
     .trim();
@@ -26,8 +36,9 @@ function looksLikeBase64Blob(compact: string, sample: string): boolean {
   if (compact.length < 60) return false;
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(compact.slice(0, 160))) return false;
   // Already readable plain text / HTML — leave alone
-  if (/[äöüÄÖÜß]/.test(sample.slice(0, 120))) return false;
-  if (/\b(hallo|hello|dear|sehr|vielen|guten)\b/i.test(sample.slice(0, 160))) {
+  // Any letter outside ASCII (TR/DE/PL/… accents) ⇒ not a raw b64 blob
+  if (/[^\x00-\x7F]/.test(sample.slice(0, 160))) return false;
+  if (/\b(hallo|hello|dear|sehr|vielen|guten|merhaba|sayın)\b/i.test(sample.slice(0, 160))) {
     return false;
   }
   if (/^<!DOCTYPE\s+html|^<html[\s>]/i.test(sample.trim())) return false;
@@ -39,27 +50,39 @@ function looksLikeBase64Blob(compact: string, sample: string): boolean {
   return nonB64 === 0;
 }
 
+function looksLikeQuotedPrintable(text: string): boolean {
+  // Soft breaks ⇒ still on the wire
+  if (/=\r?\n/.test(text)) return true;
+  // UTF-8 multi-byte lead in QP (=C3=BC, =C5=9F, =E2=80=A6, …) — not a URL query
+  if (
+    /=(?:C[2-9A-F]|D[0-9A-F]|E[0-9A-F]|F[0-7])=[0-9A-Fa-f]{2}/i.test(text)
+  ) {
+    return true;
+  }
+  // Dense =XX runs (encoded spaces =20, equals =3D) without looking like a URL
+  const hits = text.match(/=[0-9A-Fa-f]{2}/g) || [];
+  if (hits.length < 4) return false;
+  const sample = text.slice(0, 500);
+  const density = hits.length / Math.max(sample.length, 1);
+  return density >= 0.04;
+}
+
 /** Decode quoted-printable / soft breaks / stray base64 so regexes match real text. */
 export function normalizeMailText(text: string): string {
   let s = (text || "").replace(/\r/g, "");
-  s = s.replace(/=\n/g, "");
-  s = s.replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) =>
-    String.fromCharCode(parseInt(hex, 16)),
-  );
+  if (looksLikeQuotedPrintable(s)) {
+    s = decodeQuotedPrintable(s, "utf-8");
+  }
   // Some IMAP bodies arrive as raw base64 (often truncated mid-stream, unpadded)
   const compact = s.replace(/\s+/g, "");
   if (looksLikeBase64Blob(compact, s)) {
-    try {
-      const padLen = (4 - (compact.length % 4)) % 4;
-      const padded = compact + "=".repeat(padLen);
-      const decoded = Buffer.from(padded, "base64").toString("utf8");
-      if (decoded && /[A-Za-zÄÖÜäöüß]{4,}/.test(decoded)) {
-        s = decoded;
-      }
-    } catch {
-      /* ignore */
+    const decoded = decodeBase64Body(compact, "utf-8");
+    // Letters in any script (Latin + accents, Cyrillic, CJK, …)
+    if (decoded && /\p{L}{4,}/u.test(decoded)) {
+      s = decoded;
     }
   }
+  s = repairUtf8Mojibake(s);
   return stripHtmlish(s);
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { HoverTip } from "@/components/HoverTip";
 import { useIntlLocale, useLocaleUpper, useT } from "@/components/I18nProvider";
 import type { SyncLogKind, SyncLogLine } from "@/lib/tracker/types";
 
@@ -55,44 +56,52 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
     >
       <div className="term-titlebar">
         <div className="term-tls" role="group" aria-label={t("terminal.ariaSync")}>
-          <button
-            type="button"
-            className="term-tl term-tl-close"
-            title={
+          <HoverTip
+            label={
               canCancel
                 ? t("terminal.cancelSync")
                 : canDismiss
                   ? t("terminal.close")
-                  : undefined
+                  : ""
             }
-            aria-label={canCancel ? t("terminal.cancel") : t("terminal.close")}
-            disabled={!canCancel && !canDismiss}
-            onClick={onRedClick}
-            style={{
-              ...DOT_HIT,
-              opacity: canCancel || canDismiss ? 1 : 0.35,
-            }}
           >
-            <span
-              aria-hidden
-              className="term-tl-face"
-              style={{ ...DOT_FACE, backgroundColor: DOT_CLOSE }}
-            />
-          </button>
-          <button
-            type="button"
-            className="term-tl term-tl-min"
-            title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
-            aria-label={collapsed ? t("terminal.expand") : t("terminal.collapse")}
-            onClick={() => setCollapsed((c) => !c)}
-            style={DOT_HIT}
+            <button
+              type="button"
+              className="term-tl term-tl-close"
+              aria-label={canCancel ? t("terminal.cancel") : t("terminal.close")}
+              disabled={!canCancel && !canDismiss}
+              onClick={onRedClick}
+              style={{
+                ...DOT_HIT,
+                opacity: canCancel || canDismiss ? 1 : 0.35,
+              }}
+            >
+              <span
+                aria-hidden
+                className="term-tl-face"
+                style={{ ...DOT_FACE, backgroundColor: DOT_CLOSE }}
+              />
+            </button>
+          </HoverTip>
+          <HoverTip
+            label={collapsed ? t("terminal.expand") : t("terminal.collapse")}
           >
-            <span
-              aria-hidden
-              className="term-tl-face"
-              style={{ ...DOT_FACE, backgroundColor: DOT_MIN }}
-            />
-          </button>
+            <button
+              type="button"
+              className="term-tl term-tl-min"
+              aria-label={
+                collapsed ? t("terminal.expand") : t("terminal.collapse")
+              }
+              onClick={() => setCollapsed((c) => !c)}
+              style={DOT_HIT}
+            >
+              <span
+                aria-hidden
+                className="term-tl-face"
+                style={{ ...DOT_FACE, backgroundColor: DOT_MIN }}
+              />
+            </button>
+          </HoverTip>
         </div>
         <div className="term-title">
           <span className="term-title-main">{t("tracker.sync")}</span>

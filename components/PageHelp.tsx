@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { HoverTip } from "@/components/HoverTip";
 import { useT } from "@/components/I18nProvider";
 import { type AppPageId, helpSeenKey } from "@/lib/help/pages";
 
@@ -9,15 +10,16 @@ import { type AppPageId, helpSeenKey } from "@/lib/help/pages";
 export function PageHelpButton({ onClick }: { onClick: () => void }) {
   const t = useT();
   return (
-    <button
-      type="button"
-      className="cmae-btn cmae-btn-ghost cmae-page-help"
-      onClick={onClick}
-      aria-label={t("nav.helpAria")}
-      title={t("nav.helpTitle")}
-    >
-      {t("nav.helpLabel")}
-    </button>
+    <HoverTip label={t("nav.helpTitle")}>
+      <button
+        type="button"
+        className="cmae-btn cmae-btn-ghost cmae-page-help"
+        onClick={onClick}
+        aria-label={t("nav.helpAria")}
+      >
+        {t("nav.helpLabel")}
+      </button>
+    </HoverTip>
   );
 }
 

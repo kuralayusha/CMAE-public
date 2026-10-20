@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { HoverTip } from "@/components/HoverTip";
+import { TruncateTip } from "@/components/TruncateTip";
 import { useIntlLocale, useLocaleUpper, useT } from "@/components/I18nProvider";
 import { derivePlain } from "@/lib/research/plain";
 import type { JobStatus, TermKind, TermLine } from "@/lib/research/types";
@@ -209,69 +211,76 @@ export function Terminal({
               role="group"
               aria-label={t("terminal.ariaControls")}
             >
-              <button
-                type="button"
-                className="term-tl term-tl-close"
-                title={
+              <HoverTip
+                label={
                   canCancel
                     ? t("terminal.cancel")
                     : canDismiss
                       ? t("terminal.close")
                       : t("terminal.cancel")
                 }
-                aria-label={
-                  canCancel
-                    ? t("terminal.cancel")
-                    : canDismiss
-                      ? t("terminal.close")
-                      : t("terminal.cancel")
-                }
-                disabled={!canCancel && !canDismiss}
-                onClick={() => {
-                  if (canCancel) setConfirmOpen(true);
-                  else if (canDismiss) onDismiss?.();
-                }}
-                style={{
-                  ...DOT_HIT,
-                  opacity: canCancel || canDismiss ? 1 : 0.35,
-                }}
               >
-                <span
-                  aria-hidden
-                  className="term-tl-face"
-                  style={{ ...DOT_FACE, backgroundColor: DOT_CLOSE }}
-                />
-              </button>
-              <button
-                type="button"
-                className="term-tl term-tl-min"
-                title={collapsed ? t("terminal.expand") : t("terminal.collapse")}
-                aria-label={
-                  collapsed ? t("terminal.expand") : t("terminal.collapse")
-                }
-                onClick={() => setCollapsed((c) => !c)}
-                style={DOT_HIT}
+                <button
+                  type="button"
+                  className="term-tl term-tl-close"
+                  aria-label={
+                    canCancel
+                      ? t("terminal.cancel")
+                      : canDismiss
+                        ? t("terminal.close")
+                        : t("terminal.cancel")
+                  }
+                  disabled={!canCancel && !canDismiss}
+                  onClick={() => {
+                    if (canCancel) setConfirmOpen(true);
+                    else if (canDismiss) onDismiss?.();
+                  }}
+                  style={{
+                    ...DOT_HIT,
+                    opacity: canCancel || canDismiss ? 1 : 0.35,
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className="term-tl-face"
+                    style={{ ...DOT_FACE, backgroundColor: DOT_CLOSE }}
+                  />
+                </button>
+              </HoverTip>
+              <HoverTip
+                label={collapsed ? t("terminal.expand") : t("terminal.collapse")}
               >
-                <span
-                  aria-hidden
-                  className="term-tl-face"
-                  style={{ ...DOT_FACE, backgroundColor: DOT_MIN }}
-                />
-              </button>
-              <button
-                type="button"
-                className="term-tl term-tl-max"
-                title={t("terminal.openFullscreen")}
-                aria-label={t("terminal.openFullscreen")}
-                onClick={openFullscreen}
-                style={DOT_HIT}
-              >
-                <span
-                  aria-hidden
-                  className="term-tl-face"
-                  style={{ ...DOT_FACE, backgroundColor: DOT_MAX }}
-                />
-              </button>
+                <button
+                  type="button"
+                  className="term-tl term-tl-min"
+                  aria-label={
+                    collapsed ? t("terminal.expand") : t("terminal.collapse")
+                  }
+                  onClick={() => setCollapsed((c) => !c)}
+                  style={DOT_HIT}
+                >
+                  <span
+                    aria-hidden
+                    className="term-tl-face"
+                    style={{ ...DOT_FACE, backgroundColor: DOT_MIN }}
+                  />
+                </button>
+              </HoverTip>
+              <HoverTip label={t("terminal.openFullscreen")}>
+                <button
+                  type="button"
+                  className="term-tl term-tl-max"
+                  aria-label={t("terminal.openFullscreen")}
+                  onClick={openFullscreen}
+                  style={DOT_HIT}
+                >
+                  <span
+                    aria-hidden
+                    className="term-tl-face"
+                    style={{ ...DOT_FACE, backgroundColor: DOT_MAX }}
+                  />
+                </button>
+              </HoverTip>
             </div>
           ) : null}
           <div className="term-title">
@@ -281,23 +290,27 @@ export function Terminal({
             </span>
           </div>
 
-          <label className="term-mode-switch" title={t("terminal.logMode")}>
-            <span className={logMode === "simple" ? "on" : ""}>
-              {upper(t("terminal.simple"))}
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={logMode === "detail"}
-              className={`term-switch${logMode === "detail" ? " term-switch-on" : ""}`}
-              onClick={() => setLogMode((m) => (m === "simple" ? "detail" : "simple"))}
-            >
-              <span className="term-switch-knob" />
-            </button>
-            <span className={logMode === "detail" ? "on" : ""}>
-              {upper(t("terminal.detail"))}
-            </span>
-          </label>
+          <HoverTip label={t("terminal.logMode")}>
+            <label className="term-mode-switch">
+              <span className={logMode === "simple" ? "on" : ""}>
+                {upper(t("terminal.simple"))}
+              </span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={logMode === "detail"}
+                className={`term-switch${logMode === "detail" ? " term-switch-on" : ""}`}
+                onClick={() =>
+                  setLogMode((m) => (m === "simple" ? "detail" : "simple"))
+                }
+              >
+                <span className="term-switch-knob" />
+              </button>
+              <span className={logMode === "detail" ? "on" : ""}>
+                {upper(t("terminal.detail"))}
+              </span>
+            </label>
+          </HoverTip>
 
           <div className={`term-status term-status-${status}`}>
             {status === "running" ? <span className="term-pulse" /> : null}
@@ -307,8 +320,8 @@ export function Terminal({
 
         {!collapsed ? (
           <>
-            <div className="term-url" title={url}>
-              {url}
+            <div className="term-url">
+              <TruncateTip text={url} />
             </div>
             <div
               className={`term-body${logMode === "simple" ? " term-body-simple" : ""}`}
@@ -372,8 +385,21 @@ export function Terminal({
             aria-labelledby={`cancel-title-${jobId}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id={`cancel-title-${jobId}`}>{t("terminal.cancelTitle")}</h3>
-            <p>{t("terminal.cancelBody")}</p>
+            <header className="term-modal-head">
+              <h3 id={`cancel-title-${jobId}`}>{t("terminal.cancelTitle")}</h3>
+              <button
+                type="button"
+                className="term-modal-close"
+                onClick={() => setConfirmOpen(false)}
+                disabled={cancelBusy}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+            <div className="term-modal-body">
+              <p>{t("terminal.cancelBody")}</p>
+            </div>
             <div className="term-modal-actions">
               <button
                 type="button"

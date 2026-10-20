@@ -29,8 +29,7 @@
     "yes": "Yes",
     "no": "No",
     "rename": "Rename",
-    "default": "Default",
-    "open": "open"
+    "default": "Default"
   },
   "fields": {
     "fullName": "Full name",
@@ -279,8 +278,8 @@
       "action": "Action"
     },
     "chip": {
-      "ready_to_send": "Send",
-      "needs_reply": "Reply",
+      "ready_to_send": "Ready",
+      "needs_reply": "Reply due",
       "needs_action": "Link / form",
       "follow_up_due": "Follow-up",
       "waiting": "Waiting",
@@ -310,8 +309,8 @@
     "detail": {
       "fu": "Follow-up {date}",
       "fuPending": "Follow-up pending",
-      "waitingOnUs": "you",
-      "waitingOnThem": "them"
+      "waitingOnUs": "Waiting on you",
+      "waitingOnThem": "Waiting on them"
     },
     "error": {
       "bulkFailed": "Bulk action failed",
@@ -334,7 +333,18 @@
       "gmailDraftsFolder": "Gmail Drafts folder not found",
       "bulkIdsRequired": "Select at least one application",
       "bulkActionInvalid": "Invalid bulk action",
-      "invalidVariant": "Invalid draft option"
+      "invalidVariant": "Invalid draft option",
+      "invalidBody": "Invalid request body",
+      "invalidRecipient": "Invalid recipient email address",
+      "recipientNotInCandidates": "That address is not among the research contact candidates"
+    },
+    "recipient": {
+      "aria": "Choose recipient for {company}",
+      "recommended": "AI pick",
+      "option": "{email}",
+      "optionWithRole": "{email} · {role}",
+      "optionRecommended": "{label} · AI pick",
+      "saved": "Recipient updated — drafts will use {email}"
     },
     "variantNote": {
       "title": "Add a note (optional)",
@@ -432,6 +442,8 @@
       "selectCompany": "Select {company}"
     },
     "action": {
+      "openHistory": "Open timeline for {company}",
+      "more": "Actions",
       "openGmail": "Open in Gmail",
       "openGmailN": "Open in Gmail ({count} threads)",
       "createDraft": "Create Gmail draft",
@@ -516,6 +528,13 @@
     "localePrepDone": "Language is ready.",
     "localePrepFail": "Language update failed — your previous language is still active.",
     "localePrepBlocked": "Please wait until the language update finishes.",
+    "opsLocked": "Settings can’t be changed while {reason} is running. They unlock automatically when it finishes.",
+    "opsReason": {
+      "gmailSync": "Gmail sync",
+      "research": "research",
+      "trackerDraft": "mail draft preparation",
+      "multiple": "Gmail sync, research, or draft preparation"
+    },
     "jobWhy": "Work type and notice period can appear in application and follow-up text. Salary is only mentioned in replies when the employer asks.",
     "cvHint": "Up to {max} PDFs. Drop a file into the area below or click to browse — drafts pick the best match by language and tags.",
     "cvEmpty": "No CVs yet.",
@@ -549,12 +568,13 @@
       "cvPdfOnly": "Only PDF files are accepted",
       "cvNotFound": "CV not found",
       "cvParseFailed": "Could not extract text from PDF",
-      "cvLimitReached": "At most {max} CVs allowed"
+      "cvLimitReached": "At most {max} CVs allowed",
+      "opsBusy": "Settings can’t be changed while Gmail sync, research, or draft preparation is running"
     }
   },
   "workspaceFiles": {
     "jobLinksTitle": "Open roles and application links",
-    "jobLinksFit": "Fit",
+    "jobLinksFit": "Why it fits",
     "jobLinksLink": "Link",
     "jobLinksNotes": "Notes",
     "jobLinksEmpty": "No matching open roles found.\nYou can still send a speculative application.",
@@ -562,7 +582,7 @@
     "companyInfoTranslatedTitle": "{company} — research note · translated ({lang})"
   },
   "folders": {
-    "empty": "empty",
+    "empty": "Empty",
     "forAi": "for CMAE",
     "forUser": "for you",
     "suffixCanceled": "(canceled)",
@@ -621,7 +641,7 @@
   },
   "terminal": {
     "simple": "Simple",
-    "detail": "Detail",
+    "detail": "Detailed",
     "cancel": "Cancel",
     "expand": "Expand",
     "collapse": "Collapse",
@@ -633,7 +653,7 @@
     "researchStarts": "When research starts, progress appears here.",
     "pendingFolder": "(pending)",
     "openFullscreen": "Open fullscreen",
-    "logMode": "View",
+    "logMode": "Log view",
     "canceling": "Canceling…",
     "confirmCancel": "Yes, cancel",
     "cancelTitle": "Cancel this research?",
@@ -642,7 +662,7 @@
     "status": {
       "queued": "queued",
       "running": "running",
-      "done": "done",
+      "done": "completed",
       "error": "error",
       "canceled": "canceled"
     },
@@ -789,6 +809,8 @@
     "pastSession": "Earlier research",
     "removeFromPanel": "Remove from panel",
     "historyAria": "Research history",
+    "historyTitle": "Last researches",
+    "inPanel": "Open",
     "historyEmpty": "No research yet",
     "historyEmptyHint": "When you start with a new URL, it appears here.",
     "error": {

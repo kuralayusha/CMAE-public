@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
+import { HoverTip } from "@/components/HoverTip";
 import { useIntlLocale, useLocaleUpper, useT } from "@/components/I18nProvider";
 import { Button } from "@/components/ui";
 import { parseSubjectBody } from "@/lib/mail/subject-body";
@@ -380,26 +381,28 @@ export function FolderBrowser() {
       <div className="cmae-fb-main">
         <div className="cmae-fb-bar">
           <div className="cmae-fb-nav">
-            <button
-              type="button"
-              className="cmae-fb-nav-btn"
-              disabled={!path}
-              onClick={() => go(parentPath(path))}
-              aria-label={t("folders.parent")}
-              title={t("folders.parent")}
-            >
-              ←
-            </button>
-            <button
-              type="button"
-              className="cmae-fb-nav-btn"
-              disabled={!path && !filePath}
-              onClick={() => go("")}
-              aria-label={t("folders.root")}
-              title={t("folders.root")}
-            >
-              ⌂
-            </button>
+            <HoverTip label={t("folders.parent")}>
+              <button
+                type="button"
+                className="cmae-fb-nav-btn"
+                disabled={!path}
+                onClick={() => go(parentPath(path))}
+                aria-label={t("folders.parent")}
+              >
+                ←
+              </button>
+            </HoverTip>
+            <HoverTip label={t("folders.root")}>
+              <button
+                type="button"
+                className="cmae-fb-nav-btn"
+                disabled={!path && !filePath}
+                onClick={() => go("")}
+                aria-label={t("folders.root")}
+              >
+                ⌂
+              </button>
+            </HoverTip>
           </div>
 
           <nav className="cmae-fb-crumbs" aria-label={t("folders.locationAria")}>
@@ -513,23 +516,25 @@ export function FolderBrowser() {
                               : entry.badge
                                 ? [entry.badge]
                                 : []
-                            ).map((badge, i) => (
-                              <span
-                                key={`${badge.text}-${i}`}
-                                className={`cmae-fb-chip is-${badge.tone}`}
-                                title={
-                                  badge.tone === "muted"
-                                    ? t("folders.badgeNoLink")
-                                    : badge.tone === "ai"
-                                      ? t("folders.badgeAiOnly")
-                                      : t("folders.badgeLinked", {
-                                          status: badge.text,
-                                        })
-                                }
-                              >
-                                {badge.text}
-                              </span>
-                            ))}
+                            ).map((badge, i) => {
+                              const badgeTip =
+                                badge.tone === "muted"
+                                  ? t("folders.badgeNoLink")
+                                  : badge.tone === "ai"
+                                    ? t("folders.badgeAiOnly")
+                                    : t("folders.badgeLinked", {
+                                        status: badge.text,
+                                      });
+                              return (
+                                <HoverTip key={`${badge.text}-${i}`} label={badgeTip}>
+                                  <span
+                                    className={`cmae-fb-chip is-${badge.tone}`}
+                                  >
+                                    {badge.text}
+                                  </span>
+                                </HoverTip>
+                              );
+                            })}
                           </span>
                           <span className="cmae-fb-cell">
                             {entry.kind === "dir" ? "—" : formatSize(entry.size)}
@@ -561,9 +566,14 @@ export function FolderBrowser() {
                     className="cmae-fb-close"
                     disabled={revealing}
                     onClick={() => void revealInOs(preview.path)}
-                    title={fmKind === "finder" ? t("folders.openInFinder") : fmKind === "explorer" ? t("folders.openInExplorer") : t("folders.openInFiles")}
                   >
-                    {revealing ? t("folders.opening") : (fmKind === "finder" ? t("folders.openInFinder") : fmKind === "explorer" ? t("folders.openInExplorer") : t("folders.openInFiles"))}
+                    {revealing
+                      ? t("folders.opening")
+                      : fmKind === "finder"
+                        ? t("folders.openInFinder")
+                        : fmKind === "explorer"
+                          ? t("folders.openInExplorer")
+                          : t("folders.openInFiles")}
                   </button>
                   <button
                     type="button"
@@ -674,10 +684,23 @@ export function FolderBrowser() {
             aria-labelledby="cmae-fb-delete-title"
             aria-describedby="cmae-fb-delete-desc"
           >
-            <h2 id="cmae-fb-delete-title">{t("folders.deleteTitle")}</h2>
-            <p id="cmae-fb-delete-desc">
-              {t("folders.deleteBody", { name: deleteTarget.name })}
-            </p>
+            <header className="cmae-fb-modal-head">
+              <h2 id="cmae-fb-delete-title">{t("folders.deleteTitle")}</h2>
+              <button
+                type="button"
+                className="cmae-fb-modal-close"
+                disabled={busy}
+                onClick={() => setDeleteTarget(null)}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+            <div className="cmae-fb-modal-body">
+              <p id="cmae-fb-delete-desc">
+                {t("folders.deleteBody", { name: deleteTarget.name })}
+              </p>
+            </div>
             <div className="cmae-fb-modal-actions">
               <button
                 ref={deleteCancelRef}

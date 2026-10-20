@@ -71,11 +71,11 @@ export function upsertMails(mails: FetchedMail[]): UpsertMailsResult {
           fromAddr: m.fromAddr,
           toAddr: m.toAddr,
           ccAddr: m.ccAddr,
-          subject: m.subject,
+          subject: normalizeMailText(m.subject || existing.subject),
           dateIso: m.dateIso,
           snippet: normalizeMailText(m.snippet || existing.snippet).slice(0, 240),
           // Do not overwrite with an empty body (keep older/preserved body).
-          // normalizeMailText repairs stray base64 HTML left by older IMAP parsers.
+          // normalizeMailText also repairs UTF-8 mojibake from older QP decoders.
           bodyText: normalizeMailText(m.bodyText || existing.bodyText),
           headersHash: m.headersHash ?? existing.headersHash,
         })
@@ -92,7 +92,7 @@ export function upsertMails(mails: FetchedMail[]): UpsertMailsResult {
           fromAddr: m.fromAddr,
           toAddr: m.toAddr,
           ccAddr: m.ccAddr,
-          subject: m.subject,
+          subject: normalizeMailText(m.subject),
           dateIso: m.dateIso,
           snippet: normalizeMailText(m.snippet).slice(0, 240),
           bodyText: normalizeMailText(m.bodyText),

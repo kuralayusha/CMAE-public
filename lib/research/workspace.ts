@@ -158,14 +158,40 @@ export async function renameCompanyFolder(
       throw new Error(t("folders.error.invalidPath"));
     }
     if (folderPath !== currentPath) {
-      try {
-        await fs.rename(currentPath, folderPath);
-      } catch {
-        await fs.mkdir(folderPath, { recursive: true });
-      }
+      await renameWorkspaceDirOrReuse(currentPath, folderPath);
     }
     return { folderName, folderPath };
   });
+}
+
+/**
+ * Rename in place. Never mkdir a twin on failure — that orphaned empty
+ * `N- host` folders beside the real company folder during cancel/compact races.
+ */
+async function renameWorkspaceDirOrReuse(
+  currentPath: string,
+  folderPath: string,
+): Promise<void> {
+  const sourceExists = await fs
+    .stat(currentPath)
+    .then((s) => s.isDirectory())
+    .catch(() => false);
+  const targetExists = await fs
+    .stat(folderPath)
+    .then((s) => s.isDirectory())
+    .catch(() => false);
+
+  if (!sourceExists) {
+    // Cancel/compact already moved or deleted the source — keep target if present.
+    if (targetExists) return;
+    throw new Error(t("folders.error.pathNotFound"));
+  }
+  if (currentPath === folderPath) return;
+  if (targetExists) {
+    // Same index, different name already taken — do not create a third folder.
+    throw new Error(t("folders.error.nameExists"));
+  }
+  await fs.rename(currentPath, folderPath);
 }
 
 export async function writeFile(
@@ -651,11 +677,7 @@ export async function markFolderStatus(
   if (!folderPath.startsWith(workspaceRoot() + path.sep)) {
     throw new Error(t("folders.error.invalidFolder"));
   }
-  try {
-    await fs.rename(currentPath, folderPath);
-  } catch {
-    await fs.mkdir(folderPath, { recursive: true });
-  }
+  await renameWorkspaceDirOrReuse(currentPath, folderPath);
   return { folderName, folderPath };
 }
 

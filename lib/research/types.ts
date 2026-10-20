@@ -23,7 +23,7 @@ export type ResearchJob = {
   error: string | null;
   createdAt: number;
   lines: TermLine[];
-  /** Soft-kill flag — conductor checks between specialist steps */
+  /** Soft-kill flag — specialists + conductor check; AbortController hard-stops curl */
   cancelRequested?: boolean;
 };
 

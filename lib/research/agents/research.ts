@@ -2,6 +2,7 @@ import { t } from "@/lib/i18n/t";
 import { sameLanguage } from "@/lib/mail/lang";
 import { stripLeadingMarkdownH1 } from "@/lib/mail/subject-body";
 import { WS } from "@/lib/workspace/filenames";
+import { throwIfCanceled } from "../cancel";
 import { planExternalQueriesWithAi } from "../discover";
 import type { RunContext } from "../context";
 import { askLlm } from "../llm";
@@ -20,6 +21,7 @@ STRUCTURE RULES (mandatory):
 export async function runResearch(ctx: RunContext) {
   const { jobId, user } = ctx;
   speak(jobId, "research", "system", "── research online · company profile");
+  throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.research) {
     speak(jobId, "research", "think", `Reviewer feedback: ${ctx.redoFeedback.research}`);
@@ -31,9 +33,11 @@ export async function runResearch(ctx: RunContext) {
     ctx.siteLanguage,
     ctx.url,
   );
+  throwIfCanceled(jobId);
 
   let externalSnippet = "";
   for (const q of queries) {
+    throwIfCanceled(jobId);
     speak(jobId, "research", "think", `Query: ${q}`);
     const ddg = `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
     const { stdout } = await runCurl(jobId, [
@@ -61,8 +65,12 @@ CRITICAL LANGUAGE RULE: Write the ENTIRE note in language code "${siteLang}" (th
 
 ${RESEARCH_STRUCTURE_RULES}
 
+TARGET LOCK: The user-given URL is the only research/application target.
 Company: ${ctx.companyName}
 Site: ${ctx.url}
+
+You may use external snippets only to enrich facts about THIS same entity. Never switch the subject to another company (e.g. an employer listed on a personal portfolio). If the site is a personal/candidate portfolio, profile that person/brand — not their past employers.
+
 Site excerpt:
 ${(ctx.home?.text || "").slice(0, 5000)}
 

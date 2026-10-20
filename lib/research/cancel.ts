@@ -1,4 +1,5 @@
 import { t } from "@/lib/i18n/t";
+import { abortJob, getJobSignal } from "./abort";
 import { emitLine, getJob, setJobStatus } from "./events";
 import {
   folderStatusSuffix,
@@ -24,6 +25,26 @@ export function throwIfCanceled(jobId: string) {
   }
 }
 
+/** Reject as soon as the job abort signal fires (or if already aborted). */
+export function whenJobAborted(jobId: string): Promise<never> {
+  const signal = getJobSignal(jobId);
+  if (!signal) {
+    return new Promise(() => {
+      /* never — no controller yet */
+    });
+  }
+  if (signal.aborted) {
+    return Promise.reject(new JobCanceledError(jobId));
+  }
+  return new Promise((_, reject) => {
+    signal.addEventListener(
+      "abort",
+      () => reject(new JobCanceledError(jobId)),
+      { once: true },
+    );
+  });
+}
+
 export async function cancelJob(jobId: string): Promise<{
   folderName: string | null;
 }> {
@@ -32,7 +53,13 @@ export async function cancelJob(jobId: string): Promise<{
     throw new Error("Job not found");
   }
 
+  // Idempotent: already fully canceled — don't spam logs / re-rename.
+  if (job.status === "canceled" && job.cancelRequested) {
+    return { folderName: job.folderName };
+  }
+
   job.cancelRequested = true;
+  abortJob(jobId);
   emitLine(jobId, "err", "[conductor] CANCEL requested by user — killing specialists…");
 
   let folderName = job.folderName;

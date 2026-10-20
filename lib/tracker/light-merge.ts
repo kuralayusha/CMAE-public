@@ -1,6 +1,11 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { trackerItemMails, trackerItems } from "@/lib/db/schema";
+import {
+  loadRecipientsForItem,
+  parseSelectedRecipient,
+  resolveEffectiveRecipient,
+} from "./recipients";
 import { companyKey } from "./signals";
 import {
   getWorkspaceCandidate,
@@ -79,12 +84,22 @@ function patchResearchMeta(
       ? c.researchJobId
       : row.researchJobId;
 
+  const nextFolder = c.workspaceFolder || row.workspaceFolder;
+  const recipients = loadRecipientsForItem({ workspaceFolder: nextFolder });
+  const selected = parseSelectedRecipient(row.notesJson);
+  const primaryTo = resolveEffectiveRecipient({
+    selected,
+    recommended: recipients.recommended || c.primaryTo,
+    candidates: recipients.candidates,
+    fallback: c.primaryTo || row.primaryTo,
+  });
+
   db.update(trackerItems)
     .set({
       company: c.company || row.company,
-      workspaceFolder: c.workspaceFolder || row.workspaceFolder,
+      workspaceFolder: nextFolder,
       researchJobId: nextJobId,
-      primaryTo: c.primaryTo || row.primaryTo,
+      primaryTo,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(trackerItems.id, itemId))

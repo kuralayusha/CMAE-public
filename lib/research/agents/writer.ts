@@ -9,6 +9,7 @@ import {
   formatSubjectBody,
   parseSubjectBody,
 } from "@/lib/tracker/parse-mail-md";
+import { throwIfCanceled } from "../cancel";
 import type { RunContext } from "../context";
 import { askLlm } from "../llm";
 import { speak } from "../speak";
@@ -90,6 +91,7 @@ COLD vs OPEN ROLE
 export async function runWriter(ctx: RunContext) {
   const { jobId, user } = ctx;
   speak(jobId, "writer", "system", "── writer online · application mail");
+  throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.writer) {
     speak(jobId, "writer", "think", `Reviewer feedback: ${ctx.redoFeedback.writer}`);
@@ -118,8 +120,9 @@ export async function runWriter(ctx: RunContext) {
 Write a personalized application email in language: ${ctx.siteLanguage} (match the website / company's working language).
 
 Candidate: ${user.fullName} <${user.email}>
-Company: ${ctx.companyName}
+Company (TARGET from user URL ${ctx.url}): ${ctx.companyName}
 Recipient hint: ${recipient}
+Do not address or apply to a different company mentioned only in CV/site work history.
 ${jobContext}
 
 Candidate job preferences (use notice period + work type when natural; do not dump salary):

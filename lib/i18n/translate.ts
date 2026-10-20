@@ -9,6 +9,8 @@ import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
 import { getAgentCwd } from "@/lib/paths";
 import { updateSettings } from "@/lib/settings/service";
+import { formatHintsForSection } from "./hints";
+import { applyLocaleOverrides } from "./overrides";
 import {
   loadEnPack,
   loadLocaleMeta,
@@ -115,6 +117,7 @@ async function translateSection(
   section: LocalePack,
   targetLanguage: string,
 ): Promise<LocalePack> {
+  const keyContext = formatHintsForSection(sectionKey, section);
   const prompt = `You are a professional UI localization engine.
 Translate the following JSON object of UI strings from English into language code "${targetLanguage}".
 
@@ -127,8 +130,15 @@ Rules:
 - Keep technical tokens like Gmail, IMAP, Cursor, PDF, UID unchanged when they are product/protocol names.
 - Natural, concise UI tone for ${targetLanguage}.
 - Prefer sentence case / title case in values (not ALL CAPS). The app uppercases labels in the UI with correct locale rules.
+- Part of speech is critical for short UI labels:
+  - STATUS / chip / badge / inPanel / *status* keys → adjectival or state form (never an imperative verb).
+    Examples: EN "Open" (status) → TR "Açık", DE "Offen", FR "Ouvert" (not Aç / Öffnen / Ouvrir).
+    EN "Send"/"Reply" as status chips → state wording (TR "Hazır"/"Yanıt"), not command verbs (Gönder/Yanıtla).
+  - BUTTON / action keys (Save, Delete, Cancel, Continue, Back, Close, Expand, Collapse) → imperative is correct.
+  - Folder / column / field nouns (Sent, Link, Notes, Label, Period) → nouns, not verbs.
+- If KEY CONTEXT is provided below, those notes override ambiguous English wording.
 - If target is Turkish (tr): never confuse İ/I/i/ı — dotted i uppercases to İ, dotless ı to I. Do not write ASCII "I" where Turkish "İ" is required.
-
+${keyContext}
 Section key: ${sectionKey}
 JSON:
 ${JSON.stringify(section, null, 2)}`;
@@ -216,6 +226,9 @@ export async function translateLocalePack(
       pack = mergeShape(en, deepMergePack(prior, out));
     }
   }
+
+  // Hand-fixes (POS mistakes, etc.) win over LLM output for every consumer.
+  pack = applyLocaleOverrides(code, pack);
 
   let meta: LocaleMeta = {
     code,

@@ -67,6 +67,24 @@ export function setJobStatus(
 ) {
   const job = getJob(jobId);
   if (!job) return;
+
+  // Cancel/done race: scout used to call setJobStatus(..., "running") at the
+  // end and revive an already-canceled job — UI stayed "live" until a 2nd cancel.
+  const terminal = job.status === "canceled" || job.status === "done";
+  if (terminal && (status === "running" || status === "queued")) {
+    if (extra?.companyName !== undefined) job.companyName = extra.companyName;
+    if (extra?.folderName !== undefined) job.folderName = extra.folderName;
+    persistJobNow(job);
+    getJobBus().emit(`job:${jobId}`, {
+      type: "status",
+      status: job.status,
+      companyName: job.companyName,
+      error: job.error,
+      folderName: job.folderName,
+    } as JobEvent);
+    return;
+  }
+
   job.status = status;
   if (extra?.companyName !== undefined) job.companyName = extra.companyName;
   if (extra?.error !== undefined) job.error = extra.error;

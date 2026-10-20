@@ -1,58 +1,80 @@
 "use client";
 
 import {
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
   useState,
-  type MouseEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
-const GAP = 8;
+/** Almost stuck to the trigger. */
+const GAP = 2;
 const EDGE = 8;
-/** Tip's right edge sits this many px left of the pointer. */
-const CURSOR_GAP = 4;
+/** Native `title` tooltips usually appear ~1s; use half of that for hover. */
+const SHOW_DELAY_MS = 500;
 
 /**
  * Always-on hover tooltip (same visual language as TruncateTip).
  * Prefer this over native `title` for action buttons.
- * Anchored bottom-left of the cursor: tip hangs to the left, just below.
+ * Anchored bottom-left of the trigger (does not follow the cursor).
+ * Flips to the right when there is not enough room on the left.
  */
 export function HoverTip({
   label,
   children,
+  className = "",
 }: {
   label: string;
   children: ReactNode;
+  /** Extra class on the trigger wrap (e.g. full-width cells). */
+  className?: string;
 }) {
   const tipId = useId();
   const wrapRef = useRef<HTMLSpanElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
+  const delayRef = useRef<number | null>(null);
   const [open, setOpen] = useState(false);
-  const [cursor, setCursor] = useState({ x: 0, y: 0 });
   const [pos, setPos] = useState({ x: 0, y: 0, ready: false });
   const text = String(label || "").trim();
+
+  function clearDelay() {
+    if (delayRef.current != null) {
+      window.clearTimeout(delayRef.current);
+      delayRef.current = null;
+    }
+  }
+
+  useEffect(() => () => clearDelay(), []);
 
   useLayoutEffect(() => {
     if (!open || !text) return;
     const tip = tipRef.current;
-    if (!tip) return;
+    const wrap = wrapRef.current;
+    if (!tip || !wrap) return;
 
+    const r = wrap.getBoundingClientRect();
     const tw = tip.offsetWidth;
     const th = tip.offsetHeight;
 
-    // Right edge of tip near cursor → tip sits bottom-left of the pointer.
-    let x = cursor.x - tw - CURSOR_GAP;
-    let y = cursor.y + GAP;
+    // Default: tip hangs to the left of the trigger, just below it.
+    let x = r.left - tw;
+    let y = r.bottom + GAP;
 
-    if (x < EDGE) x = EDGE;
+    // Not enough room on the left → open to the right of the trigger.
+    if (x < EDGE) {
+      x = r.right;
+    }
+
     if (x + tw > window.innerWidth - EDGE) {
       x = window.innerWidth - EDGE - tw;
     }
+    if (x < EDGE) x = EDGE;
+
     if (y + th > window.innerHeight - EDGE) {
-      y = Math.max(EDGE, cursor.y - GAP - th);
+      y = Math.max(EDGE, r.top - GAP - th);
     }
 
     setPos((prev) =>
@@ -60,48 +82,36 @@ export function HoverTip({
         ? prev
         : { x, y, ready: true },
     );
-  }, [open, cursor.x, cursor.y, text]);
+  }, [open, text]);
 
   if (!text) return <>{children}</>;
 
-  function placeNearCursor(clientX: number, clientY: number) {
-    setCursor({ x: clientX, y: clientY });
-  }
-
-  function showFromMouse(e: MouseEvent) {
-    placeNearCursor(e.clientX, e.clientY);
+  function showNow() {
+    clearDelay();
     setPos((prev) => ({ ...prev, ready: false }));
     setOpen(true);
   }
 
-  function showFromFocus() {
-    const el = wrapRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    placeNearCursor(r.left + r.width / 2, r.bottom);
+  function showDelayed() {
+    clearDelay();
+    delayRef.current = window.setTimeout(showNow, SHOW_DELAY_MS);
+  }
+
+  function hide() {
+    clearDelay();
+    setOpen(false);
     setPos((prev) => ({ ...prev, ready: false }));
-    setOpen(true);
   }
 
   return (
     <>
       <span
         ref={wrapRef}
-        className="cmae-hover-tip-wrap"
-        onMouseEnter={showFromMouse}
-        onMouseMove={(e) => {
-          if (!open) return;
-          placeNearCursor(e.clientX, e.clientY);
-        }}
-        onMouseLeave={() => {
-          setOpen(false);
-          setPos((prev) => ({ ...prev, ready: false }));
-        }}
-        onFocus={showFromFocus}
-        onBlur={() => {
-          setOpen(false);
-          setPos((prev) => ({ ...prev, ready: false }));
-        }}
+        className={`cmae-hover-tip-wrap${className ? ` ${className}` : ""}`}
+        onMouseEnter={showDelayed}
+        onMouseLeave={hide}
+        onFocus={showNow}
+        onBlur={hide}
       >
         {children}
       </span>

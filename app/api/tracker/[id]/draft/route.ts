@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
+import {
+  beginDraftOperation,
+  endDraftOperation,
+} from "@/lib/tracker/draft-inflight";
 import { createGmailDraftForItem } from "@/lib/tracker/drafts";
 import type { DraftKind } from "@/lib/tracker/types";
 
@@ -36,10 +40,15 @@ export async function POST(
         { status: 400 },
       );
     }
-    const result = await createGmailDraftForItem(id, kind, {
-      ensure: Boolean(body.ensure),
-    });
-    return NextResponse.json(result);
+    beginDraftOperation();
+    try {
+      const result = await createGmailDraftForItem(id, kind, {
+        ensure: Boolean(body.ensure),
+      });
+      return NextResponse.json(result);
+    } finally {
+      endDraftOperation();
+    }
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

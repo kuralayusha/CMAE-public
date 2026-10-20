@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { OperationsProvider } from "@/components/OperationsProvider";
 import { TopNav } from "@/components/TopNav";
 
 /**
@@ -9,9 +10,9 @@ import { TopNav } from "@/components/TopNav";
  */
 export function AppChrome({ children }: { children: ReactNode }) {
   return (
-    <>
+    <OperationsProvider>
       <TopNav />
       {children}
-    </>
+    </OperationsProvider>
   );
 }

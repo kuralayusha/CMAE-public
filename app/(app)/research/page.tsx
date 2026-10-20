@@ -131,8 +131,8 @@ export default function ResearchPage() {
 
         <main className="cmae-main">
           <div className="cmae-main-inner">
-            <header className="cmae-page-head">
-              <div className="cmae-page-head-title">
+            <header className="cmae-page-head cmae-page-head--research">
+              <div className="cmae-page-head-top">
                 <h1>{t("help.research.title")}</h1>
                 <PageHelp pageId="research" />
               </div>
