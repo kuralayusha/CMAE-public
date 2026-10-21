@@ -205,6 +205,8 @@ type TrackerItem = {
   recommendedTo?: string | null;
   userVersion?: number;
   warnings?: { code: string; message: string }[];
+  unverified?: boolean;
+  channel?: string | null;
 };
 
 /** Open tab under the click gesture, then navigate after async work (avoids popup block).
@@ -1488,6 +1490,13 @@ export function TrackerList() {
         </span>
         <span className="cmae-tracker-company" role="cell">
           <TruncateTip text={item.company} />
+          {item.unverified ? (
+            <HoverTip label={t("tracker.unverifiedHint")}>
+              <span className="cmae-unverified-badge">
+                {t("tracker.unverified")}
+              </span>
+            </HoverTip>
+          ) : null}
           {item.warnings?.length ? (
             <span className="cmae-tracker-warnings" role="status">
               {item.warnings.map((w) => (
@@ -1504,7 +1513,18 @@ export function TrackerList() {
           ) : null}
         </span>
         <span className="cmae-tracker-muted" role="cell">
-          <TruncateTip text={item.position || "—"} />
+          <TruncateTip
+            text={
+              [
+                item.position || "—",
+                item.channel
+                  ? t("tracker.viaChannel", { channel: item.channel })
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            }
+          />
         </span>
         <span className="cmae-tracker-status-cell" role="cell">
           <HoverTip label={tip} className="is-fill">

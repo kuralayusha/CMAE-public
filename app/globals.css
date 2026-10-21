@@ -2252,6 +2252,21 @@ a.cmae-btn {
   letter-spacing: -0.02em;
 }
 
+.cmae-unverified-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(161, 98, 7, 0.35);
+  color: #a16207;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.5;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 .cmae-tracker-warnings {
   display: flex;
   flex-direction: column;

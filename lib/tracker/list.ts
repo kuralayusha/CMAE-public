@@ -9,6 +9,7 @@ import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
 import { statusSettingsFromRow, type StatusSettings } from "./status-constants";
 import { effective, factsFromItemRow } from "./derive/effective";
+import { parseFlagsJson } from "./derive/flags";
 import { buildGmailThreadUrls } from "./gmail-links";
 import {
   getLiveDraftAnyKind,
@@ -152,6 +153,8 @@ function mapRow(
     recommendedTo: recipients.recommended,
     userVersion: row.userVersion || 1,
     warnings: warnings.length ? warnings : undefined,
+    unverified: parseFlagsJson(row.flagsJson).unverified || undefined,
+    channel: row.channel,
     nextTransitionAt: resolved.nextTransitionAt,
   };
 }

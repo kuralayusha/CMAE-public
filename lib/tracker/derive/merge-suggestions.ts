@@ -3,7 +3,6 @@
  */
 
 import { randomUUID } from "crypto";
-import { and, eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { bumpTrackerRevision, getTrackerRevision } from "@/lib/db/revision";
 import { mergeProposals, trackerItems } from "@/lib/db/schema";
@@ -46,7 +45,7 @@ function userConflicts(
  * Soft twin detection: create merge_proposals instead of deleting rows.
  * Never auto-merges. Returns number of new proposals.
  */
-export function suggestTwinMerges(): number {
+export function suggestTwinMerges(extraPairs: [number, number][] = []): number {
   const db = getDb();
   const rows = db
     .select()
@@ -61,63 +60,84 @@ export function suggestTwinMerges(): number {
     (r) => r.userState !== "inactive" && r.status !== "inactive",
   );
 
+  const pairs: [typeof rows[number], typeof rows[number]][] = [];
+  for (const inv of inactive) {
+    for (const twin of active) {
+      if (
+        sameCompanyIdentity(twin.company, inv.company) ||
+        samePrimaryEmail(twin.primaryTo, inv.primaryTo)
+      ) {
+        // Prefer inactive as winner id (user paused it); twin is loser candidate.
+        pairs.push([inv, twin]);
+      }
+    }
+  }
+  // Active rows of the same employer (e.g. created before conversation
+  // identity existed): same company only — a shared ATS address is not enough.
+  for (let i = 0; i < active.length; i += 1) {
+    for (let j = i + 1; j < active.length; j += 1) {
+      const a = active[i]!;
+      const b = active[j]!;
+      if (!sameCompanyIdentity(a.company, b.company)) continue;
+      pairs.push(a.id < b.id ? [a, b] : [b, a]);
+    }
+  }
+
+  const live = new Map(rows.map((r) => [r.id, r]));
+  for (const [x, y] of extraPairs) {
+    const a = live.get(x);
+    const b = live.get(y);
+    if (a && b && a.id !== b.id) pairs.push(a.id < b.id ? [a, b] : [b, a]);
+  }
+
   let created = 0;
   const rev = getTrackerRevision();
   const now = new Date().toISOString();
+  const known = new Set(
+    db
+      .select()
+      .from(mergeProposals)
+      .all()
+      .map((p) => [p.winnerId, p.loserId].sort((x, y) => x - y).join(":")),
+  );
 
-  for (const inv of inactive) {
-    const twins = active.filter(
-      (a) =>
-        sameCompanyIdentity(a.company, inv.company) ||
-        samePrimaryEmail(a.primaryTo, inv.primaryTo),
-    );
-    for (const twin of twins) {
-      // Prefer inactive as winner id (user paused it); twin is loser candidate.
-      const winnerId = inv.id;
-      const loserId = twin.id;
+  for (const [winner, loser] of pairs) {
+    const winnerId = winner.id;
+    const loserId = loser.id;
+    // Any earlier proposal for this pair (pending, accepted or rejected) wins:
+    // a "keep separate" answer must not come back on every sync.
+    const key = [winnerId, loserId].sort((x, y) => x - y).join(":");
+    if (known.has(key)) continue;
+    known.add(key);
 
-      const existing = db
-        .select()
-        .from(mergeProposals)
-        .where(
-          and(
-            eq(mergeProposals.winnerId, winnerId),
-            eq(mergeProposals.loserId, loserId),
-            eq(mergeProposals.state, "pending"),
-          ),
-        )
-        .get();
-      if (existing) continue;
-
-      const conflicts = userConflicts(inv, twin);
-      // Always propose — even without conflicts (user confirms).
-      // Architecture: email alone is never auto-merge reason; company identity suspicion → ask.
-      const id = randomUUID();
-      db.insert(mergeProposals)
-        .values({
-          id,
-          winnerId,
-          loserId,
-          origin: "twin_suggestion",
-          conflictsJson: JSON.stringify(conflicts),
-          state: "pending",
-          createdRev: rev,
-          createdAt: now,
-          resolvedAt: null,
-        })
-        .run();
-      created += 1;
-      const nextRev = bumpTrackerRevision("mutation", "upsert", [
+    const conflicts = userConflicts(winner, loser);
+    // Always propose — even without conflicts (user confirms).
+    // Architecture: email alone is never auto-merge reason; company identity suspicion → ask.
+    const id = randomUUID();
+    db.insert(mergeProposals)
+      .values({
+        id,
         winnerId,
         loserId,
-      ]);
-      emitTrackerEvent({
-        type: "merge_proposal",
-        rev: nextRev,
-        proposalId: id,
-        itemIds: [winnerId, loserId],
-      });
-    }
+        origin: "twin_suggestion",
+        conflictsJson: JSON.stringify(conflicts),
+        state: "pending",
+        createdRev: rev,
+        createdAt: now,
+        resolvedAt: null,
+      })
+      .run();
+    created += 1;
+    const nextRev = bumpTrackerRevision("mutation", "upsert", [
+      winnerId,
+      loserId,
+    ]);
+    emitTrackerEvent({
+      type: "merge_proposal",
+      rev: nextRev,
+      proposalId: id,
+      itemIds: [winnerId, loserId],
+    });
   }
   return created;
 }

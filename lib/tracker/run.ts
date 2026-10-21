@@ -6,10 +6,8 @@ import { throwIfSyncCanceled } from "./cancel";
 import { runClassifyRetry } from "./derive/classify-retry";
 import { derivePendingMails } from "./derive/run-derive";
 import { pruneOrphanReadyToSendItems } from "./orphans";
-import { rebuildTrackerItems } from "./rebuild";
 import {
   listPendingDeriveMailIds,
-  markMailsDeriveState,
   setSyncState,
   syncMailsFromGmail,
   type SyncMode,
@@ -71,13 +69,15 @@ export async function runTrackerSync(opts?: {
   let itemCount: number;
   try {
     if (mode === "hard") {
-      // Explicit full regroup (stable-id diff) — not the normal path.
+      // Re-run every conversation through the AI stages (stale prompt
+      // versions / failed answers); rows are kept and only re-attached.
       log?.("think", t("sync.rebuildingList"));
-      const rebuilt = await rebuildTrackerItems({ onProgress: log, signal });
-      itemCount = rebuilt.itemCount;
-      if (pendingIds.length) {
-        markMailsDeriveState(pendingIds, "done");
-      }
+      const derived = await derivePendingMails(pendingIds, {
+        mode: "hard",
+        onProgress: log,
+        signal,
+      });
+      itemCount = derived.itemCount;
     } else {
       // Faz 4: always incremental via dirty queue — no 25-mail rebuild threshold.
       if (existingRows === 0 && pendingIds.length === 0) {

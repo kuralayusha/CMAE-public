@@ -117,6 +117,10 @@ export type TrackerListItem = TrackerItemRow & {
    * e.g. folderMissing, draftContentMismatch
    */
   warnings?: TrackerRowWarning[];
+  /** Some timeline events come from the rule fallback, not AI (shown as a badge). */
+  unverified?: boolean;
+  /** ATS / agency / job board the process runs through (stage 2). */
+  channel?: string | null;
 };
 
 export type TrackerRowWarning =

@@ -91,6 +91,8 @@ export type EventTimelineEntry = {
   event: MailEvent;
   /** stored = mail_events row; intent = mail_intents fallback; structural = outbound rule */
   origin: "stored" | "intent" | "structural";
+  /** mail_events.source for stored entries. */
+  source?: MailEventSource;
   waitingUntil?: string | null;
 };
 
@@ -107,6 +109,7 @@ export type TimelineMail = {
 export type StoredMailEvent = {
   event: MailEvent;
   waitingUntil?: string | null;
+  source?: MailEventSource;
 };
 
 export type FallbackIntent = {
@@ -180,6 +183,7 @@ export function buildEventTimeline(input: {
         dir: mail.dir,
         event: stored.event,
         origin: "stored",
+        ...(stored.source ? { source: stored.source } : {}),
         waitingUntil: stored.waitingUntil ?? null,
       };
     } else if (mail.dir === "out") {
@@ -213,12 +217,24 @@ export function buildEventTimeline(input: {
   return out;
 }
 
+/**
+ * True when any event of the timeline is a degraded fallback (intent /
+ * structural rule / regex) instead of an AI-verified stage 3 label — the UI
+ * shows the row as "unverified".
+ */
+export function timelineUnverified(timeline: EventTimelineEntry[]): boolean {
+  return timeline.some(
+    (e) => e.origin !== "stored" || e.source === "regex",
+  );
+}
+
 type CompactEntry = {
   m: number;
   t: string;
   d: "in" | "out";
   e: MailEvent;
   o?: EventTimelineEntry["origin"];
+  s?: MailEventSource;
   w?: string | null;
 };
 
@@ -229,6 +245,7 @@ export function serializeTimeline(timeline: EventTimelineEntry[]): string {
     d: e.dir,
     e: e.event,
     o: e.origin,
+    ...(e.source ? { s: e.source } : {}),
     ...(e.waitingUntil ? { w: e.waitingUntil } : {}),
   }));
   return JSON.stringify(compact);
@@ -251,6 +268,7 @@ export function parseTimeline(
         dir: item.d === "out" ? "out" : "in",
         event,
         origin: item.o || "stored",
+        ...(item.s ? { source: item.s } : {}),
         waitingUntil: item.w ?? null,
       });
     }

@@ -5,6 +5,8 @@ export type ItemFlags = {
   rejected: boolean;
   thanksSent: boolean;
   bounced: boolean;
+  /** Some event of the row is a fallback, not an AI-verified label (UI badge). */
+  unverified: boolean;
 };
 
 export function factsToFlagsJson(flags: ItemFlags): string {
@@ -19,6 +21,7 @@ export function parseFlagsJson(raw: string | null | undefined): ItemFlags {
     rejected: false,
     thanksSent: false,
     bounced: false,
+    unverified: false,
   };
   if (!raw) return empty;
   try {
@@ -30,6 +33,7 @@ export function parseFlagsJson(raw: string | null | undefined): ItemFlags {
       rejected: Boolean(v.rejected),
       thanksSent: Boolean(v.thanksSent),
       bounced: Boolean(v.bounced),
+      unverified: Boolean(v.unverified),
     };
   } catch {
     return empty;

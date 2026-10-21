@@ -576,7 +576,10 @@
         "app": "Started in CMAE",
         "mixed": "Mixed origin"
       }
-    }
+    },
+    "unverified": "Unverified",
+    "unverifiedHint": "Some statuses here come from rules, not AI — they may be wrong. They are re-checked on the next sync.",
+    "viaChannel": "via {channel}"
   },
   "settings": {
     "accProfile": "Profile",
@@ -805,7 +808,23 @@
     "incrementalRouteSummary": "AI route · {skip} skip · {attach} attach · {create} create",
     "incrementalDone": "Quick update · {attached} attached · {created} new · {skipped} skipped · {rows} applications",
     "incrementalFallbackFull": "{count} new messages — running full list rebuild",
-    "collapsedTwins": "Merged {count} duplicate row(s) with inactive applications",
+    "collapsedTwins": "Found {count} possible duplicate row(s) — confirm merges in the list",
+    "stageTriageStart": "Reading {count} conversation(s) with AI…",
+    "stageTriageBatch": "AI read {ok}/{count} conversation(s) · {seconds}s",
+    "stageTriageBatchFailed": "AI conversation batch failed: {msg}",
+    "stageTieBreak": "Asking AI which application {count} conversation(s) belong to…",
+    "stageTieBreakFailed": "AI matching failed: {msg}",
+    "stageAttachedConversation": "Attached {count} message(s) → {company}",
+    "stageAmbiguous": "Couldn't tell which employer this is — queued for review: {subject}",
+    "stageMoved": "Moved {employer} conversation out of {company}",
+    "stageCapped": "{count} more conversation(s) will be checked on the next sync",
+    "stageEventsStart": "Reading what happened in {count} conversation(s)…",
+    "stageEventsBatch": "AI labeled {ok}/{count} conversation(s) · {seconds}s",
+    "stageEventsBatchFailed": "AI event batch failed: {msg}",
+    "stageEventsFailed": "{count} conversation(s) kept unverified labels",
+    "stageAiUnavailable": "AI unavailable for {count} conversation(s): {msg}",
+    "stageTriageDegraded": "{count} conversation(s) wait for AI — nothing guessed",
+    "stageSummary": "AI check · {job} job conversation(s) · {noise} skipped · {unverified} unverified · {calls} AI call(s) in {seconds}s",
     "complete": "Sync complete · {mails} messages · {rows} applications",
     "canceled": "Sync canceled",
     "cancelRequested": "Canceling…",

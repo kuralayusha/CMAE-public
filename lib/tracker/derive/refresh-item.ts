@@ -19,7 +19,12 @@ import {
 } from "../pending-draft";
 import { statusSettingsFromRow } from "../status-constants";
 import { effective } from "./effective";
-import { normalizeMailEvent, serializeTimeline, type StoredMailEvent } from "./events";
+import {
+  normalizeMailEvent,
+  serializeTimeline,
+  type MailEventSource,
+  type StoredMailEvent,
+} from "./events";
 import {
   computeFacts,
   factsToFlagsJson,
@@ -89,7 +94,13 @@ function loadStoredEvents(mailIds: number[]): Map<number, StoredMailEvent> {
     .where(inArray(mailEvents.mailId, mailIds))
     .all()) {
     const event = normalizeMailEvent(row.event);
-    if (event) map.set(row.mailId, { event, waitingUntil: row.waitingUntil });
+    if (event) {
+      map.set(row.mailId, {
+        event,
+        waitingUntil: row.waitingUntil,
+        source: row.source as MailEventSource,
+      });
+    }
   }
   return map;
 }

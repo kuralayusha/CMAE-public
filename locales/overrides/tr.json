@@ -95,7 +95,10 @@
       "recommended": "AI önerisi",
       "optionRecommended": "{label} · AI önerisi",
       "saved": "Alıcı güncellendi — taslaklar {email} adresine gidecek"
-    }
+    },
+    "unverified": "Doğrulanmadı",
+    "unverifiedHint": "Buradaki bazı durumlar yapay zekâ yerine kurallardan geldi — hatalı olabilir. Bir sonraki senkronizasyonda yeniden kontrol edilir.",
+    "viaChannel": "{channel} üzerinden"
   },
   "terminal": {
     "detail": "Detaylı",

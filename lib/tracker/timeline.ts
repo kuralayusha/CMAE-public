@@ -10,6 +10,7 @@ import {
 import { t } from "@/lib/i18n/t";
 import { getSettingsRow, getStatusSettings } from "@/lib/settings/service";
 import { effective, factsFromItemRow } from "./derive/effective";
+import { parseFlagsJson } from "./derive/flags";
 import {
   attachMailsToEvents,
   eventsMissingMailLinks,
@@ -58,6 +59,8 @@ export type TrackerDetailItem = {
   lastOutboundAt: string | null;
   lastInboundAt: string | null;
   updatedAt: string;
+  unverified: boolean;
+  channel: string | null;
 };
 
 export type TimelinePayload = {
@@ -104,6 +107,8 @@ export function loadTrackerItem(itemId: number): TrackerDetailItem | null {
     lastOutboundAt: row.lastOutboundAt,
     lastInboundAt: row.lastInboundAt,
     updatedAt: row.updatedAt,
+    unverified: parseFlagsJson(row.flagsJson).unverified,
+    channel: row.channel,
   };
 }
 

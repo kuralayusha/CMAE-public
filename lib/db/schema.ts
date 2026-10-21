@@ -143,6 +143,10 @@ export const trackerItems = sqliteTable("tracker_items", {
   deletedAt: text("deleted_at"),
   deletedReason: text("deleted_reason"),
   mergedIntoId: integer("merged_into_id"),
+  /** Intermediary carrying the process (ATS / agency / job board); stage 2 */
+  channel: text("channel"),
+  /** ats | agency | job_board */
+  channelKind: text("channel_kind"),
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -198,6 +202,13 @@ export const mailConversations = sqliteTable("mail_conversations", {
   fingerprint: text("fingerprint").notNull(),
   itemId: integer("item_id"),
   updatedAt: text("updated_at").notNull(),
+  /** Stage 3 cache: fingerprint + prompt version the stored events belong to */
+  eventsFingerprint: text("events_fingerprint"),
+  eventsPromptVersion: integer("events_prompt_version"),
+  /** ok | failed (failed → fallback events, row shows "unverified") */
+  eventsState: text("events_state"),
+  eventsAttempts: integer("events_attempts").notNull().default(0),
+  eventsAt: text("events_at"),
 });
 
 /** Stage 1 triage output per conversation (AI). */
@@ -215,6 +226,10 @@ export const conversationAnalysis = sqliteTable("conversation_analysis", {
   promptVersion: integer("prompt_version").notNull(),
   fingerprint: text("fingerprint").notNull(),
   createdAt: text("created_at").notNull(),
+  /** ok | failed (failed = no AI answer; conversation stays unverified) */
+  state: text("state").notNull().default("ok"),
+  attempts: integer("attempts").notNull().default(0),
+  error: text("error"),
 });
 
 /** Stage 3 per-mail process event (see lib/tracker/derive/events.ts). */

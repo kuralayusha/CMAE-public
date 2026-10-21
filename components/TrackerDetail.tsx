@@ -33,6 +33,8 @@ type DetailItem = {
   userVersion?: number;
   recipientOptions?: RecipientOption[];
   recommendedTo?: string | null;
+  unverified?: boolean;
+  channel?: string | null;
 };
 
 type GoneState = {
@@ -390,8 +392,23 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
 
       <header className="cmae-td-header">
         <div className="cmae-td-header-main">
-          <h2 className="cmae-td-company">{item.company}</h2>
-          <p className="cmae-td-position">{item.position || "—"}</p>
+          <h2 className="cmae-td-company">
+            {item.company}
+            {item.unverified ? (
+              <span
+                className="cmae-unverified-badge"
+                title={t("tracker.unverifiedHint")}
+              >
+                {t("tracker.unverified")}
+              </span>
+            ) : null}
+          </h2>
+          <p className="cmae-td-position">
+            {item.position || "—"}
+            {item.channel
+              ? ` · ${t("tracker.viaChannel", { channel: item.channel })}`
+              : ""}
+          </p>
         </div>
         <span className="cmae-status-chip" data-status={item.status}>
           {statusLabel}

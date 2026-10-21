@@ -14,6 +14,7 @@ import { assembleConversations, conversationKeyByMail } from "./conversation-gra
 import {
   buildEventTimeline,
   PASSIVE_INBOUND_EVENTS,
+  timelineUnverified,
   type EventTimelineEntry,
   type FallbackIntent,
   type StoredMailEvent,
@@ -216,6 +217,7 @@ export function computeFacts(input: {
       rejected: lastMeaningful?.event === "rejection",
       thanksSent: isThanksSent,
       bounced: lastIntent === "bounce",
+      unverified: timelineUnverified(timeline),
     },
     aiStatus: input.aiStatusHint ?? null,
     timeline,

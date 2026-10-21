@@ -10,6 +10,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb, getSqlite } from "@/lib/db/client";
 import {
   conversationAnalysis,
+  mailConversations,
   mailEvents,
   senderRoles,
 } from "@/lib/db/schema";
@@ -86,11 +87,16 @@ export function getCachedTriage(
     .get();
   if (
     !row ||
+    row.state !== "ok" ||
     row.fingerprint !== fingerprint ||
     row.promptVersion !== promptVersion
   ) {
     return null;
   }
+  return rowToTriage(row);
+}
+
+function rowToTriage(row: typeof conversationAnalysis.$inferSelect): TriageResult {
   return {
     isJobProcess: Boolean(row.isJobProcess),
     employer: row.employer,
@@ -101,6 +107,70 @@ export function getCachedTriage(
     refCode: row.refCode,
     counterpartEmail: row.counterpartEmail,
   };
+}
+
+/** Latest stored triage regardless of fingerprint (null when never ok). */
+export function getLatestTriage(conversationId: string): TriageResult | null {
+  const row = getDb()
+    .select()
+    .from(conversationAnalysis)
+    .where(eq(conversationAnalysis.conversationId, conversationId))
+    .get();
+  return row && row.state === "ok" ? rowToTriage(row) : null;
+}
+
+export function getTriageState(conversationId: string): {
+  state: string;
+  attempts: number;
+  fingerprint: string;
+  promptVersion: number;
+  createdAt: string;
+} | null {
+  const row = getDb()
+    .select()
+    .from(conversationAnalysis)
+    .where(eq(conversationAnalysis.conversationId, conversationId))
+    .get();
+  if (!row) return null;
+  return {
+    state: row.state,
+    attempts: row.attempts,
+    fingerprint: row.fingerprint,
+    promptVersion: row.promptVersion,
+    createdAt: row.createdAt,
+  };
+}
+
+/** AI gave no usable answer: keep the conversation unverified (no guessed fields). */
+export function saveTriageFailure(
+  conv: { conversationId: string; fingerprint: string },
+  error: string,
+  meta: { model: string; promptVersion: number },
+): void {
+  const prev = getTriageState(conv.conversationId);
+  const now = new Date().toISOString();
+  const values = {
+    conversationId: conv.conversationId,
+    isJobProcess: 1,
+    employer: null,
+    intermediary: null,
+    intermediaryKind: null,
+    position: null,
+    refCode: null,
+    counterpartEmail: null,
+    model: meta.model,
+    promptVersion: meta.promptVersion,
+    fingerprint: conv.fingerprint,
+    createdAt: now,
+    state: "failed",
+    attempts: (prev?.state === "failed" ? prev.attempts : 0) + 1,
+    error: error.slice(0, 300),
+  };
+  getDb()
+    .insert(conversationAnalysis)
+    .values(values)
+    .onConflictDoUpdate({ target: conversationAnalysis.conversationId, set: values })
+    .run();
 }
 
 export function saveTriage(
@@ -124,6 +194,9 @@ export function saveTriage(
       promptVersion: meta.promptVersion,
       fingerprint: conv.fingerprint,
       createdAt: now,
+      state: "ok",
+      attempts: 0,
+      error: null,
     };
     getDb()
       .insert(conversationAnalysis)
@@ -154,6 +227,16 @@ export function upsertSenderRole(
     .get();
   // A user decision is never overwritten by AI.
   if (existing?.source === "user" && source !== "user") return;
+  // Once seen as an intermediary, a domain never keys identity again unless
+  // the user says so (one conversation may name the agency as employer).
+  if (
+    existing &&
+    source !== "user" &&
+    INTERMEDIARY_ROLES.has(existing.role as SenderRole) &&
+    !INTERMEDIARY_ROLES.has(role)
+  ) {
+    return;
+  }
   const values = {
     accountId,
     domain: domain.toLowerCase(),
@@ -171,6 +254,17 @@ export function upsertSenderRole(
     .run();
 }
 
+export function listSenderRoles(
+  accountId: string,
+): { domain: string; role: SenderRole; source: string }[] {
+  return getDb()
+    .select()
+    .from(senderRoles)
+    .where(eq(senderRoles.accountId, accountId))
+    .all()
+    .map((r) => ({ domain: r.domain, role: r.role as SenderRole, source: r.source }));
+}
+
 /** Domains that must not be used as identity keys (stage 2). */
 export function intermediaryDomains(accountId: string): Set<string> {
   return new Set(
@@ -184,15 +278,36 @@ export function intermediaryDomains(accountId: string): Set<string> {
   );
 }
 
-/** Replace stage 3 events for the given mails of one conversation. */
+/**
+ * Replace stage 3 events for the given mails of one conversation; with
+ * `fingerprint` also records the conversation's stage 3 cache key.
+ */
 export function saveMailEvents(
   conversationId: string,
   events: ExtractedEvent[],
-  meta: { source: MailEventSource; model?: string; promptVersion?: number },
+  meta: {
+    source: MailEventSource;
+    model?: string;
+    promptVersion?: number;
+    fingerprint?: string;
+  },
 ): void {
   const now = new Date().toISOString();
   const sqlite = getSqlite();
   sqlite.transaction(() => {
+    if (meta.fingerprint) {
+      getDb()
+        .update(mailConversations)
+        .set({
+          eventsFingerprint: meta.fingerprint,
+          eventsPromptVersion: meta.promptVersion ?? null,
+          eventsState: "ok",
+          eventsAttempts: 0,
+          eventsAt: now,
+        })
+        .where(eq(mailConversations.id, conversationId))
+        .run();
+    }
     for (const e of events) {
       const values = {
         mailId: e.mailId,
@@ -212,4 +327,27 @@ export function saveMailEvents(
         .run();
     }
   })();
+}
+
+/** Stage 3 failed: fallback events stay in place (row shows unverified). */
+export function markEventsFailed(
+  conversationId: string,
+  meta: { fingerprint: string; promptVersion: number },
+): void {
+  const row = getDb()
+    .select({ attempts: mailConversations.eventsAttempts, state: mailConversations.eventsState })
+    .from(mailConversations)
+    .where(eq(mailConversations.id, conversationId))
+    .get();
+  getDb()
+    .update(mailConversations)
+    .set({
+      eventsFingerprint: meta.fingerprint,
+      eventsPromptVersion: meta.promptVersion,
+      eventsState: "failed",
+      eventsAttempts: (row?.state === "failed" ? row.attempts : 0) + 1,
+      eventsAt: new Date().toISOString(),
+    })
+    .where(eq(mailConversations.id, conversationId))
+    .run();
 }

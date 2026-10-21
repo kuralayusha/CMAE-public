@@ -22,6 +22,7 @@ export type AssignSource =
   | "research_contact"
   | "domain"
   | "ai"
+  | "identity"
   | "user"
   | "legacy";
 
@@ -320,6 +321,7 @@ export function findItemByDomainOrContact(
 export function tryRuleBasedAssign(
   mail: typeof mailMessages.$inferSelect,
   userEmail: string,
+  opts?: { structuralOnly?: boolean },
 ): AssignResult {
   const already = getAssignment(mail.id);
   if (already) return { kind: "already", itemId: already.itemId };
@@ -347,6 +349,10 @@ export function tryRuleBasedAssign(
     });
     return { kind: "assigned", itemId: byThread, source: "thread" };
   }
+
+  // Domain / contact matching is identity (stage 2) in the conversation flow:
+  // ATS and agency domains are shared by many employers.
+  if (opts?.structuralOnly) return { kind: "none" };
 
   const byDomain = findItemByDomainOrContact(mail, userEmail);
   if (byDomain != null) {
