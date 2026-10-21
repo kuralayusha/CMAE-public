@@ -34,6 +34,7 @@ type DetailItem = {
   recipientOptions?: RecipientOption[];
   recommendedTo?: string | null;
   unverified?: boolean;
+  mailAfterClose?: boolean;
   channel?: string | null;
 };
 
@@ -138,10 +139,25 @@ function writeShowEmailsPref(on: boolean) {
   }
 }
 
-export function TrackerDetail({ itemId }: { itemId: number }) {
+export type TrackerDetailProps = {
+  itemId: number;
+  /** `panel` hides back-link and uses close / in-place navigation. */
+  variant?: "page" | "panel";
+  onClose?: () => void;
+  /** When a row was merged, open the survivor without leaving the list. */
+  onOpenItem?: (id: number) => void;
+};
+
+export function TrackerDetail({
+  itemId,
+  variant = "page",
+  onClose,
+  onOpenItem,
+}: TrackerDetailProps) {
   const t = useT();
   const locale = useIntlLocale();
   const router = useRouter();
+  const isPanel = variant === "panel";
   const [item, setItem] = useState<DetailItem | null>(null);
   const [mails, setMails] = useState<DetailMail[]>([]);
   const [timeline, setTimeline] = useState<TimelineData | null>(null);
@@ -153,6 +169,41 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
   const [loadingTimeline, setLoadingTimeline] = useState(true);
   const [showEmails, setShowEmails] = useState(true);
   const [savingRecipient, setSavingRecipient] = useState(false);
+
+  const goBack = useCallback(() => {
+    if (isPanel && onClose) {
+      onClose();
+      return;
+    }
+    router.push("/tracker");
+  }, [isPanel, onClose, router]);
+
+  const openMerged = useCallback(
+    (id: number) => {
+      if (onOpenItem) {
+        onOpenItem(id);
+        return;
+      }
+      if (isPanel && onClose) {
+        onClose();
+        router.push(`/tracker/${id}`);
+        return;
+      }
+      router.push(`/tracker/${id}`);
+    },
+    [isPanel, onClose, onOpenItem, router],
+  );
+
+  const redirectToMerged = useCallback(
+    (id: number) => {
+      if (onOpenItem) {
+        onOpenItem(id);
+        return;
+      }
+      router.replace(`/tracker/${id}`);
+    },
+    [onOpenItem, router],
+  );
 
   const mailById = useMemo(() => {
     const map = new Map<number, DetailMail>();
@@ -171,7 +222,7 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
           setMergeNotice(
             t("tracker.detailPage.mergedRedirect", { id: data.mergedIntoId }),
           );
-          router.replace(`/tracker/${data.mergedIntoId}`);
+          redirectToMerged(Number(data.mergedIntoId));
           return;
         }
         setGone({
@@ -208,7 +259,7 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
     } finally {
       setLoadingItem(false);
     }
-  }, [itemId, t, router]);
+  }, [itemId, t, redirectToMerged]);
 
   const loadTimeline = useCallback(
     async (refresh = false) => {
@@ -245,7 +296,7 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
       setMergeNotice(
         t("tracker.detailPage.mergedRedirect", { id: ev.intoId }),
       );
-      router.replace(`/tracker/${ev.intoId}`);
+      redirectToMerged(ev.intoId);
       return;
     }
     if (ev.type === "deleted" && ev.itemId === itemId) {
@@ -342,13 +393,13 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
           <Button
             type="button"
             variant="ghost"
-            onClick={() => router.push(`/tracker/${gone.mergedIntoId}`)}
+            onClick={() => openMerged(gone.mergedIntoId!)}
           >
             {t("tracker.detailPage.openMerged")}
           </Button>
         ) : null}
-        <Button type="button" variant="ghost" onClick={() => router.push("/tracker")}>
-          {t("tracker.detailPage.back")}
+        <Button type="button" variant="ghost" onClick={goBack}>
+          {isPanel ? t("common.close") : t("tracker.detailPage.back")}
         </Button>
       </div>
     );
@@ -360,8 +411,8 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
         <p className="cmae-td-error">
           {loadError || t("tracker.detailPage.notFound")}
         </p>
-        <Button type="button" variant="ghost" onClick={() => router.push("/tracker")}>
-          {t("tracker.detailPage.back")}
+        <Button type="button" variant="ghost" onClick={goBack}>
+          {isPanel ? t("common.close") : t("tracker.detailPage.back")}
         </Button>
       </div>
     );
@@ -373,11 +424,15 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
     chip === chipKey ? item.status.replace(/_/g, " ") : chip;
 
   return (
-    <div className="cmae-td">
+    <div className={`cmae-td${isPanel ? " is-panel" : ""}`}>
       <div className="cmae-td-toolbar">
-        <Link href="/tracker" className="cmae-td-back">
-          ← {t("tracker.detailPage.back")}
-        </Link>
+        {isPanel ? (
+          <span className="cmae-td-toolbar-spacer" aria-hidden />
+        ) : (
+          <Link href="/tracker" className="cmae-td-back">
+            ← {t("tracker.detailPage.back")}
+          </Link>
+        )}
         <div className="cmae-td-toolbar-actions">
           <Button
             type="button"
@@ -400,6 +455,14 @@ export function TrackerDetail({ itemId }: { itemId: number }) {
                 title={t("tracker.unverifiedHint")}
               >
                 {t("tracker.unverified")}
+              </span>
+            ) : null}
+            {item.mailAfterClose ? (
+              <span
+                className="cmae-unverified-badge"
+                title={t("tracker.mailAfterCloseHint")}
+              >
+                {t("tracker.mailAfterClose")}
               </span>
             ) : null}
           </h2>

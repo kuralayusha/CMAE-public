@@ -94,7 +94,27 @@ export type EventTimelineEntry = {
   /** mail_events.source for stored entries. */
   source?: MailEventSource;
   waitingUntil?: string | null;
+  /** AI confidence 0–1 when known (stored AI events). */
+  confidence?: number | null;
+  /** Normalized position label for multi-role rows (optional). */
+  pos?: string | null;
+  /** Interview / meeting day YYYY-MM-DD when known. */
+  scheduledAt?: string | null;
 };
+
+/** AI rejection below this confidence counts as unverified in the UI. */
+export const LOW_CONFIDENCE = 0.6;
+
+/** Same order as foldTimeline: time, inbound before outbound, mailId. */
+export function compareTimelineEntries(
+  a: EventTimelineEntry,
+  b: EventTimelineEntry,
+): number {
+  const t = a.at.localeCompare(b.at);
+  if (t) return t;
+  if (a.dir !== b.dir) return a.dir === "in" ? -1 : 1;
+  return a.mailId - b.mailId;
+}
 
 export type TimelineMail = {
   id: number;
@@ -104,12 +124,16 @@ export type TimelineMail = {
   conversationKey: string | null;
   subject?: string;
   bodyText?: string;
+  /** Position from conversation triage when known. */
+  position?: string | null;
 };
 
 export type StoredMailEvent = {
   event: MailEvent;
   waitingUntil?: string | null;
   source?: MailEventSource;
+  confidence?: number | null;
+  scheduledAt?: string | null;
 };
 
 export type FallbackIntent = {
@@ -164,9 +188,12 @@ export function buildEventTimeline(input: {
   events: ReadonlyMap<number, StoredMailEvent>;
   intents: ReadonlyMap<number, FallbackIntent>;
 }): EventTimelineEntry[] {
-  const sorted = [...input.mails].sort(
-    (a, b) => a.at.localeCompare(b.at) || a.id - b.id,
-  );
+  const sorted = [...input.mails].sort((a, b) => {
+    const t = a.at.localeCompare(b.at);
+    if (t) return t;
+    if (a.dir !== b.dir) return a.dir === "in" ? -1 : 1;
+    return a.id - b.id;
+  });
   const byConversation = new Map<string, EventTimelineEntry[]>();
   const out: EventTimelineEntry[] = [];
 
@@ -174,6 +201,7 @@ export function buildEventTimeline(input: {
     const convKey = mail.conversationKey || `mail:${mail.id}`;
     const prior = byConversation.get(convKey) || [];
     let entry: EventTimelineEntry | null = null;
+    const pos = mail.position?.trim() || null;
 
     const stored = input.events.get(mail.id);
     if (stored) {
@@ -185,6 +213,9 @@ export function buildEventTimeline(input: {
         origin: "stored",
         ...(stored.source ? { source: stored.source } : {}),
         waitingUntil: stored.waitingUntil ?? null,
+        confidence: stored.confidence ?? null,
+        scheduledAt: stored.scheduledAt ?? null,
+        pos,
       };
     } else if (mail.dir === "out") {
       entry = {
@@ -193,6 +224,7 @@ export function buildEventTimeline(input: {
         dir: "out",
         event: structuralOutboundEvent(prior, mail),
         origin: "structural",
+        pos,
       };
     } else {
       const intent = input.intents.get(mail.id);
@@ -205,6 +237,7 @@ export function buildEventTimeline(input: {
           event,
           origin: "intent",
           waitingUntil: intent?.waitingUntil ?? null,
+          pos,
         };
       }
     }
@@ -224,7 +257,13 @@ export function buildEventTimeline(input: {
  */
 export function timelineUnverified(timeline: EventTimelineEntry[]): boolean {
   return timeline.some(
-    (e) => e.origin !== "stored" || e.source === "regex",
+    (e) =>
+      e.origin !== "stored" ||
+      e.source === "regex" ||
+      (e.event === "rejection" &&
+        e.source === "ai" &&
+        typeof e.confidence === "number" &&
+        e.confidence < LOW_CONFIDENCE),
   );
 }
 
@@ -236,6 +275,9 @@ type CompactEntry = {
   o?: EventTimelineEntry["origin"];
   s?: MailEventSource;
   w?: string | null;
+  c?: number | null;
+  p?: string | null;
+  x?: string | null;
 };
 
 export function serializeTimeline(timeline: EventTimelineEntry[]): string {
@@ -247,6 +289,9 @@ export function serializeTimeline(timeline: EventTimelineEntry[]): string {
     o: e.origin,
     ...(e.source ? { s: e.source } : {}),
     ...(e.waitingUntil ? { w: e.waitingUntil } : {}),
+    ...(typeof e.confidence === "number" ? { c: e.confidence } : {}),
+    ...(e.pos ? { p: e.pos } : {}),
+    ...(e.scheduledAt ? { x: e.scheduledAt } : {}),
   }));
   return JSON.stringify(compact);
 }
@@ -270,6 +315,9 @@ export function parseTimeline(
         origin: item.o || "stored",
         ...(item.s ? { source: item.s } : {}),
         waitingUntil: item.w ?? null,
+        confidence: typeof item.c === "number" ? item.c : null,
+        pos: typeof item.p === "string" ? item.p : null,
+        scheduledAt: typeof item.x === "string" ? item.x : null,
       });
     }
     return out;

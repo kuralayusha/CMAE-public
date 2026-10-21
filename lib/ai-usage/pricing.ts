@@ -90,7 +90,10 @@ const num = (v: unknown): number | null =>
 export function parsePriceTable(raw: unknown): PriceTable | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
-  const version = typeof o.version === "string" ? o.version.trim() : "";
+  // Ingest labels reject '+'; normalize ISO offsets so remote versions stay safe.
+  const version = typeof o.version === "string"
+    ? o.version.trim().replace(/\+00:00$/, "Z").replace(/\+/g, "p")
+    : "";
   if (!version || !Array.isArray(o.prices)) return null;
   const prices: ModelPrice[] = [];
   for (const row of o.prices) {

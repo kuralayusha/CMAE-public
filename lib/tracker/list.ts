@@ -154,6 +154,10 @@ function mapRow(
     userVersion: row.userVersion || 1,
     warnings: warnings.length ? warnings : undefined,
     unverified: parseFlagsJson(row.flagsJson).unverified || undefined,
+    mailAfterClose:
+      resolved.mailAfterClose ||
+      parseFlagsJson(row.flagsJson).mailAfterClose ||
+      undefined,
     channel: row.channel,
     nextTransitionAt: resolved.nextTransitionAt,
   };

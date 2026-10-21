@@ -529,15 +529,15 @@ Bütün okuma yolları `account_id = app_meta.account_id` filtresiyle çalışı
 | Durum | Koşul | Gösterim (örnek TR) |
 |---|---|---|
 | `never_synced` | Hiç başarılı job yok | Boş liste yerine: "İlk senkronizasyon yapılıyor — son 30 gün taranıyor (120/480)". Asla "Henüz kayıt yok" denmez. |
-| `fresh` | Yukarıdaki tanım | Küçük gri metin: "2 dk önce güncellendi" |
-| `syncing` | Job `running` | "Güncelleniyor… (Gelen kutusu 50/120)". Liste son commit'teki haliyle **tam** görünür. |
-| `stale_offline` | Son hata `network` | Amber: "Gmail'e ulaşılamıyor. Liste en son 14:05 itibarıyla doğru; yeni yanıtlar görünmüyor olabilir." + "Tekrar dene" |
-| `auth_failed` | Son hata `auth` | Kırmızı: "Gmail girişi reddedildi — uygulama şifresini yenileyin. Otomatik senkronizasyon durduruldu." + "Ayarlar" |
-| `partial` | Bir kaynak başarısız (örn. drafts) | Amber: "Mailler güncel; Gmail taslak durumu 1 saattir doğrulanamadı." |
-| `ai_degraded` | `needs_classification > 0` veya `mail_unassigned > 0` | Bilgi bandı: "3 mail henüz sınıflandırılmadı — ilgili satırların durumu geçici." Satır rozeti: "Doğrulanmadı" |
-| `throttled` | Gmail limit | "Gmail geçici olarak istekleri sınırladı; 15 dk sonra tekrar denenecek." |
+| `fresh` | Yukarıdaki tanım | Sync terminalde / meta; sayfa bandı yok |
+| `syncing` | Job `running` | Sync terminal: "Güncelleniyor…". Liste son commit'teki haliyle **tam** görünür. |
+| `stale_offline` | Son hata `network` | Sync terminal (sync bitince satır): "Gmail'e ulaşılamıyor…" |
+| `auth_failed` | Son hata `auth` | Sync terminal (hata satırı): "Gmail girişi reddedildi…" |
+| `partial` | Bir kaynak başarısız (örn. drafts) | Sync terminal satırı |
+| `ai_degraded` | `needs_classification > 0` veya `mail_unassigned > 0` | Sync terminal satırı; satır rozeti: "Doğrulanmadı" |
+| `throttled` | Gmail limit | Sync terminal satırı |
 | `account_switching` | Hesap değişimi silmesi sürüyor | "Önceki hesabın verileri siliniyor…" (liste geçici olarak kilitli) |
-| `merge_pending` | `merge_proposals.state='pending'` var | Bilgi bandı: "2 birleştirme kararınızı bekliyor" + "İncele" |
+| (merge) | `merge_proposals.state='pending'` | Tracker sayfasında **tek** şerit: "N merge decision(s)…" + **Manage** → `/tracker/merge`. Freshness state değildir. |
 | Satır: `updating` | Satırın kirli (dirty) maili var ve job çalışıyor | Satırda küçük spinner: "Güncelleniyor" |
 | Satır: draft | `gmail_drafts.state` | "Gmail'de taslak (1 dk önce doğrulandı)" / "Taslak durumu bilinmiyor" / "Taslak Gmail'den silinmiş" |
 | Detay: mail | `gone_at` dolu | Mail kartında "Gmail'de silinmiş" etiketi; fact'lere katkısı sürer (K1) |
@@ -807,16 +807,21 @@ Olay zaman bağımsız bir fact'tir; item başına kronolojik zaman çizelgesi `
 |------|-------|--------|
 | 1 | `user_state` inactive/dismissed | `inactive` |
 | 2 | Sadece araştırma, giden yok | `ready_to_send` |
-| 3 | `withdrawn` veya ret sonrası `thanks_sent` | `closed` (hemen) |
-| 4 | Son anlamlı gelen `rejection` | `rejected`; giden yoksa `rejectionCloseDays` (10) sonra `closed`. Ret sonrası yeni başvuru, soru veya davet süreci devam ettirir |
-| 5 | Son gidenden sonra `action_required` / `assessment` | `needs_action`; `staleCloseDays` sonra `closed` |
-| 6 | Son gidenden sonra `interview_invite` / `info_request` / `offer` | `needs_reply` (davet/teklif pozitif) |
-| 7 | Sessizlik çapası = son giden; yoksa son `ack`/`auto_ack`; yoksa son gelen. Çapadan `staleCloseDays` (20) geçti | `closed` (`ignored` yok) |
-| 8 | Son gelen `ooo` ve dönüş tarihi var | gün sonuna kadar `waiting`, sonra `follow_up_due` |
-| 9 | Çapadan `followUpDays` (art arda follow-up varsa 7 gün bekleme) geçti | `follow_up_due`, değilse `in_progress` |
+| 3 | `withdrawn` veya ret mandalı varken `thanks_sent` | `closed` (hemen) |
+| 4 | Ret mandalı açık | `rejected`; kapanış çapası `max(rejectedAt, aftermathAt) + rejectionCloseDays`. **Bizim** giden `other` / `follow_up_sent` mandalı açmaz (feedback kovalaması); yalnızca `application_sent`, AI `interview_invite`/`offer`/`assessment`, veya AI `info_request`/`action_required` açar |
+| 5 | Teklif sonrası bizim yanıt (withdrawn değil) | `waiting` (pozitif); `staleCloseDays` sonra `closed` — `follow_up_due` üretilmez |
+| 6 | Son gidenden sonra `action_required` / `assessment` | `needs_action`; `staleCloseDays` sonra `closed` |
+| 7 | Son gidenden sonra `interview_invite` / `info_request` / `offer` | `needs_reply` (davet/teklif pozitif) |
+| 8 | `scheduledAt` (mülakat günü) gelecekte | gün sonuna kadar `waiting` |
+| 9 | Sessizlik çapası = son giden; yoksa son `ack`/`auto_ack`; yoksa son gelen (`min(at, now)`). Çapadan `staleCloseDays` (20) geçti | `closed` (`ignored` yok) |
+| 10 | Son gelen `ooo` ve dönüş tarihi var | gün sonuna kadar `waiting`, sonra `follow_up_due` |
+| 11 | Çapadan `followUpDays` (art arda follow-up varsa 7 gün bekleme) geçti | `follow_up_due`, değilse `in_progress` |
 
-- Pasif gelen olaylar (`ack`, `auto_ack`, `ooo`, `other`) sadece sessizlik saatini başlatır/korur; status'u kendisi değiştirmez.
-- `nextTransitionAt` her dalda bir sonraki saat geçişidir (ret kapanışı, stale kapanışı, follow-up zamanı, OOO bitişi); `GET /api/tracker` `validUntil`'i bunlardan hesaplar.
+- Pasif gelen olaylar (`ack`, `auto_ack`, `ooo`, `other`) sadece sessizlik saatini başlatır/korur; status'u kendisi değiştirmez. Ret mandalı varken bunlar yalnızca `aftermathAt` uzatır.
+- Aynı işverende birden fazla pozisyon: zaman çizelgesi `pos` ile gruplanır; satır status'u en aktif grubun sonucudur (bir rolün reddi diğerini gömmesin).
+- Kapalı satıra sonradan insan maili → status `closed` kalır, `mailAfterClose` rozeti.
+- `user_state = inactive` yeni mailde kendiliğinden uyanmaz (kullanıcı kararı).
+- `nextTransitionAt` her dalda bir sonraki saat geçişidir (ret kapanışı, stale kapanışı, follow-up zamanı, OOO/mülakat bitişi); `GET /api/tracker` `validUntil`'i bunlardan hesaplar.
 - `rejectionCloseDays` ve `staleCloseDays` Ayarlar'dan değiştirilebilir (1–90 gün, API doğrular).
 - `refreshItemFacts` artık `ai_status` yazmaz; cache kolonları (status, waitingOn…) yalnızca sıralama/geri uyumluluk içindir, okunan değer her zaman `effective()`'tir. Detay API'si de `effective()` kullanır.
 
@@ -825,7 +830,7 @@ Olay zaman bağımsız bir fact'tir; item başına kronolojik zaman çizelgesi `
 - Aşama 1 ve 3 sonuçları `(conversation_id, fingerprint, prompt_version)` ile önbelleğe alınır. Konuşmaya yeni mail gelmedikçe fingerprint değişmez ve LLM çağrılmaz; prompt sürümü artınca sadece etkilenen konuşmalar tembel olarak yeniden analiz edilir.
 - `mail_events.source`: `ai` | `regex` | `header` | `rule`; `model` + `prompt_version` her satırda saklanır. Hard sync önbelleği bypass eder.
 - Tablolar migration `010_conversations` ile gelir; hesap değişiminde silinen tablolar listesine eklendi. `011_conversation_ai`: `conversation_analysis.state/attempts/error`, `mail_conversations.events_*` (Aşama 3 önbellek anahtarı), `tracker_items.channel/channel_kind`.
-- **Sınırlar:** çalıştırma başına en çok 300 konuşma AI'ya gider (önbellekten gelen sınırsız), kalan sahipsiz mailler `derive_state='pending'` kalır; LLM eşzamanlılığı 3, çağrı başına 90 sn. Her LLM çağrısından sonra iptal/fencing kontrolü yapılır; her parti bir ilerleme satırı yazar (heartbeat). Hard sync artık tam yeniden gruplama yapmaz: aynı hattı tüm konuşmalar için çalıştırır, eski prompt sürümlerini ve başarısız cevapları hemen yeniden dener.
+- **Sınırlar:** çalıştırma başına en çok 300 konuşma AI'ya gider (incremental'da önbellekten gelen sınırsız), kalan sahipsiz mailler `derive_state='pending'` kalır; LLM eşzamanlılığı 3, çağrı başına 90 sn. Her LLM çağrısından sonra iptal/fencing kontrolü yapılır; her parti bir ilerleme satırı yazar (heartbeat). **Hard sync** = son 30 günü Gmail'den yeniden çek + her konuşmayı AI'ya cache'siz yeniden ver (ilk sync gibi derleme); 30 günden eski mailler ve mevcut satırlar silinmez, satırlar yeniden bağlanır/güncellenir. 300'den fazla konuşma varsa kalanı sonraki hard sync'te devam eder.
 
 #### 2.6.11 Değerlendirme düzeneği (eval)
 

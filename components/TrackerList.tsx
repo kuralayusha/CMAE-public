@@ -11,10 +11,12 @@ import {
 import { useRouter } from "next/navigation";
 import { useIntlLocale, useLocaleUpper, useT } from "@/components/I18nProvider";
 import { RichText } from "@/components/RichText";
+import { ClientFormattedTime } from "@/components/ClientFormattedTime";
 import { SyncTerminal } from "@/components/SyncTerminal";
 import { HoverTip } from "@/components/HoverTip";
 import { TruncateTip } from "@/components/TruncateTip";
 import { Button } from "@/components/ui";
+import { TrackerDetail } from "@/components/TrackerDetail";
 import {
   listVariantMeta,
   pickDefaultVariantId,
@@ -34,6 +36,7 @@ import {
 import type { SyncLogLine } from "@/lib/tracker/types";
 import type { TVars } from "@/lib/i18n/lookup";
 import "./tracker-list.css";
+import "./tracker-detail.css";
 
 function IconGmail({ count }: { count?: number }) {
   return (
@@ -206,6 +209,7 @@ type TrackerItem = {
   userVersion?: number;
   warnings?: { code: string; message: string }[];
   unverified?: boolean;
+  mailAfterClose?: boolean;
   channel?: string | null;
 };
 
@@ -413,6 +417,11 @@ export function TrackerList() {
   const [prepareModal, setPrepareModal] = useState<PrepareModalState | null>(
     null,
   );
+  const [historyItemId, setHistoryItemId] = useState<number | null>(null);
+  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
+  const historyCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [syncSessionId, setSyncSessionId] = useState<string | null>(null);
@@ -422,10 +431,17 @@ export function TrackerList() {
   const syncEsRef = useRef<EventSource | null>(null);
   const syncAttachedJobRef = useRef<string | null>(null);
   const syncShowToastRef = useRef(false);
+  const lastFreshnessTermLineRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (store.error) setError(store.error);
-  }, [store.error]);
+    if (store.error) {
+      setError(
+        /^[a-z0-9]+(\.[a-z0-9]+)+$/i.test(store.error)
+          ? t(store.error)
+          : store.error,
+      );
+    }
+  }, [store.error, t]);
 
   const loadMergeProposals = useCallback(async () => {
     try {
@@ -442,6 +458,55 @@ export function TrackerList() {
     if (loading) return;
     void loadMergeProposals();
   }, [loading, store.rev, loadMergeProposals]);
+
+  // After a sync finishes, surface remaining freshness warnings in the terminal
+  // (never as page banners). Merge decisions use the Manage banner only.
+  useEffect(() => {
+    if (syncTermStatus !== "done" && syncTermStatus !== "error") {
+      if (syncTermStatus == null) lastFreshnessTermLineRef.current = null;
+      return;
+    }
+    if (!freshness) return;
+    if (
+      freshness.state === "fresh" ||
+      freshness.state === "syncing" ||
+      freshness.state === "merge_pending"
+    ) {
+      return;
+    }
+    const text = t(
+      freshness.messageKey || `tracker.freshness.${freshness.state}`,
+      {
+        ...(freshness.messageParams || {}),
+        minutes: Number(freshness.messageParams?.minutes ?? 0),
+        count: Number(freshness.messageParams?.count ?? 0),
+        classCount: Number(freshness.messageParams?.classCount ?? 0),
+        unassignedCount: Number(
+          freshness.messageParams?.unassignedCount ?? 0,
+        ),
+        when: freshness.dataAsOf
+          ? formatWhen(freshness.dataAsOf, locale)
+          : String(freshness.messageParams?.when ?? "—"),
+      },
+    );
+    if (lastFreshnessTermLineRef.current === text) return;
+    lastFreshnessTermLineRef.current = text;
+    setSyncLines((prev) => {
+      if (prev.some((l) => l.text === text)) return prev;
+      return [
+        ...prev,
+        {
+          id: `freshness-${Date.now()}`,
+          at: Date.now(),
+          kind:
+            freshness.state === "auth_failed" || freshness.state === "stale_offline"
+              ? ("err" as const)
+              : ("system" as const),
+          text,
+        },
+      ];
+    });
+  }, [freshness, syncTermStatus, t, locale]);
 
   useEffect(() => {
     if (!toast) return;
@@ -537,8 +602,47 @@ export function TrackerList() {
     await applyActiveAction([...selectedIds], action, { clearSelection: true });
   }
 
+  const openHistoryPanel = useCallback((itemId: number) => {
+    if (historyCloseTimerRef.current) {
+      clearTimeout(historyCloseTimerRef.current);
+      historyCloseTimerRef.current = null;
+    }
+    setHistoryItemId(itemId);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setHistoryPanelOpen(true));
+    });
+  }, []);
+
+  const closeHistoryPanel = useCallback(() => {
+    setHistoryPanelOpen(false);
+    if (historyCloseTimerRef.current) {
+      clearTimeout(historyCloseTimerRef.current);
+    }
+    historyCloseTimerRef.current = setTimeout(() => {
+      setHistoryItemId(null);
+      historyCloseTimerRef.current = null;
+    }, 360);
+  }, []);
+
   useEffect(() => {
-    if (!gmailModal && !prepareModal) return;
+    return () => {
+      if (historyCloseTimerRef.current) {
+        clearTimeout(historyCloseTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (historyItemId == null) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [historyItemId]);
+
+  useEffect(() => {
+    if (!gmailModal && !prepareModal && historyItemId == null) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (prepareModal) {
@@ -549,11 +653,17 @@ export function TrackerList() {
         }
         return;
       }
-      setGmailModal(null);
+      if (gmailModal) {
+        setGmailModal(null);
+        return;
+      }
+      if (historyItemId != null) {
+        closeHistoryPanel();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [gmailModal, prepareModal]);
+  }, [gmailModal, prepareModal, historyItemId, closeHistoryPanel]);
 
   const prepareModalItemId = prepareModal?.item.id ?? null;
   const prepareModalKind = prepareModal?.kind ?? null;
@@ -609,11 +719,6 @@ export function TrackerList() {
     await refreshTrackerList({ force: true });
   }, []);
 
-  const pendingDraftCount = useMemo(
-    () => allItems.filter((i) => Boolean(i.pendingGmailDraft)).length,
-    [allItems],
-  );
-
   const applySyncPayload = useCallback(
     (data: {
       sections?: Section[];
@@ -634,6 +739,7 @@ export function TrackerList() {
         total: data.total || 0,
         rev: data.rev,
       });
+      // Sync finish/update summaries stay in the sync terminal, not page banners.
       if (data.showToast) {
         const parts = [
           data.mode === "hard"
@@ -656,7 +762,19 @@ export function TrackerList() {
             }),
           );
         }
-        setToast(parts.join(" · "));
+        const text = parts.join(" · ");
+        setSyncLines((prev) => {
+          if (prev.some((l) => l.text === text)) return prev;
+          return [
+            ...prev,
+            {
+              id: `sync-summary-${Date.now()}`,
+              at: Date.now(),
+              kind: "ok" as const,
+              text,
+            },
+          ];
+        });
       }
     },
     [t],
@@ -1286,7 +1404,7 @@ export function TrackerList() {
           aria-label={label}
           onClick={() => {
             closeActionsMenu();
-            router.push(`/tracker/${item.id}`);
+            openHistoryPanel(item.id);
           }}
         >
           <IconHistory />
@@ -1436,6 +1554,13 @@ export function TrackerList() {
               </span>
             </HoverTip>
           ) : null}
+          {item.mailAfterClose ? (
+            <HoverTip label={t("tracker.mailAfterCloseHint")}>
+              <span className="cmae-unverified-badge">
+                {t("tracker.mailAfterClose")}
+              </span>
+            </HoverTip>
+          ) : null}
           {item.warnings?.length ? (
             <span className="cmae-tracker-warnings" role="status">
               {item.warnings.map((w) => (
@@ -1567,9 +1692,16 @@ export function TrackerList() {
             <span className="cmae-tracker-dot">·</span>
             <span>
               {t("tracker.metaLastSync")}{" "}
-              {sync?.lastSyncAt
-                ? formatWhen(sync.lastSyncAt, locale)
-                : t("tracker.metaNoneYet")}
+              {sync?.lastSyncAt ? (
+                <ClientFormattedTime
+                  value={sync.lastSyncAt}
+                  locale={locale}
+                  format={formatWhen}
+                  fallback="…"
+                />
+              ) : (
+                t("tracker.metaNoneYet")
+              )}
             </span>
             {sync?.lastError ? (
               <>
@@ -1633,79 +1765,52 @@ export function TrackerList() {
 
       {error ? <p className="cmae-tracker-banner is-error">{error}</p> : null}
       {toast ? <p className="cmae-tracker-banner">{toast}</p> : null}
-      {!loading && freshness && freshness.state !== "fresh" ? (
-        <div
-          className={`cmae-tracker-banner cmae-tracker-freshness is-${freshness.state === "auth_failed" ? "error" : freshness.state === "syncing" || freshness.state === "never_synced" ? "info" : "warn"}`}
-        >
-          <span>
-            {t(
-              freshness.messageKey || `tracker.freshness.${freshness.state}`,
-              {
-                ...(freshness.messageParams || {}),
-                minutes: Number(freshness.messageParams?.minutes ?? 0),
-                count: Number(freshness.messageParams?.count ?? 0),
-                classCount: Number(freshness.messageParams?.classCount ?? 0),
-                unassignedCount: Number(
-                  freshness.messageParams?.unassignedCount ?? 0,
-                ),
-                when: freshness.dataAsOf
-                  ? formatWhen(freshness.dataAsOf, locale)
-                  : String(freshness.messageParams?.when ?? "—"),
-              },
-            )}
-          </span>
-          {freshness.state === "auth_failed" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => router.push("/settings")}
-            >
-              {t("tracker.freshness.authFailedSettings")}
-            </Button>
-          ) : null}
-          {freshness.state === "stale_offline" ||
-          freshness.state === "stale" ||
-          freshness.state === "never_synced" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={syncing || loading}
-              onClick={() => void runSync({ mode: "incremental" })}
-            >
-              {freshness.state === "never_synced"
-                ? t("tracker.freshness.neverSyncedCta")
-                : t("tracker.freshness.staleOfflineRetry")}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {!loading && freshness?.state === "fresh" && freshness.messageKey ? (
-        <p className="cmae-tracker-freshness-meta">
-          {t(freshness.messageKey, {
-            minutes: Number(freshness.messageParams?.minutes ?? 0),
-          })}
-        </p>
-      ) : null}
-      {!loading && pendingDraftCount > 0 ? (
-        <div className="cmae-tracker-banner cmae-tracker-pending-banner">
-          <p>{t("tracker.pendingDraft.banner")}</p>
-          <Button
-            type="button"
-            onClick={() => void runSync({ mode: "incremental" })}
-            disabled={syncing}
-          >
-            {syncing
-              ? t("tracker.pendingDraft.syncing")
-              : t("tracker.pendingDraft.cta")}
-          </Button>
-        </div>
-      ) : null}
       {!loading && mergeCount > 0 ? (
         <div className="cmae-tracker-banner cmae-tracker-freshness is-warn">
           <p>{t("tracker.merge.banner", { count: mergeCount })}</p>
           <Button type="button" onClick={() => router.push("/tracker/merge")}>
             {t("tracker.merge.manage")}
           </Button>
+        </div>
+      ) : null}
+
+      {historyItemId != null ? (
+        <div
+          className={`cmae-td-drawer-root${historyPanelOpen ? " is-open" : ""}`}
+          role="presentation"
+        >
+          <div
+            className="cmae-td-drawer-backdrop"
+            onClick={closeHistoryPanel}
+            aria-hidden
+          />
+          <aside
+            className="cmae-td-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("tracker.detailPage.timeline")}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="cmae-td-drawer-head">
+              <button
+                type="button"
+                className="cmae-td-close"
+                onClick={closeHistoryPanel}
+                aria-label={t("common.close")}
+              >
+                ×
+              </button>
+            </header>
+            <div className="cmae-td-drawer-scroll">
+              <TrackerDetail
+                key={historyItemId}
+                itemId={historyItemId}
+                variant="panel"
+                onClose={closeHistoryPanel}
+                onOpenItem={openHistoryPanel}
+              />
+            </div>
+          </aside>
         </div>
       ) : null}
 

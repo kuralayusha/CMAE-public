@@ -60,6 +60,7 @@ export type TrackerDetailItem = {
   lastInboundAt: string | null;
   updatedAt: string;
   unverified: boolean;
+  mailAfterClose?: boolean;
   channel: string | null;
 };
 
@@ -108,6 +109,10 @@ export function loadTrackerItem(itemId: number): TrackerDetailItem | null {
     lastInboundAt: row.lastInboundAt,
     updatedAt: row.updatedAt,
     unverified: parseFlagsJson(row.flagsJson).unverified,
+    mailAfterClose:
+      resolved.mailAfterClose ||
+      parseFlagsJson(row.flagsJson).mailAfterClose ||
+      undefined,
     channel: row.channel,
   };
 }

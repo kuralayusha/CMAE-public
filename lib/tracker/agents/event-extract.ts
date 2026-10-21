@@ -22,7 +22,7 @@ import type {
 } from "../derive/stage-store";
 import { packBatches } from "./conversation-triage";
 
-export const EVENTS_PROMPT_VERSION = 1;
+export const EVENTS_PROMPT_VERSION = 2;
 
 export const OUTBOUND_EVENTS: ReadonlySet<MailEvent> = new Set([
   "application_sent",
@@ -89,33 +89,41 @@ Give EVERY mail exactly one event.
 OUTGOING mails (written by ME) — only these events:
 - application_sent: ME applies for a role (incl. speculative/unsolicited application, sending CV for a role, applying again for a different role).
 - follow_up_sent: ME asks about the status of an application already sent, without answering anything new.
-- thanks_sent: ME's short courtesy reply that only thanks / closes the loop (typically after a rejection), with no new question, document or scheduling.
+- thanks_sent: ME's short courtesy reply that ONLY thanks / closes the loop (typically after a rejection). NEVER thanks_sent if the mail also asks a new question, requests documents/feedback, or proposes scheduling — use other instead.
 - withdrawn: ME withdraws the application or declines the process / offer.
-- other: any other outgoing mail — answering questions, sending requested info or documents, scheduling, confirming an appointment, asking questions.
+- other: any other outgoing mail — answering questions, sending requested info or documents, scheduling, confirming an appointment, asking questions (including asking for rejection feedback).
 
 INCOMING mails — only these events:
 - auto_ack: automated receipt confirmation of the application (system / no-reply sender, ATS confirmation).
 - ack: a person or company confirms receipt / says they will review, with nothing required from ME.
-- info_request: they ask ME a question or request information/documents that ME must answer by email.
-- interview_invite: invitation to an interview / call / meeting, or a request to pick a time for one.
+- info_request: they ask ME a question or request information/documents that ME must answer by email. NOT for unsolicited feedback after a rejection, talent-pool notes, or status updates that need no reply — those are other.
+- interview_invite: invitation to an interview / call / meeting, or a request to pick a time for one. Set scheduled_at (YYYY-MM-DD) when a specific interview/meeting day is stated or confirmed.
 - assessment: a test task, coding challenge, or recorded/AI interview to complete.
 - action_required: ME must do something outside email that is NOT optional (complete profile or application in a portal, give or renew data-retention consent, verify an account that blocks the application).
-- rejection: the application is declined / position filled / not moving forward.
+- rejection: the application is declined / position filled / not moving forward. Soft declines ("we will keep your profile", "not proceeding at this time", "talent pool") are still rejection.
 - offer: a job offer.
 - ooo: out-of-office / absence auto-reply. Set waiting_until (YYYY-MM-DD) when a return date is stated.
-- other: anything else (appointment confirmations, one-time passcodes, generic status updates, notifications that need nothing).
+- other: anything else (appointment confirmations without a new invite, one-time passcodes, generic status updates, rejection feedback answers, notifications that need nothing). Set scheduled_at when an appointment day is confirmed.
 
 confidence: 0–1, how sure you are.
+scheduled_at: YYYY-MM-DD or null — interview/meeting day when clearly stated (invite or confirmation).
 
 Return ONLY JSON:
-{"conversations":[{"id":"C1","mails":[{"mail":123,"event":"application_sent","confidence":0.9,"waiting_until":null}]}]}
+{"conversations":[{"id":"C1","mails":[{"mail":123,"event":"application_sent","confidence":0.9,"waiting_until":null,"scheduled_at":null}]}]}
 
 ${blocks.join("\n")}`;
 }
 
 type RawEventConv = {
   id?: unknown;
-  mails?: { mail?: unknown; mailId?: unknown; event?: unknown; confidence?: unknown; waiting_until?: unknown }[];
+  mails?: {
+    mail?: unknown;
+    mailId?: unknown;
+    event?: unknown;
+    confidence?: unknown;
+    waiting_until?: unknown;
+    scheduled_at?: unknown;
+  }[];
 };
 
 function isoDay(v: unknown): string | null {
@@ -141,11 +149,16 @@ export function validateEvents(
     const allowed = dir === "out" ? OUTBOUND_EVENTS : INBOUND_EVENTS;
     if (!allowed.has(event)) return null;
     const c = Number(r.confidence);
+    const scheduled =
+      event === "interview_invite" || event === "other" || event === "ack"
+        ? isoDay(r.scheduled_at)
+        : null;
     byId.set(mailId, {
       mailId,
       event,
       confidence: Number.isFinite(c) ? Math.min(1, Math.max(0, c)) : 0.7,
       waitingUntil: event === "ooo" ? isoDay(r.waiting_until) : null,
+      scheduledAt: scheduled,
     });
   }
   if (byId.size !== transcript.messages.length) return null;

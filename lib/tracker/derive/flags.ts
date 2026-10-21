@@ -7,6 +7,8 @@ export type ItemFlags = {
   bounced: boolean;
   /** Some event of the row is a fallback, not an AI-verified label (UI badge). */
   unverified: boolean;
+  /** Row was closed; a later human inbound arrived (UI badge only). */
+  mailAfterClose: boolean;
 };
 
 export function factsToFlagsJson(flags: ItemFlags): string {
@@ -22,6 +24,7 @@ export function parseFlagsJson(raw: string | null | undefined): ItemFlags {
     thanksSent: false,
     bounced: false,
     unverified: false,
+    mailAfterClose: false,
   };
   if (!raw) return empty;
   try {
@@ -34,6 +37,7 @@ export function parseFlagsJson(raw: string | null | undefined): ItemFlags {
       thanksSent: Boolean(v.thanksSent),
       bounced: Boolean(v.bounced),
       unverified: Boolean(v.unverified),
+      mailAfterClose: Boolean(v.mailAfterClose),
     };
   } catch {
     return empty;

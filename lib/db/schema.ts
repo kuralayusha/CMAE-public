@@ -251,6 +251,8 @@ export const mailEvents = sqliteTable("mail_events", {
   model: text("model"),
   promptVersion: integer("prompt_version"),
   createdAt: text("created_at").notNull(),
+  /** interview / meeting day YYYY-MM-DD when stated */
+  scheduledAt: text("scheduled_at"),
 });
 
 /** Per-account sender domain role; intermediary domains never key identity. */

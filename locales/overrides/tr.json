@@ -6,6 +6,11 @@
     "inPanel": "Açık"
   },
   "tracker": {
+    "hardSync": "Tam sync",
+    "hardSyncToggle": "Kapsamlı sync",
+    "hardSyncHint": "Yeniden çek + yeniden analiz",
+    "hardSyncTitle": "Son 30 günü yeniden çeker ve her konuşmayı AI ile baştan analiz eder (ilk sync gibi). CMAE'deki daha eski mailler kalır; satırlar silinmez, güncellenir.",
+    "syncTitle": "Hızlı sync — yalnızca son sync'ten sonraki yeni mailler",
     "detailPage": {
       "goneFromGmail": "Gmail'de silinmiş",
       "mergedRedirect": "Bu satır birleştirildi — #{id} açılıyor…",
@@ -118,6 +123,8 @@
     },
     "unverified": "Doğrulanmadı",
     "unverifiedHint": "Buradaki bazı durumlar yapay zekâ yerine kurallardan geldi — hatalı olabilir. Bir sonraki senkronizasyonda yeniden kontrol edilir.",
+    "mailAfterClose": "Yeni mail",
+    "mailAfterCloseHint": "Bu başvuru kapanmıştı; sonra yeni bir mesaj geldi. Siz harekete geçene kadar durum kapalı kalır.",
     "viaChannel": "{channel} üzerinden"
   },
   "terminal": {
@@ -152,17 +159,17 @@
       "multiple": "Gmail senkronizasyonu, araştırma veya taslak hazırlama"
     },
     "accDiagnostics": "Tanılama",
-    "diagnosticsHint": "Sync işleri, mail kuyrukları, IMAP IDLE ve yerel log yolu. Parola veya mail gövdesi gösterilmez.",
-    "diagnosticsRefresh": "Tanılamayı yenile",
-    "diagnosticsLoadFailed": "Tanılama yüklenemedi",
-    "diagnosticsAt": "Anlık görüntü: {at}",
-    "diagnosticsJobs": "İş süresi p50={p50}ms p95={p95}ms (son {n})",
     "accPrivacy": "Gizlilik ve kullanım verisi",
     "telemetryToggle": "Anonim AI kullanım istatistiklerini paylaş",
     "telemetrySent": "Gönderilenler: token sayıları, AI çağrısını hangi CMAE özelliğinin yaptığı (ör. mail sync veya araştırma), model adı, tahmini maliyet ve rastgele anonim bir kimlik.",
     "telemetryNotSent": "Asla gönderilmeyenler: mailleriniz, prompt'lar, AI yanıtları, isimler, adresler, CV'niz veya API anahtarınız.",
     "telemetryHint": "Rastgele kimlik Gmail adresinize veya Cursor anahtarınıza bağlı değildir. İstediğiniz zaman kapatabilirsiniz; kullanım yine bu bilgisayarda sayılır, yalnızca paylaşılmaz.",
     "telemetrySaveFailed": "Bu ayar kaydedilemedi",
+    "diagnosticsHint": "Sync işleri, mail kuyrukları, IMAP IDLE ve yerel log yolu. Parola veya mail gövdesi gösterilmez.",
+    "diagnosticsRefresh": "Tanılamayı yenile",
+    "diagnosticsLoadFailed": "Tanılama yüklenemedi",
+    "diagnosticsAt": "Anlık görüntü: {at}",
+    "diagnosticsJobs": "İş süresi p50={p50}ms p95={p95}ms (son {n})",
     "diagnosticsQueues": "Kuyruklar: pending={pending}, needs_classification={needsClass}, unassigned={unassigned}, poison={poison}, merge_proposals={merges}",
     "diagnosticsDrafts": "Taslak durumları: {summary}",
     "diagnosticsImap": "IMAP bağlantı={connections}, IDLE={idle}, kutu={mailbox}, All Mail={allMail}",
@@ -190,5 +197,15 @@
   },
   "errors": {
     "llmTimeout": "AI {seconds} sn içinde yanıt vermedi"
+  },
+  "sync": {
+    "hardStarted": "Tam Gmail sync başladı",
+    "hardAiReanalyze": "{count} konuşma AI ile yeniden analiz ediliyor (önbellek yok sayılıyor)…",
+    "hardAiReanalyzePartial": "{count} konuşma AI ile yeniden analiz ediliyor (önbellek yok) · {deferred} sonraki sync’e bırakıldı…",
+    "stageTriageBatch": "AI triage {done}/{total} · {seconds}s",
+    "stageEventsBatch": "AI events {done}/{total} · {seconds}s",
+    "rebuildingList": "Başvuru listesi tüm konuşmalardan yeniden derleniyor…",
+    "hardSyncNote": "Tam sync: son 30 gün yeniden çekildi; daha eski mailler korundu; AI her konuşmayı yeniden okuyacak",
+    "hardModeIntro": "Tam sync · son {days} gün yeniden çekilir + tam AI yeniden analizi (kayıtlı daha eski mailler kalır)"
   }
 }

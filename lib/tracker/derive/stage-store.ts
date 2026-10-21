@@ -59,6 +59,8 @@ export type ExtractedEvent = {
   event: MailEvent;
   confidence: number;
   waitingUntil?: string | null;
+  /** Interview / meeting day YYYY-MM-DD when stated. */
+  scheduledAt?: string | null;
 };
 
 /** Stage 1 provider (wave 2: LLM). */
@@ -319,6 +321,7 @@ export function saveMailEvents(
         model: meta.model ?? null,
         promptVersion: meta.promptVersion ?? null,
         createdAt: now,
+        scheduledAt: e.scheduledAt ?? null,
       };
       getDb()
         .insert(mailEvents)

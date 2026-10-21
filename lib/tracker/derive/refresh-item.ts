@@ -5,7 +5,9 @@
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import {
+  conversationAnalysis,
   mailAssignments,
+  mailConversations,
   mailEvents,
   mailIntents,
   mailMessages,
@@ -18,7 +20,7 @@ import {
   shouldClearPendingGmailDraft,
 } from "../pending-draft";
 import { statusSettingsFromRow } from "../status-constants";
-import { effective } from "./effective";
+import { effective, foldTimeline } from "./effective";
 import {
   normalizeMailEvent,
   serializeTimeline,
@@ -99,10 +101,45 @@ function loadStoredEvents(mailIds: number[]): Map<number, StoredMailEvent> {
         event,
         waitingUntil: row.waitingUntil,
         source: row.source as MailEventSource,
+        confidence: row.confidence ?? null,
+        scheduledAt: row.scheduledAt ?? null,
       });
     }
   }
   return map;
+}
+
+/** mailId → triage position for multi-role rejection groups. */
+function loadPositionsByMail(mailIds: number[]): Map<number, string | null> {
+  const out = new Map<number, string | null>();
+  if (!mailIds.length) return out;
+  const db = getDb();
+  const convRows = db
+    .select({
+      id: mailConversations.id,
+      mailIds: mailConversations.mailIds,
+      position: conversationAnalysis.position,
+    })
+    .from(mailConversations)
+    .leftJoin(
+      conversationAnalysis,
+      eq(conversationAnalysis.conversationId, mailConversations.id),
+    )
+    .all();
+  const wanted = new Set(mailIds);
+  for (const row of convRows) {
+    let ids: number[] = [];
+    try {
+      ids = JSON.parse(row.mailIds || "[]") as number[];
+    } catch {
+      ids = [];
+    }
+    const pos = row.position?.trim() || null;
+    for (const id of ids) {
+      if (wanted.has(id)) out.set(id, pos);
+    }
+  }
+  return out;
 }
 
 /**
@@ -125,12 +162,14 @@ export function refreshItemFacts(
 
   const assigned = loadAssignedMails(itemId);
   const mailIds = assigned.map((m) => m.id);
-  const facts = computeFacts({
+  const positionByMail = loadPositionsByMail(mailIds);
+  let facts = computeFacts({
     assignedMails: assigned,
     intents: loadIntents(mailIds, intents),
     events: loadStoredEvents(mailIds),
     researchCandidate: Boolean(item.researchJobId || item.originResearchJobId),
     aiStatusHint: item.aiStatus,
+    positionByMail,
   });
 
   const userState =
@@ -145,6 +184,12 @@ export function refreshItemFacts(
     staleCloseDays: statusSettings.staleCloseDays,
     now: opts?.now,
   });
+  const mailAfterClose =
+    resolved.mailAfterClose || foldTimeline(facts.timeline).mailAfterClose;
+  facts = {
+    ...facts,
+    flags: { ...facts.flags, mailAfterClose },
+  };
 
   let notesObj: Record<string, unknown> = {};
   try {

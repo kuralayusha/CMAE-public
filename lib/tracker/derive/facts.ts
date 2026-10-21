@@ -101,6 +101,8 @@ export function computeTimeline(input: {
   mails: FactMail[];
   intents: MailIntentMap;
   events?: ReadonlyMap<number, StoredMailEvent>;
+  /** mailId → position label from conversation triage */
+  positionByMail?: ReadonlyMap<number, string | null>;
 }): EventTimelineEntry[] {
   const convKeys = conversationKeyByMail(
     assembleConversations(
@@ -122,6 +124,7 @@ export function computeTimeline(input: {
       conversationKey: convKeys.get(m.id) ?? null,
       subject: m.subject,
       bodyText: normalizeMailText(m.bodyText || m.snippet || ""),
+      position: input.positionByMail?.get(m.id) ?? null,
     })),
     events: input.events ?? new Map(),
     intents: fallbackIntents(input.mails, input.intents),
@@ -152,6 +155,9 @@ export function computeFacts(input: {
   events?: ReadonlyMap<number, StoredMailEvent>;
   researchCandidate: boolean;
   aiStatusHint?: string | null;
+  positionByMail?: ReadonlyMap<number, string | null>;
+  /** From effective()/fold when the closed row got later human mail. */
+  mailAfterClose?: boolean;
 }): ItemFacts {
   const linkedMails = input.assignedMails;
   const outbounds = linkedMails.filter((m) => isOutboundMail(m));
@@ -164,6 +170,7 @@ export function computeFacts(input: {
     mails: linkedMails,
     intents: input.intents,
     events: input.events,
+    positionByMail: input.positionByMail,
   });
 
   const inboundEvents = timeline.filter((e) => e.dir === "in");
@@ -218,6 +225,7 @@ export function computeFacts(input: {
       thanksSent: isThanksSent,
       bounced: lastIntent === "bounce",
       unverified: timelineUnverified(timeline),
+      mailAfterClose: Boolean(input.mailAfterClose),
     },
     aiStatus: input.aiStatusHint ?? null,
     timeline,
