@@ -383,15 +383,32 @@
       "draftContentMismatch": "Draft file differs from the Gmail draft"
     },
     "merge": {
-      "prompt": "These two rows may be the same application — {a} and {b}. Merge them?",
+      "banner": "{count} merge decision(s) waiting for you.",
+      "manage": "Manage",
+      "pageTitle": "Merge decisions",
+      "pageSubtitle": "Rows that may belong to the same employer.",
+      "intro": "These rows may be the same application. If you merge them, their mails are combined into one row; if you keep them separate, we won't ask again.",
+      "back": "Back to tracker",
+      "pair": "{a} / {b}",
+      "why": {
+        "twin_suggestion": "Looks like the same employer",
+        "other": "Possible duplicate"
+      },
+      "mails": "Recent mails ({count})",
+      "moreMails": "+{count} more",
+      "noMails": "No mails yet",
+      "noSubject": "(no subject)",
+      "dirIn": "Received",
+      "dirOut": "Sent",
+      "conflictHint": "These rows disagree. Choose which value to keep before merging.",
+      "progress": "{done} / {total} done",
+      "allDone": "All done — going back to the tracker…",
       "fieldUserState": "Active / inactive",
       "fieldRecipient": "Recipient",
       "sideA": "first",
       "sideB": "second",
       "accept": "Merge",
-      "reject": "Keep separate",
-      "accepted": "Rows merged",
-      "rejected": "Kept as separate rows"
+      "reject": "Keep separate"
     },
     "recipient": {
       "aria": "Choose recipient for {company}",

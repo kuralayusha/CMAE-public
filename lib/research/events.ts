@@ -1,4 +1,5 @@
 import { EventEmitter } from "events";
+import { notifyOperationsChanged } from "@/lib/operations/bus";
 import { hydrateJobsFromDisk, persistJobDebounced, persistJobNow } from "./persist";
 import type { JobEvent, ResearchJob, TermKind, TermLine } from "./types";
 
@@ -86,6 +87,7 @@ export function setJobStatus(
   }
 
   job.status = status;
+  notifyOperationsChanged();
   if (extra?.companyName !== undefined) job.companyName = extra.companyName;
   if (extra?.error !== undefined) job.error = extra.error;
   if (extra?.folderName !== undefined) job.folderName = extra.folderName;

@@ -418,20 +418,7 @@ export function TrackerList() {
   const [syncSessionId, setSyncSessionId] = useState<string | null>(null);
   const [hardSync, setHardSync] = useState(false);
   const [actionsMenuId, setActionsMenuId] = useState<number | null>(null);
-  const [mergeProposals, setMergeProposals] = useState<
-    {
-      id: string;
-      winnerId: number;
-      loserId: number;
-      conflicts: { field: string; winner: string | null; loser: string | null }[];
-      winner: { id: number; company: string; primaryTo: string | null; userState: string };
-      loser: { id: number; company: string; primaryTo: string | null; userState: string };
-    }[]
-  >([]);
-  const [mergeBusyId, setMergeBusyId] = useState<string | null>(null);
-  const [mergeChoices, setMergeChoices] = useState<
-    Record<string, Record<string, string | null>>
-  >({});
+  const [mergeCount, setMergeCount] = useState(0);
   const syncEsRef = useRef<EventSource | null>(null);
   const syncAttachedJobRef = useRef<string | null>(null);
   const syncShowToastRef = useRef(false);
@@ -444,24 +431,8 @@ export function TrackerList() {
     try {
       const res = await fetch("/api/tracker/merge-proposals");
       if (!res.ok) return;
-      const data = (await res.json()) as {
-        proposals?: typeof mergeProposals;
-      };
-      const list = data.proposals || [];
-      setMergeProposals(list);
-      setMergeChoices((prev) => {
-        const next = { ...prev };
-        for (const p of list) {
-          if (!next[p.id]) {
-            const defaults: Record<string, string | null> = {};
-            for (const c of p.conflicts) {
-              defaults[c.field] = c.winner;
-            }
-            next[p.id] = defaults;
-          }
-        }
-        return next;
-      });
+      const data = (await res.json()) as { proposals?: unknown[] };
+      setMergeCount((data.proposals || []).length);
     } catch {
       /* ignore */
     }
@@ -471,38 +442,6 @@ export function TrackerList() {
     if (loading) return;
     void loadMergeProposals();
   }, [loading, store.rev, loadMergeProposals]);
-
-  async function respondMerge(
-    proposalId: string,
-    decision: "accept" | "reject",
-  ) {
-    setMergeBusyId(proposalId);
-    setError(null);
-    try {
-      const res = await fetch("/api/tracker/merge-proposals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: proposalId,
-          decision,
-          choices: mergeChoices[proposalId] || {},
-        }),
-      });
-      const data = (await res.json()) as { error?: string; ok?: boolean };
-      if (!res.ok) throw new Error(data.error || t("tracker.error.mergeFailed"));
-      setToast(
-        decision === "accept"
-          ? t("tracker.merge.accepted")
-          : t("tracker.merge.rejected"),
-      );
-      await loadMergeProposals();
-      await refreshTrackerList({ force: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setMergeBusyId(null);
-    }
-  }
 
   useEffect(() => {
     if (!toast) return;
@@ -1761,72 +1700,14 @@ export function TrackerList() {
           </Button>
         </div>
       ) : null}
-      {!loading && mergeProposals.length > 0
-        ? mergeProposals.map((p) => (
-            <div
-              key={p.id}
-              className="cmae-tracker-banner cmae-tracker-freshness is-warn"
-            >
-              <div style={{ flex: 1 }}>
-                <p>
-                  {t("tracker.merge.prompt", {
-                    a: p.winner.company,
-                    b: p.loser.company,
-                  })}
-                </p>
-                {p.conflicts.map((c) => (
-                  <label
-                    key={c.field}
-                    style={{
-                      display: "block",
-                      marginTop: 6,
-                      fontSize: "0.9em",
-                    }}
-                  >
-                    {c.field === "user_state"
-                      ? t("tracker.merge.fieldUserState")
-                      : t("tracker.merge.fieldRecipient")}
-                    {": "}
-                    <select
-                      value={mergeChoices[p.id]?.[c.field] ?? c.winner ?? ""}
-                      onChange={(e) =>
-                        setMergeChoices((prev) => ({
-                          ...prev,
-                          [p.id]: {
-                            ...(prev[p.id] || {}),
-                            [c.field]: e.target.value || null,
-                          },
-                        }))
-                      }
-                    >
-                      <option value={c.winner ?? ""}>
-                        {c.winner || "—"} ({t("tracker.merge.sideA")})
-                      </option>
-                      <option value={c.loser ?? ""}>
-                        {c.loser || "—"} ({t("tracker.merge.sideB")})
-                      </option>
-                    </select>
-                  </label>
-                ))}
-              </div>
-              <Button
-                type="button"
-                disabled={mergeBusyId === p.id}
-                onClick={() => void respondMerge(p.id, "accept")}
-              >
-                {t("tracker.merge.accept")}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={mergeBusyId === p.id}
-                onClick={() => void respondMerge(p.id, "reject")}
-              >
-                {t("tracker.merge.reject")}
-              </Button>
-            </div>
-          ))
-        : null}
+      {!loading && mergeCount > 0 ? (
+        <div className="cmae-tracker-banner cmae-tracker-freshness is-warn">
+          <p>{t("tracker.merge.banner", { count: mergeCount })}</p>
+          <Button type="button" onClick={() => router.push("/tracker/merge")}>
+            {t("tracker.merge.manage")}
+          </Button>
+        </div>
+      ) : null}
 
       {gmailModal ? (
         <div

@@ -31,15 +31,32 @@
       "mergeFailed": "Birleştirme çözülemedi"
     },
     "merge": {
-      "prompt": "Bu iki satır aynı başvuru olabilir — {a} ve {b}. Birleştirilsin mi?",
+      "banner": "{count} birleştirme kararınızı bekliyor.",
+      "manage": "Yönet",
+      "pageTitle": "Birleştirme kararları",
+      "pageSubtitle": "Aynı işverene ait olabilecek satırlar.",
+      "intro": "Bu satırlar aynı başvuru olabilir. Birleştirirsen mailler tek satırda toplanır; ayrı tutarsan bir daha sorulmaz.",
+      "back": "Tracker'a dön",
+      "pair": "{a} / {b}",
+      "why": {
+        "twin_suggestion": "Aynı işveren gibi görünüyor",
+        "other": "Olası kopya"
+      },
+      "mails": "Son mailler ({count})",
+      "moreMails": "+{count} daha",
+      "noMails": "Henüz mail yok",
+      "noSubject": "(konu yok)",
+      "dirIn": "Gelen",
+      "dirOut": "Giden",
+      "conflictHint": "Bu satırlar farklı değerler içeriyor. Birleştirmeden önce hangisinin kalacağını seç.",
+      "progress": "{done} / {total} tamamlandı",
+      "allDone": "Hepsi tamam — tracker'a dönülüyor…",
       "fieldUserState": "Aktif / pasif",
       "fieldRecipient": "Alıcı",
       "sideA": "birinci",
       "sideB": "ikinci",
       "accept": "Birleştir",
-      "reject": "Ayrı tut",
-      "accepted": "Satırlar birleştirildi",
-      "rejected": "Ayrı satırlar olarak bırakıldı"
+      "reject": "Ayrı tut"
     },
     "freshness": {
       "neverSynced": "İlk senkronizasyon yapılıyor — son mailler taranıyor. Liste boş değil; hâlâ yükleniyor.",

@@ -1239,3 +1239,8 @@ Her faz bağımsız olarak yayınlanabilir. Kabul kriterleri otomatik testlerle 
     - **Hesap değişiminde research-only satırlar:** Diske bağlı oldukları için korunuyorlar (§2.7.2). Onay diyaloğunda "Research satırlarını da sil" seçeneği sunulup sunulmayacağı açık.
     - **Hesap değişimi yedeği:** `cmae.db.pre-account-switch` dosyası 7 gün tutuluyor ama UI'da "geri al" yok. Bu bilinçli bir tercih; kullanıcıya ayrıca bir geri alma sunulmak istenirse ayrı bir karar gerekir.
     - **Bekleyen birleştirme teklifleri:** Kullanıcı uzun süre yanıt vermezse tekliflerin ne zaman `stale` sayılıp kaldırılacağı (öneri: ilgili satırlardan biri değişince veya 30 gün sonra).
+
+## Ek not: Merge yönetim sayfası ve operations SSE
+
+- **Merge yönetimi:** Tracker listesi artık tek bir "N birleştirme kararı bekliyor" şeridi ve `Manage` butonu gösterir. Kararlar `/tracker/merge` sayfasında verilir (`GET/POST /api/tracker/merge-proposals`; GET her iki satırın son mailleri ve `mailCount` ile zenginleşir). Tüm öneriler bitince sayfa `/tracker`'a döner.
+- **Operations SSE:** `/api/operations/status` polling'i yerine `/api/operations/events` (SSE) kullanılır. `lib/operations/bus.ts` yalnızca abone varken 1 sn'lik bellek içi izleyici çalıştırır, sadece değişimde yayınlar; `notifyOperationsChanged()` draft, research ve sync geçişlerinde anlık tetikler. İstemci yalnızca `useOperations` kullanılan sayfalarda bağlanır (ref sayacı), üstel geri çekilmeyle yeniden bağlanır, EventSource çalışmazsa 10 sn'lik yedek polling devreye girer. Gerçek koruma sunucuda `settingsBusyResponse` (409) olarak kalır.

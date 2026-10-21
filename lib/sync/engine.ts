@@ -30,6 +30,7 @@ import {
   retryDelayMs,
   type SyncErrorKind,
 } from "./errors";
+import { notifyOperationsChanged } from "@/lib/operations/bus";
 import { computeTrackerFreshness } from "./freshness";
 import { appendSyncLog } from "./jsonl-log";
 
@@ -455,6 +456,7 @@ function finishSession(
   extra?: { error?: string; result?: SyncSessionResult },
 ) {
   session.status = status;
+  notifyOperationsChanged();
   if (extra?.error !== undefined) session.error = extra.error;
   if (extra?.result !== undefined) session.result = extra.result;
   if (extra?.error) emit(session.id, { type: "error", error: extra.error });
@@ -867,6 +869,7 @@ async function runClaimedJob(job: JobRow): Promise<void> {
     abort,
   };
   globalThis.__cmaeTrackerSync = session;
+  notifyOperationsChanged();
 
   // Free the work IMAP slot: pause dedicated IDLE while sync/drafts use IMAP.
   const usesImap = job.kind === "mail_sync" || job.kind === "drafts_reconcile";
@@ -1376,6 +1379,7 @@ function startSkipImapSession(mode: SyncMode): SyncSessionPublic {
     abort,
   };
   globalThis.__cmaeTrackerSync = session;
+  notifyOperationsChanged();
 
   void (async () => {
     try {

@@ -2,12 +2,13 @@
  * K3 merge proposal list + respond (accept / reject).
  */
 
-import { eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpRevision, getTrackerRevision } from "@/lib/db/revision";
 import {
   itemLineage,
   mailAssignments,
+  mailMessages,
   mergeProposals,
   trackerItems,
 } from "@/lib/db/schema";
@@ -16,6 +17,25 @@ import { emitTrackerEvent } from "./events-bus";
 import { mergeItemInTx } from "./item-tx";
 import { withSelectedRecipient } from "./recipients";
 import type { MergeConflict } from "./derive/merge-suggestions";
+
+export type MergeMailView = {
+  subject: string;
+  from: string;
+  direction: string | null;
+  date: string;
+};
+
+export type MergeSideView = {
+  id: number;
+  company: string;
+  primaryTo: string | null;
+  userState: string;
+  status: string;
+  mails: MergeMailView[];
+  mailCount: number;
+};
+
+const MERGE_MAILS_PER_SIDE = 5;
 
 export type MergeProposalView = {
   id: string;
@@ -26,8 +46,8 @@ export type MergeProposalView = {
   state: string;
   createdRev: number;
   createdAt: string;
-  winner: { id: number; company: string; primaryTo: string | null; userState: string };
-  loser: { id: number; company: string; primaryTo: string | null; userState: string };
+  winner: MergeSideView;
+  loser: MergeSideView;
 };
 
 function parseConflicts(json: string): MergeConflict[] {
@@ -45,13 +65,41 @@ function parseConflicts(json: string): MergeConflict[] {
   }
 }
 
-function briefItem(row: typeof trackerItems.$inferSelect) {
+function loadSideMails(itemId: number): {
+  mails: MergeMailView[];
+  mailCount: number;
+} {
+  const db = getDb();
+  const rows = db
+    .select({
+      subject: mailMessages.subject,
+      from: mailMessages.fromAddr,
+      direction: mailMessages.direction,
+      date: mailMessages.dateIso,
+    })
+    .from(mailAssignments)
+    .innerJoin(mailMessages, eq(mailMessages.id, mailAssignments.mailId))
+    .where(eq(mailAssignments.itemId, itemId))
+    .orderBy(desc(mailMessages.dateIso))
+    .limit(MERGE_MAILS_PER_SIDE)
+    .all();
+  const count = db
+    .select({ n: sql<number>`count(*)` })
+    .from(mailAssignments)
+    .where(eq(mailAssignments.itemId, itemId))
+    .get();
+  return { mails: rows, mailCount: count?.n ?? rows.length };
+}
+
+function briefItem(row: typeof trackerItems.$inferSelect): MergeSideView {
   return {
     id: row.id,
     company: row.company,
     primaryTo: row.primaryTo,
+    status: row.status,
     userState:
       row.userState || (row.status === "inactive" ? "inactive" : "active"),
+    ...loadSideMails(row.id),
   };
 }
 
