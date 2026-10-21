@@ -3,25 +3,32 @@ import { I18nProvider } from "@/components/I18nProvider";
 import { LocaleStaleGate } from "@/components/LocaleStaleGate";
 import { VersionGate } from "@/components/VersionGate";
 import { loadActivePack, loadEnPack } from "@/lib/i18n/pack";
+import { t } from "@/lib/i18n/t";
 import type { LocalePack } from "@/lib/i18n/types";
+import { getThemeBootScript } from "@/lib/theme";
 import "./globals.css";
 import "@/components/folder-browser.css";
 
-export const metadata: Metadata = {
-  title: "CMAE",
-  description: "Local-first cold mail agent — tracker, search, and Gmail drafts",
-  openGraph: {
-    title: "CMAE",
-    description: "Local-first cold mail agent — tracker, search, and Gmail drafts",
-    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "CMAE" }],
-  },
-  twitter: {
-    card: "summary",
-    title: "CMAE",
-    description: "Local-first cold mail agent — tracker, search, and Gmail drafts",
-    images: ["/icons/icon-512.png"],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const title = t("meta.title");
+  const description = t("meta.description");
+  const ogAlt = t("meta.ogAlt");
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: ogAlt }],
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+      images: ["/icons/icon-512.png"],
+    },
+  };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -39,11 +46,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   }
 
   return (
-    <html lang={initialCode.slice(0, 2) || "en"} className="h-full">
+    <html
+      lang={initialCode.slice(0, 2) || "en"}
+      className="h-full"
+      suppressHydrationWarning
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var p=location.pathname;if(p==="/"||p==="/download"){document.documentElement.removeAttribute("data-theme")}else{var t=localStorage.getItem("cmae.theme");var dark=t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.setAttribute("data-theme","dark")}}catch(e){}`,
+            __html: getThemeBootScript(),
           }}
         />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -57,7 +68,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col antialiased">
+      <body
+        className="min-h-full flex flex-col antialiased"
+        suppressHydrationWarning
+      >
         <I18nProvider
           initialCode={initialCode}
           initialPack={initialPack}

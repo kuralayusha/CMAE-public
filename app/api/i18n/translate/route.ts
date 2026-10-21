@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadEnPack, saveUserPack } from "@/lib/i18n/pack";
 import { getRemoteTranslateUrl, isVercelRuntime } from "@/lib/i18n/remote";
 import { countMissingLeaves, mergeShape } from "@/lib/i18n/shape";
+import { t } from "@/lib/i18n/t";
 import { translateLocalePack } from "@/lib/i18n/translate";
 import type { LocalePack } from "@/lib/i18n/types";
 import { updateSettings } from "@/lib/settings/service";
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
     const targetLanguage = String(body.targetLanguage || "").trim();
     if (!targetLanguage) {
       return NextResponse.json(
-        { error: "targetLanguage is required" },
+        { error: t("i18n.error.targetRequired") },
         { status: 400 },
       );
     }
@@ -59,7 +60,10 @@ export async function POST(req: Request) {
           {
             error:
               remoteData.error ||
-              `Remote translate failed (${remoteRes.status}) at ${remoteUrl}`,
+              t("i18n.error.remoteFailed", {
+                status: remoteRes.status,
+                url: remoteUrl,
+              }),
           },
           { status: remoteRes.status >= 400 ? remoteRes.status : 502 },
         );
@@ -68,7 +72,7 @@ export async function POST(req: Request) {
       const pack = remoteData.pack;
       if (!pack || typeof pack !== "object") {
         return NextResponse.json(
-          { error: "Remote translate returned no pack" },
+          { error: t("i18n.error.remoteNoPack") },
           { status: 502 },
         );
       }

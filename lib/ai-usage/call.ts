@@ -37,11 +37,17 @@ import {
   EMBEDDED_PRICES,
   selectPrice,
 } from "./pricing";
+import { currentUsageRunId } from "./run-context";
 import type { TokenCounts, UsageBackend, UsageEvent, UsageStatus } from "./types";
 
 export type PromptWithUsageInput = {
   feature: AiFeature;
   syncMode?: SyncMode;
+  /**
+   * UI-level run id (sync job / research job / translate batch). Falls back to
+   * AsyncLocalStorage (`withUsageRun`). Never invented per AI call.
+   */
+  runId?: string | null;
   /** Skip the response-cache read (hard sync); the fresh result still replaces the entry. */
   bypassCache?: boolean;
   model?: string;
@@ -150,6 +156,7 @@ export async function promptWithUsage(
       ts,
       feature: input.feature,
       syncMode: input.syncMode ?? null,
+      runId: input.runId ?? currentUsageRunId() ?? null,
       model,
       priceVersion: table.version,
       status,

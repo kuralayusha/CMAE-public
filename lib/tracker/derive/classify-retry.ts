@@ -8,6 +8,7 @@ import { mailMessages, trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
 import { classifyMailSignals } from "../agents/mail-signals";
+import { DEFAULT_FOLLOW_UP_DAYS } from "../status-constants";
 import { throwIfSyncCanceled } from "../cancel";
 import { normalizeMailText } from "../signals";
 import type { MailBrief } from "../match";
@@ -45,7 +46,7 @@ export async function runClassifyRetry(opts?: {
   const log = opts?.onProgress;
   const signal = opts?.signal;
   let db = getDb();
-  const followUpDays = getSettingsRow()?.followUpDays ?? 5;
+  const followUpDays = getSettingsRow()?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
 
   const pendingMails = db
     .select()

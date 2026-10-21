@@ -10,6 +10,18 @@ import {
 } from "@/components/OperationsProvider";
 import { Button, Field, PageShell } from "@/components/ui";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
+import {
+  DEFAULT_FOLLOW_UP_DAYS,
+  DEFAULT_REJECTION_CLOSE_DAYS,
+  DEFAULT_STALE_CLOSE_DAYS,
+  FOLLOW_UP_DAYS_MAX,
+  FOLLOW_UP_DAYS_MIN,
+  REJECTION_CLOSE_DAYS_MAX,
+  REJECTION_CLOSE_DAYS_MIN,
+  STALE_CLOSE_DAYS_MAX,
+  STALE_CLOSE_DAYS_MIN,
+  validateStatusDaySettings,
+} from "@/lib/tracker/status-constants";
 import { formatVersionLabel } from "@/lib/version/semver";
 
 type WorkType = "fulltime" | "parttime" | "contracted";
@@ -107,9 +119,9 @@ export default function SettingsPage() {
     gmailAddress: "",
     gmailAppPassword: "",
     cursorApiKey: "",
-    followUpDays: 5,
-    rejectionCloseDays: 10,
-    staleCloseDays: 20,
+    followUpDays: DEFAULT_FOLLOW_UP_DAYS,
+    rejectionCloseDays: DEFAULT_REJECTION_CLOSE_DAYS,
+    staleCloseDays: DEFAULT_STALE_CLOSE_DAYS,
     preferredLanguage: "en",
     emailSignature: "",
   });
@@ -245,9 +257,10 @@ export default function SettingsPage() {
       ...f,
       fullName: data.fullName || "",
       gmailAddress: data.gmailAddress || "",
-      followUpDays: data.followUpDays || 5,
-      rejectionCloseDays: data.rejectionCloseDays || 10,
-      staleCloseDays: data.staleCloseDays || 20,
+      followUpDays: data.followUpDays || DEFAULT_FOLLOW_UP_DAYS,
+      rejectionCloseDays:
+        data.rejectionCloseDays || DEFAULT_REJECTION_CLOSE_DAYS,
+      staleCloseDays: data.staleCloseDays || DEFAULT_STALE_CLOSE_DAYS,
       preferredLanguage: data.preferredLanguage || "en",
       emailSignature: data.emailSignature || "",
     }));
@@ -291,6 +304,33 @@ export default function SettingsPage() {
 
   async function persistSettings(opts?: { confirmAccountSwitch?: boolean }) {
     if (formLocked) return;
+    const dayCheck = validateStatusDaySettings({
+      followUpDays: form.followUpDays,
+      rejectionCloseDays:
+        form.rejectionCloseDays ?? DEFAULT_REJECTION_CLOSE_DAYS,
+      staleCloseDays: form.staleCloseDays ?? DEFAULT_STALE_CLOSE_DAYS,
+    });
+    if (!dayCheck.ok) {
+      const msg =
+        dayCheck.code === "followUpDaysRange"
+          ? t("settings.error.followUpDaysRange", {
+              min: FOLLOW_UP_DAYS_MIN,
+              max: FOLLOW_UP_DAYS_MAX,
+            })
+          : dayCheck.code === "rejectionCloseDaysRange"
+            ? t("settings.error.rejectionCloseDaysRange", {
+                min: REJECTION_CLOSE_DAYS_MIN,
+                max: REJECTION_CLOSE_DAYS_MAX,
+              })
+            : dayCheck.code === "staleCloseDaysRange"
+              ? t("settings.error.staleCloseDaysRange", {
+                  min: STALE_CLOSE_DAYS_MIN,
+                  max: STALE_CLOSE_DAYS_MAX,
+                })
+              : t("settings.error.followUpBeforeStale");
+      flash(msg, "err");
+      return;
+    }
     setBusy(true);
     flash(null);
     const prevLang = (meta?.preferredLanguage || "en").toLowerCase();
@@ -420,7 +460,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/onboarding/reset", { method: "POST" });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Delete failed");
+      if (!res.ok) throw new Error(data.error || t("settings.error.wipeFailed"));
       setWipeOpen(false);
       try {
         for (const k of Object.keys(localStorage)) {
@@ -582,54 +622,69 @@ export default function SettingsPage() {
           <SettingsAcc title={t("settings.accEmail")}>
             <Field
               label={t("fields.followUpDays")}
-              hint={t("fields.followUpHint")}
+              hint={t("fields.followUpHint", {
+                min: FOLLOW_UP_DAYS_MIN,
+                max: FOLLOW_UP_DAYS_MAX,
+                default: DEFAULT_FOLLOW_UP_DAYS,
+              })}
             >
               <input
                 className="cmae-input"
                 type="number"
-                min={1}
-                max={30}
+                min={FOLLOW_UP_DAYS_MIN}
+                max={FOLLOW_UP_DAYS_MAX}
                 value={form.followUpDays}
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    followUpDays: Number(e.target.value) || 5,
+                    followUpDays:
+                      Number(e.target.value) || DEFAULT_FOLLOW_UP_DAYS,
                   })
                 }
               />
             </Field>
             <Field
               label={t("fields.rejectionCloseDays")}
-              hint={t("fields.rejectionCloseHint")}
+              hint={t("fields.rejectionCloseHint", {
+                min: REJECTION_CLOSE_DAYS_MIN,
+                max: REJECTION_CLOSE_DAYS_MAX,
+                default: DEFAULT_REJECTION_CLOSE_DAYS,
+              })}
             >
               <input
                 className="cmae-input"
                 type="number"
-                min={1}
-                max={90}
+                min={REJECTION_CLOSE_DAYS_MIN}
+                max={REJECTION_CLOSE_DAYS_MAX}
                 value={form.rejectionCloseDays}
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    rejectionCloseDays: Number(e.target.value) || 10,
+                    rejectionCloseDays:
+                      Number(e.target.value) || DEFAULT_REJECTION_CLOSE_DAYS,
                   })
                 }
               />
             </Field>
             <Field
               label={t("fields.staleCloseDays")}
-              hint={t("fields.staleCloseHint")}
+              hint={t("fields.staleCloseHint", {
+                min: STALE_CLOSE_DAYS_MIN,
+                max: STALE_CLOSE_DAYS_MAX,
+                default: DEFAULT_STALE_CLOSE_DAYS,
+              })}
             >
               <input
                 className="cmae-input"
                 type="number"
-                min={1}
-                max={90}
+                min={STALE_CLOSE_DAYS_MIN}
+                max={STALE_CLOSE_DAYS_MAX}
                 value={form.staleCloseDays}
                 onChange={(e) =>
                   setForm({
                     ...form,
-                    staleCloseDays: Number(e.target.value) || 20,
+                    staleCloseDays:
+                      Number(e.target.value) || DEFAULT_STALE_CLOSE_DAYS,
                   })
                 }
               />
@@ -1004,7 +1059,7 @@ export default function SettingsPage() {
                         diagnostics.sources
                           .map(
                             (s) =>
-                              `${s.role}:${s.lastSuccessAt?.slice(0, 19) || "never"}`,
+                              `${s.role}:${s.lastSuccessAt?.slice(0, 19) || t("settings.never")}`,
                           )
                           .join(", ") || "—",
                     })}

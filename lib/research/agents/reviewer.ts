@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import { throwIfCanceled } from "../cancel";
 import type { RunContext } from "../context";
 import { askLlm, extractJson } from "../llm";
@@ -10,7 +11,13 @@ const REDOABLE = ["scout", "jobfit", "contact", "research", "writer"] as const;
 
 export async function runReviewer(ctx: RunContext): Promise<ReviewVerdict> {
   const { jobId } = ctx;
-  speak(jobId, "reviewer", "system", "── reviewer online · quality & consistency");
+  speak(
+    jobId,
+    "reviewer",
+    "system",
+    t("terminal.detail.reviewerOnline"),
+    t("terminal.plain.startedTask"),
+  );
   throwIfCanceled(jobId);
 
   const packageBrief = `
@@ -83,7 +90,7 @@ Return ONLY JSON:
 
 Package:
 ${packageBrief}`,
-    "Scoring package…",
+    t("terminal.llm.scoring"),
     "reviewer",
   );
 
@@ -95,7 +102,17 @@ ${packageBrief}`,
     jobId,
     "reviewer",
     verdict.passed ? "ok" : "think",
-    `score ${verdict.overallScore}/${verdict.threshold} · ${verdict.passed ? "PASS" : `REWIND → ${verdict.rewindTo}`}`,
+    verdict.passed
+      ? t("terminal.detail.reviewScorePass", {
+          score: verdict.overallScore,
+          threshold: verdict.threshold,
+        })
+      : t("terminal.detail.reviewScoreRewind", {
+          score: verdict.overallScore,
+          threshold: verdict.threshold,
+          agent: verdict.rewindTo || "",
+        }),
+    t("terminal.plain.scoringPackage"),
   );
   if (verdict.summary) {
     speak(jobId, "reviewer", "think", verdict.summary);
@@ -105,7 +122,10 @@ ${packageBrief}`,
       jobId,
       "reviewer",
       "think",
-      `feedback[${verdict.rewindTo}]: ${verdict.feedback[verdict.rewindTo]}`,
+      t("terminal.detail.reviewFeedback", {
+        agent: verdict.rewindTo,
+        msg: verdict.feedback[verdict.rewindTo],
+      }),
     );
   }
 

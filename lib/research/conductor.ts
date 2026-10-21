@@ -16,6 +16,7 @@ import { hasFolderStatusSuffix } from "./folder-status";
 import { speak } from "./speak";
 import { SPECIALISTS, type SpecialistId } from "./types";
 import { markFolderError, writeFile } from "./workspace";
+import { withUsageRunAsync } from "@/lib/ai-usage/run-context";
 
 const PIPELINE: Exclude<SpecialistId, "reviewer">[] = [
   "scout",
@@ -39,6 +40,11 @@ const RUNNERS: Record<Exclude<SpecialistId, "reviewer">, StepFn> = {
 };
 
 export async function runConductor(jobId: string) {
+  // One research job = one usage run (scout→writer share jobId).
+  return withUsageRunAsync(jobId, () => runConductorBody(jobId));
+}
+
+async function runConductorBody(jobId: string) {
   const job = getJob(jobId);
   if (!job) return;
 
@@ -48,8 +54,11 @@ export async function runConductor(jobId: string) {
     jobId,
     "conductor",
     "system",
-    `◆ conductor · ${job.url} · specialists: ${SPECIALISTS.join(" → ")}`,
-    "Research starting; specialists will run in order: scout → jobfit → contact → research → writer → reviewer",
+    t("terminal.detail.conductorSession", {
+      url: job.url,
+      pipeline: SPECIALISTS.join(" → "),
+    }),
+    t("terminal.plain.researchStarting"),
   );
 
   let ctx: RunContext | null = null;
@@ -62,9 +71,7 @@ export async function runConductor(jobId: string) {
     });
     const cvText = libraryText?.trim() || cfg?.cvText?.trim() || "";
     if (!cvText) {
-      throw new Error(
-        "CV not found — upload a CV in Settings or place a PDF in workspace/cvs/",
-      );
+      throw new Error(t("research.error.cvMissing"));
     }
 
     ctx = createRunContext(jobId, job.url, {
@@ -84,8 +91,16 @@ export async function runConductor(jobId: string) {
         jobId,
         "conductor",
         "system",
-        `▶ dispatch → ${agent} (step ${stepIndex + 1}/${PIPELINE.length})`,
-        `Step ${stepIndex + 1}/${PIPELINE.length}: dispatched to ${agent}`,
+        t("terminal.detail.dispatch", {
+          agent,
+          step: stepIndex + 1,
+          total: PIPELINE.length,
+        }),
+        t("terminal.plain.dispatchStep", {
+          step: stepIndex + 1,
+          total: PIPELINE.length,
+          agent,
+        }),
       );
 
       await RUNNERS[agent](ctx);
@@ -97,7 +112,13 @@ export async function runConductor(jobId: string) {
 
     for (;;) {
       throwIfCanceled(jobId);
-      speak(jobId, "conductor", "system", "▶ dispatch → reviewer");
+      speak(
+        jobId,
+        "conductor",
+        "system",
+        t("terminal.detail.dispatchReviewer"),
+        t("terminal.plain.handedWork", { agent: t("terminal.agents.reviewer") }),
+      );
       const verdict = await runReviewer(ctx);
       throwIfCanceled(jobId);
 
@@ -106,7 +127,10 @@ export async function runConductor(jobId: string) {
           jobId,
           "conductor",
           "ok",
-          `workflow complete · score ${verdict.overallScore}`,
+          t("terminal.detail.workflowComplete", {
+            score: verdict.overallScore,
+          }),
+          t("terminal.plain.researchComplete"),
         );
         break;
       }
@@ -116,7 +140,7 @@ export async function runConductor(jobId: string) {
           jobId,
           "conductor",
           "think",
-          `max rewind (${MAX_REWINDS}) exceeded — continuing with current package`,
+          t("terminal.detail.maxRewind", { max: MAX_REWINDS }),
         );
         break;
       }
@@ -129,7 +153,7 @@ export async function runConductor(jobId: string) {
           jobId,
           "conductor",
           "think",
-          `max retry for ${target} — locking package`,
+          t("terminal.detail.maxRetry", { agent: target }),
         );
         break;
       }
@@ -143,14 +167,25 @@ export async function runConductor(jobId: string) {
         jobId,
         "conductor",
         "system",
-        `⏪ REWIND → ${target} (rewind #${rewinds})`,
+        t("terminal.detail.rewind", { agent: target, n: rewinds }),
+        t("terminal.plain.packageRejected", {
+          agent: t(`terminal.agents.${target}`),
+        }),
       );
 
       stepIndex = resumeAt;
       while (stepIndex < PIPELINE.length) {
         throwIfCanceled(jobId);
         const agent = PIPELINE[stepIndex];
-        speak(jobId, "conductor", "system", `▶ re-dispatch → ${agent}`);
+        speak(
+          jobId,
+          "conductor",
+          "system",
+          t("terminal.detail.reDispatch", { agent }),
+          t("terminal.plain.handedWork", {
+            agent: t(`terminal.agents.${agent}`),
+          }),
+        );
         await RUNNERS[agent](ctx);
         throwIfCanceled(jobId);
         syncFolderFromJob(ctx);
@@ -173,10 +208,22 @@ export async function runConductor(jobId: string) {
       companyName: ctx.companyName,
       folderName: ctx.folderName,
     });
-    speak(jobId, "conductor", "ok", `done · ${ctx.folderName}/`);
+    speak(
+      jobId,
+      "conductor",
+      "ok",
+      t("terminal.detail.doneFolder", { folder: ctx.folderName }),
+      t("terminal.plain.researchComplete"),
+    );
   } catch (err) {
     if (err instanceof JobCanceledError || isCanceled(jobId)) {
-      speak(jobId, "conductor", "err", "pipeline aborted (canceled)");
+      speak(
+        jobId,
+        "conductor",
+        "err",
+        t("terminal.detail.pipelineCanceled"),
+        t("terminal.plain.jobCanceled"),
+      );
       // Re-assert canceled if a specialist revived status to "running".
       const live = getJob(jobId);
       if (live && live.status !== "canceled") {
@@ -189,7 +236,12 @@ export async function runConductor(jobId: string) {
       return;
     }
     const message = err instanceof Error ? err.message : String(err);
-    speak(jobId, "conductor", "err", `FATAL: ${message}`);
+    speak(
+      jobId,
+      "conductor",
+      "err",
+      t("terminal.detail.fatal", { msg: message }),
+    );
 
     let folderName = ctx?.folderName;
     if (
@@ -211,13 +263,24 @@ export async function runConductor(jobId: string) {
           jobId,
           "conductor",
           "err",
-          `Folder rename failed: ${renameErr instanceof Error ? renameErr.message : String(renameErr)}`,
+          t("terminal.detail.folderRenameFailed", {
+            msg:
+              renameErr instanceof Error
+                ? renameErr.message
+                : String(renameErr),
+          }),
         );
       }
     }
 
     if (isCanceled(jobId)) {
-      speak(jobId, "conductor", "err", "pipeline aborted (canceled)");
+      speak(
+        jobId,
+        "conductor",
+        "err",
+        t("terminal.detail.pipelineCanceled"),
+        t("terminal.plain.jobCanceled"),
+      );
       return;
     }
     setJobStatus(jobId, "error", { error: message, folderName });

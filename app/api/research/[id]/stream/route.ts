@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { getJob, getJobBus } from "@/lib/research/events";
 import type { JobEvent } from "@/lib/research/types";
@@ -13,10 +14,13 @@ export async function GET(
   const { id } = await ctx.params;
   const job = getJob(id);
   if (!job) {
-    return new Response(JSON.stringify({ error: "Job not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: t("research.error.jobNotFound") }),
+      {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   const encoder = new TextEncoder();

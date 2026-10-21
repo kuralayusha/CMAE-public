@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useT } from "@/components/I18nProvider";
 import {
   SCENARIO_COMPANIES,
   useLandingScenario,
@@ -22,100 +23,111 @@ type Row = {
   isNew?: boolean;
 };
 
-const STATUS_LABEL: Record<TrackerStatus, string> = {
-  ready_to_send: "Ready to send",
-  needs_reply: "Reply needed",
-  follow_up_due: "Follow-up due",
-  in_progress: "Active",
-};
-
-const INITIAL: Row[] = [
-  {
-    id: "notion",
-    company: "Notion",
-    role: "Software Engineer",
-    status: "in_progress",
-    label: STATUS_LABEL.in_progress,
-    activity: "2d ago",
-  },
-  {
-    id: "figma",
-    company: "Figma",
-    role: "Product Engineer",
-    status: "follow_up_due",
-    label: STATUS_LABEL.follow_up_due,
-    activity: "5d ago",
-  },
-  {
-    id: "anthropic",
-    company: "Anthropic",
-    role: "Full-stack",
-    status: "needs_reply",
-    label: STATUS_LABEL.needs_reply,
-    activity: "1d ago",
-  },
-];
-
-const AFTER_SYNC: Row[] = [
-  {
-    id: "stripe",
-    company: SCENARIO_COMPANIES[0]!.name,
-    role: SCENARIO_COMPANIES[0]!.role,
-    status: "ready_to_send",
-    label: STATUS_LABEL.ready_to_send,
-    activity: "just now",
-    isNew: true,
-  },
-  {
-    id: "vercel",
-    company: SCENARIO_COMPANIES[1]!.name,
-    role: SCENARIO_COMPANIES[1]!.role,
-    status: "ready_to_send",
-    label: STATUS_LABEL.ready_to_send,
-    activity: "just now",
-    isNew: true,
-  },
-  {
-    id: "linear",
-    company: SCENARIO_COMPANIES[2]!.name,
-    role: SCENARIO_COMPANIES[2]!.role,
-    status: "ready_to_send",
-    label: STATUS_LABEL.ready_to_send,
-    activity: "just now",
-    isNew: true,
-  },
-  {
-    id: "notion",
-    company: "Notion",
-    role: "Software Engineer",
-    status: "in_progress",
-    label: STATUS_LABEL.in_progress,
-    activity: "2d ago",
-  },
-  {
-    id: "figma",
-    company: "Figma",
-    role: "Product Engineer",
-    status: "needs_reply",
-    label: STATUS_LABEL.needs_reply,
-    activity: "just now",
-  },
-  {
-    id: "anthropic",
-    company: "Anthropic",
-    role: "Full-stack",
-    status: "needs_reply",
-    label: STATUS_LABEL.needs_reply,
-    activity: "1d ago",
-  },
-];
-
 export function LandingTrackerDemo() {
+  const t = useT();
   const { researchDone, markTrackerSynced } = useLandingScenario();
-  const [rows, setRows] = useState(INITIAL);
   const [syncing, setSyncing] = useState(false);
   const [synced, setSynced] = useState(false);
   const [pulse, setPulse] = useState<number | null>(null);
+
+  const statusLabel = useMemo(
+    (): Record<TrackerStatus, string> => ({
+      ready_to_send: t("landing.demo.statusReady"),
+      needs_reply: t("landing.demo.statusReply"),
+      follow_up_due: t("landing.demo.statusFollowUp"),
+      in_progress: t("landing.demo.statusActive"),
+    }),
+    [t],
+  );
+
+  const initial = useMemo(
+    (): Row[] => [
+      {
+        id: "notion",
+        company: "Notion",
+        role: "Software Engineer",
+        status: "in_progress",
+        label: statusLabel.in_progress,
+        activity: t("landing.demo.activity2d"),
+      },
+      {
+        id: "figma",
+        company: "Figma",
+        role: "Product Engineer",
+        status: "follow_up_due",
+        label: statusLabel.follow_up_due,
+        activity: t("landing.demo.activity5d"),
+      },
+      {
+        id: "anthropic",
+        company: "Anthropic",
+        role: "Full-stack",
+        status: "needs_reply",
+        label: statusLabel.needs_reply,
+        activity: t("landing.demo.activity1d"),
+      },
+    ],
+    [statusLabel, t],
+  );
+
+  const afterSync = useMemo(
+    (): Row[] => [
+      {
+        id: "stripe",
+        company: SCENARIO_COMPANIES[0]!.name,
+        role: SCENARIO_COMPANIES[0]!.role,
+        status: "ready_to_send",
+        label: statusLabel.ready_to_send,
+        activity: t("landing.demo.activityJustNow"),
+        isNew: true,
+      },
+      {
+        id: "vercel",
+        company: SCENARIO_COMPANIES[1]!.name,
+        role: SCENARIO_COMPANIES[1]!.role,
+        status: "ready_to_send",
+        label: statusLabel.ready_to_send,
+        activity: t("landing.demo.activityJustNow"),
+        isNew: true,
+      },
+      {
+        id: "linear",
+        company: SCENARIO_COMPANIES[2]!.name,
+        role: SCENARIO_COMPANIES[2]!.role,
+        status: "ready_to_send",
+        label: statusLabel.ready_to_send,
+        activity: t("landing.demo.activityJustNow"),
+        isNew: true,
+      },
+      {
+        id: "notion",
+        company: "Notion",
+        role: "Software Engineer",
+        status: "in_progress",
+        label: statusLabel.in_progress,
+        activity: t("landing.demo.activity2d"),
+      },
+      {
+        id: "figma",
+        company: "Figma",
+        role: "Product Engineer",
+        status: "needs_reply",
+        label: statusLabel.needs_reply,
+        activity: t("landing.demo.activityJustNow"),
+      },
+      {
+        id: "anthropic",
+        company: "Anthropic",
+        role: "Full-stack",
+        status: "needs_reply",
+        label: statusLabel.needs_reply,
+        activity: t("landing.demo.activity1d"),
+      },
+    ],
+    [statusLabel, t],
+  );
+
+  const rows = synced ? afterSync : initial;
 
   const runSync = useCallback(() => {
     if (syncing) return;
@@ -124,7 +136,7 @@ export function LandingTrackerDemo() {
     markTrackerSynced(false);
     setPulse(null);
     let step = 0;
-    const scanCount = rows.length;
+    const scanCount = initial.length;
     const id = window.setInterval(() => {
       step += 1;
       if (step <= scanCount) {
@@ -132,27 +144,26 @@ export function LandingTrackerDemo() {
         return;
       }
       window.clearInterval(id);
-      setRows(AFTER_SYNC);
       setSyncing(false);
       setSynced(true);
       markTrackerSynced(true);
       setPulse(null);
     }, 380);
-  }, [syncing, rows.length, markTrackerSynced]);
+  }, [syncing, initial.length, markTrackerSynced]);
 
   return (
     <div className="cmae-land-demo">
       <div className="cmae-land-tracker-bar">
         <p className="cmae-land-demo-hint">
           {syncing
-            ? "Scanning inbox — merging threads…"
+            ? t("landing.demo.trackerSyncing")
             : synced
               ? researchDone
-                ? "Stripe, Vercel, and Linear landed as Ready to send. Figma moved to Reply needed."
-                : "Stripe, Vercel, and Linear appeared as Ready to send. Figma moved to Reply needed."
+                ? t("landing.demo.trackerSyncedWithResearch")
+                : t("landing.demo.trackerSynced")
               : researchDone
-                ? "Click Gmail sync — your three researched companies join as Ready to send."
-                : "Existing conversations stay. Click Gmail sync to pull in the Research companies."}
+                ? t("landing.demo.trackerReadyWithResearch")
+                : t("landing.demo.trackerReady")}
         </p>
         <button
           type="button"
@@ -160,17 +171,21 @@ export function LandingTrackerDemo() {
           onClick={runSync}
           disabled={syncing}
         >
-          {syncing ? "Syncing…" : synced ? "Sync again" : "Gmail sync"}
+          {syncing
+            ? t("landing.demo.trackerSyncingBtn")
+            : synced
+              ? t("landing.demo.trackerSyncAgain")
+              : t("landing.demo.trackerSync")}
         </button>
       </div>
 
       <div className="cmae-land-inset cmae-land-tracker">
         <div className="cmae-land-tracker-table" role="table">
           <div className="cmae-land-tracker-row is-head" role="row">
-            <span role="columnheader">Company</span>
-            <span role="columnheader">Role</span>
-            <span role="columnheader">Status</span>
-            <span role="columnheader">Activity</span>
+            <span role="columnheader">{t("landing.demo.colCompany")}</span>
+            <span role="columnheader">{t("landing.demo.colRole")}</span>
+            <span role="columnheader">{t("landing.demo.colStatus")}</span>
+            <span role="columnheader">{t("landing.demo.colActivity")}</span>
           </div>
           {rows.map((row, i) => (
             <div

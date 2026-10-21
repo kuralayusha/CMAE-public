@@ -130,7 +130,9 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
               className={`term-line term-line-simple term-kind-${line.kind}`}
               style={{ color: KIND_COLOR[line.kind] }}
             >
-              <span className="term-stamp">{formatStamp(line.at, locale)}</span>
+              <span className="term-stamp" suppressHydrationWarning>
+                {formatStamp(line.at, locale)}
+              </span>
               <span className="term-line-main">{line.text}</span>
             </div>
           ))}

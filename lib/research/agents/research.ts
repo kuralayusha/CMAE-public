@@ -20,11 +20,22 @@ STRUCTURE RULES (mandatory):
 
 export async function runResearch(ctx: RunContext) {
   const { jobId, user } = ctx;
-  speak(jobId, "research", "system", "── research online · company profile");
+  speak(
+    jobId,
+    "research",
+    "system",
+    t("terminal.detail.researchOnline"),
+    t("terminal.plain.startedTask"),
+  );
   throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.research) {
-    speak(jobId, "research", "think", `Reviewer feedback: ${ctx.redoFeedback.research}`);
+    speak(
+      jobId,
+      "research",
+      "think",
+      t("terminal.detail.reviewerFeedback", { msg: ctx.redoFeedback.research }),
+    );
   }
 
   const queries = await planExternalQueriesWithAi(
@@ -38,7 +49,13 @@ export async function runResearch(ctx: RunContext) {
   let externalSnippet = "";
   for (const q of queries) {
     throwIfCanceled(jobId);
-    speak(jobId, "research", "think", `Query: ${q}`);
+    speak(
+      jobId,
+      "research",
+      "think",
+      t("terminal.detail.query", { query: q }),
+      t("terminal.plain.gatheringInfo"),
+    );
     const ddg = `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
     const { stdout } = await runCurl(jobId, [
       "-sL",
@@ -87,7 +104,7 @@ Required sections (## headings, in this order — translate heading text into "$
 ## Notes for the candidate
 ## Sources
 `,
-    "Writing company profile…",
+    t("terminal.llm.writingProfile"),
     "research",
   );
 
@@ -115,7 +132,7 @@ ${RESEARCH_STRUCTURE_RULES}
 Source note:
 ${research}
 `,
-      `Company profile (${user.preferredLang})…`,
+      t("terminal.llm.profileLang", { lang: user.preferredLang }),
       "research",
     );
     const translated = stripLeadingMarkdownH1(translatedRaw);
@@ -127,13 +144,21 @@ ${research}
         lang: user.preferredLang,
       })}\n\n${translated}\n`,
     );
+    const files = `${WS.companyInfo} + ${WS.companyInfoTranslated}`;
     speak(
       jobId,
       "research",
       "ok",
-      `${WS.companyInfo} + ${WS.companyInfoTranslated} written`,
+      t("terminal.detail.filesWritten", { files }),
+      t("terminal.plain.filesWritten", { files }),
     );
   } else {
-    speak(jobId, "research", "ok", `${WS.companyInfo} written`);
+    speak(
+      jobId,
+      "research",
+      "ok",
+      t("terminal.detail.filesWritten", { files: WS.companyInfo }),
+      t("terminal.plain.filesWritten", { files: WS.companyInfo }),
+    );
   }
 }

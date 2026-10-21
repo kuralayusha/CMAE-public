@@ -16,6 +16,11 @@ export type UsageEvent = {
   ts: string;
   feature: AiFeature;
   syncMode: SyncMode | null;
+  /**
+   * UI-level run (sync job / research job / translate batch). Null when the
+   * call is not part of such a run — never equals eventId as a fake stand-in.
+   */
+  runId: string | null;
   model: string;
   priceVersion: string;
   tokens: TokenCounts;

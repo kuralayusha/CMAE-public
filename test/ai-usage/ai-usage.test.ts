@@ -373,6 +373,7 @@ describe("uploader", () => {
         ts: new Date(Date.now() + i).toISOString(),
         feature: "tracker.sync.triage",
         syncMode: "incremental",
+        runId: "test-sync-run",
         model: "composer-2.5",
         priceVersion: "embedded-test",
         tokens: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 1, cacheWriteTokens: 0, reasoningTokens: 0 },
@@ -428,8 +429,8 @@ describe("uploader", () => {
     assert.deepEqual(Object.keys(ev).sort(), [
       "cache_hit", "cache_read_tokens", "cache_write_tokens", "cost_micro_usd", "duration_ms",
       "event_id", "feature", "input_tokens", "model", "output_tokens", "price_version",
-      "reasoning_tokens", "saved_cost_micro_usd", "saved_input_tokens", "status", "sync_mode",
-      "ts", "usage_missing",
+      "reasoning_tokens", "run_id", "saved_cost_micro_usd", "saved_input_tokens", "status",
+      "sync_mode", "ts", "usage_missing",
     ]);
   });
 

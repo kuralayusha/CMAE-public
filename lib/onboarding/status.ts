@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
 import { getDataDir } from "@/lib/paths";
 import { parseJobPreferences } from "@/lib/settings/preferences";
+import { DEFAULT_FOLLOW_UP_DAYS } from "@/lib/tracker/status-constants";
 import { eq } from "drizzle-orm";
 
 export type OnboardingGaps = string[];
@@ -62,9 +63,6 @@ export function getOnboardingGaps(): OnboardingGaps {
   }
   if (!filled(row?.emailSignature)) gaps.push("emailSignature");
   if (!filled(row?.preferredLanguage)) gaps.push("preferredLanguage");
-  if (!(row?.followUpDays != null && row.followUpDays >= 1)) {
-    gaps.push("followUpDays");
-  }
 
   const prefs = parseJobPreferences(row?.jobPreferencesJson);
   if (!prefs.workTypes.length) gaps.push("workTypes");
@@ -128,7 +126,7 @@ export function markOnboardingComplete(): string {
     db.insert(settings)
       .values({
         id: 1,
-        followUpDays: 5,
+        followUpDays: DEFAULT_FOLLOW_UP_DAYS,
         preferredLanguage: "en",
         onboardingCompletedAt: at,
         updatedAt: at,
@@ -150,7 +148,7 @@ export function markOnboardingComplete(): string {
     db.insert(settings)
       .values({
         id: 1,
-        followUpDays: 5,
+        followUpDays: DEFAULT_FOLLOW_UP_DAYS,
         preferredLanguage: "en",
         onboardingCompletedAt: at,
         updatedAt: at,

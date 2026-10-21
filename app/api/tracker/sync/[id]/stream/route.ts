@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import {
   getSyncSession,
@@ -18,10 +19,13 @@ export async function GET(
   const { id } = await ctx.params;
   const session = getSyncSession(id);
   if (!session) {
-    return new Response(JSON.stringify({ error: "Sync session not found" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: t("sync.sessionNotFound") }),
+      {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   const encoder = new TextEncoder();

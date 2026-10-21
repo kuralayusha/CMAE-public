@@ -16,7 +16,10 @@ import { SyncTerminal } from "@/components/SyncTerminal";
 import { HoverTip } from "@/components/HoverTip";
 import { TruncateTip } from "@/components/TruncateTip";
 import { Button } from "@/components/ui";
-import { TrackerDetail } from "@/components/TrackerDetail";
+import {
+  TrackerHistoryDrawer,
+  type TrackerHistoryDrawerHandle,
+} from "@/components/TrackerHistoryDrawer";
 import {
   listVariantMeta,
   pickDefaultVariantId,
@@ -36,7 +39,6 @@ import {
 import type { SyncLogLine } from "@/lib/tracker/types";
 import type { TVars } from "@/lib/i18n/lookup";
 import "./tracker-list.css";
-import "./tracker-detail.css";
 
 function IconGmail({ count }: { count?: number }) {
   return (
@@ -418,11 +420,6 @@ export function TrackerList() {
   const [prepareModal, setPrepareModal] = useState<PrepareModalState | null>(
     null,
   );
-  const [historyItemId, setHistoryItemId] = useState<number | null>(null);
-  const [historyPanelOpen, setHistoryPanelOpen] = useState(false);
-  const historyCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
   const [selectedIds, setSelectedIds] = useState<Set<number>>(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [syncSessionId, setSyncSessionId] = useState<string | null>(null);
@@ -433,6 +430,7 @@ export function TrackerList() {
   const syncAttachedJobRef = useRef<string | null>(null);
   const syncShowToastRef = useRef(false);
   const lastFreshnessTermLineRef = useRef<string | null>(null);
+  const historyDrawerRef = useRef<TrackerHistoryDrawerHandle>(null);
 
   useEffect(() => {
     if (store.error) {
@@ -603,49 +601,11 @@ export function TrackerList() {
     await applyActiveAction([...selectedIds], action, { clearSelection: true });
   }
 
-  const openHistoryPanel = useCallback((itemId: number) => {
-    if (historyCloseTimerRef.current) {
-      clearTimeout(historyCloseTimerRef.current);
-      historyCloseTimerRef.current = null;
-    }
-    setHistoryItemId(itemId);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => setHistoryPanelOpen(true));
-    });
-  }, []);
-
-  const closeHistoryPanel = useCallback(() => {
-    setHistoryPanelOpen(false);
-    if (historyCloseTimerRef.current) {
-      clearTimeout(historyCloseTimerRef.current);
-    }
-    historyCloseTimerRef.current = setTimeout(() => {
-      setHistoryItemId(null);
-      historyCloseTimerRef.current = null;
-    }, 360);
-  }, []);
-
   useEffect(() => {
-    return () => {
-      if (historyCloseTimerRef.current) {
-        clearTimeout(historyCloseTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (historyItemId == null) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [historyItemId]);
-
-  useEffect(() => {
-    if (!gmailModal && !prepareModal && historyItemId == null) return;
+    if (!gmailModal && !prepareModal) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      if (historyDrawerRef.current?.isOpen()) return;
       if (prepareModal) {
         if (prepareModal.step === "note") {
           setPrepareModal({ ...prepareModal, step: "pick", userNote: "" });
@@ -654,17 +614,11 @@ export function TrackerList() {
         }
         return;
       }
-      if (gmailModal) {
-        setGmailModal(null);
-        return;
-      }
-      if (historyItemId != null) {
-        closeHistoryPanel();
-      }
+      setGmailModal(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [gmailModal, prepareModal, historyItemId, closeHistoryPanel]);
+  }, [gmailModal, prepareModal]);
 
   const prepareModalItemId = prepareModal?.item.id ?? null;
   const prepareModalKind = prepareModal?.kind ?? null;
@@ -1405,7 +1359,7 @@ export function TrackerList() {
           aria-label={label}
           onClick={() => {
             closeActionsMenu();
-            openHistoryPanel(item.id);
+            historyDrawerRef.current?.open(item.id);
           }}
         >
           <IconHistory />
@@ -1775,45 +1729,7 @@ export function TrackerList() {
         </div>
       ) : null}
 
-      {historyItemId != null ? (
-        <div
-          className={`cmae-td-drawer-root${historyPanelOpen ? " is-open" : ""}`}
-          role="presentation"
-        >
-          <div
-            className="cmae-td-drawer-backdrop"
-            onClick={closeHistoryPanel}
-            aria-hidden
-          />
-          <aside
-            className="cmae-td-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label={t("tracker.detailPage.timeline")}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="cmae-td-drawer-head">
-              <button
-                type="button"
-                className="cmae-td-close"
-                onClick={closeHistoryPanel}
-                aria-label={t("common.close")}
-              >
-                ×
-              </button>
-            </header>
-            <div className="cmae-td-drawer-scroll">
-              <TrackerDetail
-                key={historyItemId}
-                itemId={historyItemId}
-                variant="panel"
-                onClose={closeHistoryPanel}
-                onOpenItem={openHistoryPanel}
-              />
-            </div>
-          </aside>
-        </div>
-      ) : null}
+      <TrackerHistoryDrawer ref={historyDrawerRef} />
 
       {gmailModal ? (
         <div

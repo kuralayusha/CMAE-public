@@ -8,6 +8,17 @@ export type Theme = "light" | "dark";
 
 const CYCLE: ThemePreference[] = ["light", "dark", "system"];
 
+/**
+ * Inline boot script for <head>: apply theme before paint to avoid FOUC.
+ * Must stay in sync with getThemePreference / getResolvedTheme / applyResolvedTheme.
+ * Landing paths stay light. Mutates DOM before React hydrates — pair with
+ * suppressHydrationWarning on <html>.
+ */
+export function getThemeBootScript(): string {
+  const key = JSON.stringify(THEME_KEY);
+  return `try{var p=location.pathname;if(p==="/"||p==="/download"){document.documentElement.removeAttribute("data-theme")}else{var t=localStorage.getItem(${key});var dark=t==="dark"||(t!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);if(dark)document.documentElement.setAttribute("data-theme","dark");else document.documentElement.removeAttribute("data-theme")}}catch(e){}`;
+}
+
 export function getSystemTheme(): Theme {
   if (typeof window === "undefined") return "light";
   try {

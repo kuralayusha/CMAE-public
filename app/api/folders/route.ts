@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { syncTopLevelFolderRefs } from "@/lib/research/folder-refs";
 import {
@@ -82,7 +83,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, ...result });
     }
 
-    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    return NextResponse.json(
+      { error: t("folders.error.unknownAction") },
+      { status: 400 },
+    );
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },

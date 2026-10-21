@@ -16,3 +16,8 @@ export { promptWithUsage, LlmTimeoutError } from "./call";
 export type { PromptWithUsageInput, PromptWithUsageResult } from "./call";
 export { AI_FEATURES, isCacheableFeature } from "./features";
 export type { AiFeature, SyncMode } from "./features";
+export {
+  currentUsageRunId,
+  withUsageRun,
+  withUsageRunAsync,
+} from "./run-context";

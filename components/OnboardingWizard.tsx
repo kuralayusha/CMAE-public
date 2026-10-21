@@ -114,7 +114,6 @@ export function OnboardingWizard() {
     gmailAddress: "",
     gmailAppPassword: "",
     cursorApiKey: "",
-    followUpDays: 5,
     preferredLanguage: "en",
     emailSignature: "",
   });
@@ -147,7 +146,6 @@ export function OnboardingWizard() {
           ...f,
           fullName: pickFilled(f.fullName, s.fullName),
           gmailAddress: pickFilled(f.gmailAddress, s.gmailAddress),
-          followUpDays: f.followUpDays || s.followUpDays || 5,
           preferredLanguage: pickFilled(
             f.preferredLanguage,
             s.preferredLanguage,
@@ -195,9 +193,7 @@ export function OnboardingWizard() {
           cursorFromEnv
         );
       case "prefs":
-        return (
-          form.emailSignature.trim().length >= 3 && form.followUpDays >= 1
-        );
+        return form.emailSignature.trim().length >= 3;
       case "job":
         return (
           prefs.workTypes.length >= 1 &&
@@ -225,7 +221,6 @@ export function OnboardingWizard() {
     const body: Record<string, unknown> = {
       fullName: f.fullName,
       gmailAddress: f.gmailAddress,
-      followUpDays: f.followUpDays,
       preferredLanguage: f.preferredLanguage,
       emailSignature: f.emailSignature,
       jobPreferences: p,
@@ -482,7 +477,7 @@ export function OnboardingWizard() {
         const msg =
           gmailData.gmail?.error ||
           gmailData.error ||
-          "Gmail connection failed";
+          t("onboarding.bootGmailFail");
         patchBoot("gmail", {
           status: "fail",
           detail: msg,
@@ -508,7 +503,7 @@ export function OnboardingWizard() {
         const msg =
           cursorData.cursor?.error ||
           cursorData.error ||
-          "Cursor API key could not be verified";
+          t("onboarding.bootCursorFail");
         patchBoot("cursor", {
           status: "fail",
           detail: msg,
@@ -539,7 +534,6 @@ export function OnboardingWizard() {
         body: JSON.stringify({
           fullName: snapshot.form.fullName,
           gmailAddress: snapshot.form.gmailAddress,
-          followUpDays: snapshot.form.followUpDays,
           preferredLanguage: snapshot.form.preferredLanguage,
           emailSignature: snapshot.form.emailSignature,
           jobPreferences: snapshot.prefs,
@@ -962,24 +956,6 @@ export function OnboardingWizard() {
             <h1 className="cmae-onb-title">{t("onboarding.prefsTitle")}</h1>
             <p className="cmae-onb-why">{t("onboarding.prefsWhy")}</p>
             <div className="cmae-onb-fields">
-              <Field
-                label={t("fields.followUpDay")}
-                hint={t("fields.followUpHint")}
-              >
-                <input
-                  className="cmae-input"
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={form.followUpDays}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      followUpDays: Number(e.target.value) || 5,
-                    })
-                  }
-                />
-              </Field>
               <Field
                 label={t("fields.emailSignature")}
                 hint={t("fields.emailSignatureHint")}

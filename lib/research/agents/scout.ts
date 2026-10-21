@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import {
   hostBrandHint,
   resolveCompanyName,
@@ -18,18 +19,29 @@ import { createCompanyFolder, renameCompanyFolder, writeFile } from "../workspac
 
 export async function runScout(ctx: RunContext) {
   const { jobId, url } = ctx;
-  speak(jobId, "scout", "system", "── scout online · discovery & route plan");
+  speak(
+    jobId,
+    "scout",
+    "system",
+    t("terminal.detail.scoutOnline"),
+    t("terminal.plain.startedTask"),
+  );
   throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.scout) {
-    speak(jobId, "scout", "think", `Reviewer feedback: ${ctx.redoFeedback.scout}`);
+    speak(
+      jobId,
+      "scout",
+      "think",
+      t("terminal.detail.reviewerFeedback", { msg: ctx.redoFeedback.scout }),
+    );
   }
 
   let host = "Company";
   try {
     host = new URL(url).hostname.replace(/^www\./, "");
   } catch {
-    throw new Error(`Invalid URL: ${url}`);
+    throw new Error(t("research.error.invalidUrl", { url }));
   }
 
   if (!ctx.folderPath) {
@@ -41,10 +53,21 @@ export async function runScout(ctx: RunContext) {
       job.folderName = folder.folderName;
       job.folderPath = folder.folderPath;
     }
-    speak(jobId, "scout", "ok", `workspace → ${folder.folderName}/`);
+    speak(
+      jobId,
+      "scout",
+      "ok",
+      t("terminal.detail.workspaceReady", { folder: folder.folderName }),
+    );
   }
 
-  speak(jobId, "scout", "think", "Fetching homepage…");
+  speak(
+    jobId,
+    "scout",
+    "think",
+    t("terminal.detail.fetchingHomepage"),
+    t("terminal.plain.reviewingHome"),
+  );
   const home = await fetchPage(jobId, url);
   throwIfCanceled(jobId);
   ctx.home = home;
@@ -60,14 +83,23 @@ export async function runScout(ctx: RunContext) {
     jobId,
     "scout",
     "think",
-    `lang≈${plan.siteLanguage} · ${plan.routes.length} routes · ${plan.pathGuesses.length} paths`,
+    t("terminal.detail.routeSummary", {
+      lang: plan.siteLanguage,
+      routes: plan.routes.length,
+      paths: plan.pathGuesses.length,
+    }),
   );
   for (const r of plan.routes.slice(0, 10)) {
     speak(
       jobId,
       "scout",
       "system",
-      `  · [${r.role}/p${r.priority}] ${r.text || "(link)"} → ${r.href}`,
+      t("terminal.detail.routeLink", {
+        role: r.role,
+        priority: r.priority,
+        text: r.text || t("terminal.detail.linkNoText"),
+        href: r.href,
+      }),
     );
   }
 
@@ -92,7 +124,13 @@ export async function runScout(ctx: RunContext) {
     const key = r.href.replace(/\/$/, "");
     if (visited.has(key)) continue;
     visited.add(key);
-    speak(jobId, "scout", "think", `Visit (${r.role}): ${r.href}`);
+    speak(
+      jobId,
+      "scout",
+      "think",
+      t("terminal.detail.visitRole", { role: r.role, href: r.href }),
+      t("terminal.plain.browsingPages"),
+    );
     pages.push(await fetchPage(jobId, r.href));
   }
 
@@ -102,7 +140,13 @@ export async function runScout(ctx: RunContext) {
       const guess = new URL(pathGuess, url).toString();
       const key = guess.replace(/\/$/, "");
       if (visited.has(key)) continue;
-      speak(jobId, "scout", "think", `Trying path: ${guess}`);
+      speak(
+        jobId,
+        "scout",
+        "think",
+        t("terminal.detail.tryingPath", { path: guess }),
+        t("terminal.plain.browsingPages"),
+      );
       const page = await fetchPage(jobId, guess);
       if (page.text.length > 80) {
         visited.add(key);
@@ -138,7 +182,7 @@ Return ONLY JSON:
   "companyName": "",
   "siteKind": "employer|agency|personal_portfolio|product|other"
 }`,
-    "Company name…",
+    t("terminal.llm.companyName"),
     "scout",
   );
   const parsed = extractJson<CompanyIdentityGuess>(nameRaw);
@@ -178,7 +222,11 @@ Return ONLY JSON:
       jobId,
       "scout",
       "think",
-      `name locked to URL host · rejected off-target guess "${guess?.companyName || plainFallback?.companyName || "?"}" → ${companyName}`,
+      t("terminal.detail.nameLocked", {
+        guess: guess?.companyName || plainFallback?.companyName || "?",
+        name: companyName,
+      }),
+      t("terminal.plain.extractingCompany"),
     );
   }
   ctx.companyName = companyName;
@@ -203,6 +251,9 @@ Return ONLY JSON:
     jobId,
     "scout",
     "ok",
-    `ready · ${renamed.folderName}/ · ${pages.length} pages`,
+    t("terminal.detail.scoutReady", {
+      folder: renamed.folderName,
+      pages: pages.length,
+    }),
   );
 }

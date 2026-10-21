@@ -8,11 +8,22 @@ import { writeFile } from "../workspace";
 
 export async function runJobFit(ctx: RunContext) {
   const { jobId, user } = ctx;
-  speak(jobId, "jobfit", "system", "── jobfit online · CV ↔ job matching");
+  speak(
+    jobId,
+    "jobfit",
+    "system",
+    t("terminal.detail.jobfitOnline"),
+    t("terminal.plain.startedTask"),
+  );
   throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.jobfit) {
-    speak(jobId, "jobfit", "think", `Reviewer feedback: ${ctx.redoFeedback.jobfit}`);
+    speak(
+      jobId,
+      "jobfit",
+      "think",
+      t("terminal.detail.reviewerFeedback", { msg: ctx.redoFeedback.jobfit }),
+    );
   }
 
   const corpus = ctx.pages
@@ -46,7 +57,7 @@ Return ONLY JSON:
   "siteLanguage": "${ctx.siteLanguage}",
   "notes": ""
 }`,
-    "Job–CV analysis…",
+    t("terminal.llm.jobFit"),
     "jobfit",
   );
 
@@ -71,7 +82,13 @@ Return ONLY JSON:
   const notesLabel = t("workspaceFiles.jobLinksNotes");
 
   if (ctx.jobFit.hasMatchingJob) {
-    speak(jobId, "jobfit", "ok", `${ctx.jobFit.jobs.length} matching jobs`);
+    speak(
+      jobId,
+      "jobfit",
+      "ok",
+      t("terminal.detail.matchingJobs", { count: ctx.jobFit.jobs.length }),
+      t("terminal.plain.matchingJobs", { count: ctx.jobFit.jobs.length }),
+    );
     await writeFile(
       ctx.folderPath,
       WS.jobLinks,
@@ -83,7 +100,13 @@ Return ONLY JSON:
         .join("\n")}\n\n${notesLabel}: ${ctx.jobFit.notes || "—"}\n`,
     );
   } else {
-    speak(jobId, "jobfit", "think", "No matching jobs → cold application path");
+    speak(
+      jobId,
+      "jobfit",
+      "think",
+      t("terminal.detail.noMatchingJobs"),
+      t("terminal.plain.noMatchingJobs"),
+    );
     await writeFile(
       ctx.folderPath,
       WS.jobLinks,

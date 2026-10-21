@@ -16,7 +16,7 @@ export const settings = sqliteTable("settings", {
   cursorApiKeyEnc: text("cursor_api_key_enc"),
   cvText: text("cv_text"),
   cvFileName: text("cv_file_name"),
-  followUpDays: integer("follow_up_days").notNull().default(5),
+  followUpDays: integer("follow_up_days").notNull().default(7),
   /** Rejected → closed after this many days without a thank-you */
   rejectionCloseDays: integer("rejection_close_days").notNull().default(10),
   /** No human reply this many days after the last outbound → closed */
@@ -454,6 +454,8 @@ export const aiUsageEvents = sqliteTable("ai_usage_events", {
   ts: text("ts").notNull(),
   feature: text("feature").notNull(),
   syncMode: text("sync_mode"),
+  /** Logical run (sync job / research job / translate batch). */
+  runId: text("run_id"),
   model: text("model").notNull(),
   priceVersion: text("price_version").notNull(),
   inputTokens: integer("input_tokens").notNull().default(0),

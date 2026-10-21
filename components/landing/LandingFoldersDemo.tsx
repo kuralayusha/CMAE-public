@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useT } from "@/components/I18nProvider";
 import {
   useLandingScenario,
   type ScenarioCompany,
@@ -13,10 +14,17 @@ type View =
   | { level: "file"; company: ScenarioCompany; file: ScenarioFile };
 
 export function LandingFoldersDemo() {
+  const t = useT();
   const { companies, filesFor, researchDone } = useLandingScenario();
   const first = companies[0]!;
   const firstFiles = filesFor(first.id);
   const defaultFile = firstFiles[0]!;
+
+  function badgeLabel(raw: string) {
+    if (raw === "for you") return t("landing.demo.badgeForYou");
+    if (raw === "for CMAE") return t("landing.demo.badgeForAi");
+    return raw;
+  }
 
   const [view, setView] = useState<View>({
     level: "file",
@@ -84,8 +92,8 @@ export function LandingFoldersDemo() {
     <div className="cmae-land-demo">
       <p className="cmae-land-demo-hint">
         {researchDone
-          ? "Research folders are ready — open a brief or draft."
-          : "Sample workspace from the scenario — same layout as Folders in the app."}
+          ? t("landing.demo.foldersReady")
+          : t("landing.demo.foldersSample")}
       </p>
 
       <div className="cmae-land-inset cmae-land-fb">
@@ -96,7 +104,7 @@ export function LandingFoldersDemo() {
               className="cmae-land-fb-icon"
               onClick={goBack}
               disabled={view.level === "root"}
-              aria-label="Back"
+              aria-label={t("landing.demo.foldersBack")}
             >
               ←
             </button>
@@ -104,11 +112,14 @@ export function LandingFoldersDemo() {
               type="button"
               className="cmae-land-fb-icon"
               onClick={goRoot}
-              aria-label="Workspace root"
+              aria-label={t("landing.demo.foldersRoot")}
             >
               ⌂
             </button>
-            <nav className="cmae-land-fb-crumbs" aria-label="Path">
+            <nav
+              className="cmae-land-fb-crumbs"
+              aria-label={t("landing.demo.foldersPath")}
+            >
               {crumbs.map((c, i) => (
                 <span key={`${c}-${i}`} className="cmae-land-fb-crumb">
                   {i > 0 ? (
@@ -131,9 +142,13 @@ export function LandingFoldersDemo() {
             </nav>
           </div>
           <span className="cmae-land-fb-count">
-            {folderCount ? `${folderCount} folders` : null}
+            {folderCount
+              ? t("landing.demo.foldersCount", { count: folderCount })
+              : null}
             {folderCount && fileCount ? " · " : null}
-            {fileCount ? `${fileCount} files` : null}
+            {fileCount
+              ? t("landing.demo.filesCount", { count: fileCount })
+              : null}
             {!folderCount && !fileCount ? "—" : null}
           </span>
         </div>
@@ -168,7 +183,7 @@ export function LandingFoldersDemo() {
                             key={b.label}
                             className={`cmae-land-fb-badge is-${b.tone}`}
                           >
-                            ({b.label})
+                            ({badgeLabel(b.label)})
                           </span>
                         ))
                       : null}

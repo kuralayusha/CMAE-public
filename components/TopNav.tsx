@@ -13,10 +13,11 @@ import { useT } from "@/components/I18nProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import type { AppPageId } from "@/lib/help/pages";
 
-const LINKS: { href: string; id: AppPageId }[] = [
+const LINKS: { href: string; id: AppPageId | "usage" }[] = [
   { href: "/tracker", id: "tracker" },
   { href: "/research", id: "research" },
   { href: "/folders", id: "folders" },
+  { href: "/usage", id: "usage" },
   { href: "/settings", id: "settings" },
 ];
 
@@ -29,10 +30,11 @@ type Phase = "idle" | "collapsing" | "sliding";
 /** Survives layout remounts so the underline can animate from the previous tab. */
 let lastIndicator: Indicator | null = null;
 
-function activeFromPath(pathname: string | null): AppPageId {
+function activeFromPath(pathname: string | null): AppPageId | "usage" {
   if (!pathname) return "tracker";
   if (pathname.startsWith("/research")) return "research";
   if (pathname.startsWith("/folders")) return "folders";
+  if (pathname.startsWith("/usage")) return "usage";
   if (pathname.startsWith("/settings")) return "settings";
   return "tracker";
 }

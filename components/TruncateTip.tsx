@@ -75,6 +75,7 @@ export function TruncateTip({
       <span
         ref={ref}
         className={`cmae-truncate${className ? ` ${className}` : ""}`}
+        suppressHydrationWarning
         onMouseEnter={showDelayed}
         onMouseLeave={hide}
         onFocus={placeAndShow}

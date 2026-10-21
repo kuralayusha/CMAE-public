@@ -182,7 +182,11 @@
     "accountSwitchConfirm": "Evet, değiştir ve eski veriyi sil",
     "error": {
       "opsBusy": "Gmail senkronizasyonu, araştırma veya taslak hazırlama çalışırken ayarlar değiştirilemez",
-      "closeDaysRange": "Gün değerleri {min} ile {max} arasında tam sayı olmalı"
+      "closeDaysRange": "Gün değerleri {min} ile {max} arasında tam sayı olmalı",
+      "followUpDaysRange": "Takip günü {min}–{max} arasında tam sayı olmalı",
+      "rejectionCloseDaysRange": "Retten sonra kapatma günü {min}–{max} arasında tam sayı olmalı",
+      "staleCloseDaysRange": "Cevap gelmezse kapatma günü {min}–{max} arasında tam sayı olmalı",
+      "followUpBeforeStale": "Takip günü, “Cevap gelmezse kapat” değerinden küçük olmalı; aksi halde Follow-up due hiç görünmez"
     },
     "cvHint": "En fazla {max} PDF. Taslaklar önce rol etiketine, sonra aile içindeki dile göre seçer (aynı aile = bir CV’nin dil varyantları)."
   },
@@ -191,10 +195,11 @@
     "cvFamilyHint": "Aynı CV’nin dil varyantları için aynı id (ör. general). Bu dosya ayrı bir rolse boş bırak.",
     "cvFamilyPlaceholder": "ör. general, frontend",
     "cvTagsHint": "İlan başlığıyla eşleşen rol kelimeleri — ör. odoo, frontend. Pozisyon eşleşmesi dili ezer.",
+    "followUpHint": "Bu kadar gün cevap gelmezse Tracker başvuruyu takip için hazır işaretler. “Cevap gelmezse kapat”tan küçük olmalı. İzin: {min}–{max} (varsayılan {default}).",
     "rejectionCloseDays": "Retten sonra kapat (gün)",
-    "rejectionCloseHint": "Ret gelince satır, teşekkür maili gönderebilmen için Reddedildi bölümünde kalır. Teşekkür maili gönderirsen hemen kapanır; göndermezsen bu kadar gün sonra kapanır. Aynı şirkete yeni bir başvuru veya soru gönderirsen süreç devam eder.",
+    "rejectionCloseHint": "Ret gelince satır, teşekkür maili gönderebilmen için Reddedildi bölümünde kalır. Teşekkür maili gönderirsen hemen kapanır; göndermezsen bu kadar gün sonra kapanır. İzin: {min}–{max} (varsayılan {default}).",
     "staleCloseDays": "Cevap gelmezse kapat (gün)",
-    "staleCloseHint": "Son gönderdiğin mailden (başvuru veya takip) itibaren sayılır. Bu süre içinde kimse cevap vermezse, takip göndermiş olsan bile satır kapanır."
+    "staleCloseHint": "Son gönderdiğin mailden (başvuru veya takip) itibaren sayılır. Takip gününden büyük olmalı (ve ikinci takip için en az {min}). İzin: {min}–{max} (varsayılan {default})."
   },
   "errors": {
     "llmTimeout": "AI {seconds} sn içinde yanıt vermedi"

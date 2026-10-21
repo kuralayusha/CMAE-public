@@ -167,7 +167,9 @@ export function MergeManager() {
                   {" · "}
                   {m.from}
                   {" · "}
-                  {formatDate(m.date, locale)}
+                  <span suppressHydrationWarning>
+                    {formatDate(m.date, locale)}
+                  </span>
                 </span>
               </li>
             ))}

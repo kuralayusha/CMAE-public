@@ -31,7 +31,7 @@ export async function askLlm(
     jobId,
     agent,
     "think",
-    label || "Model thinking…",
+    label || t("terminal.detail.modelThinking"),
     t("terminal.plain.evaluating"),
   );
   const apiKey = await resolveApiKey();
@@ -41,6 +41,7 @@ export async function askLlm(
   // abort promise so cancel unblocks the pipeline immediately.
   const result = await promptWithUsage({
     feature,
+    runId: jobId,
     prompt,
     apiKey,
     cwd: getAgentCwd(),
@@ -53,12 +54,15 @@ export async function askLlm(
 
   const text = result.text;
   const preview = text.replace(/\s+/g, " ").slice(0, 160);
+  const shortPreview = `${preview.slice(0, 90)}${preview.length > 90 ? "…" : ""}`;
   speak(
     jobId,
     agent,
     "think",
-    `  ↳ ${preview}${text.length > 160 ? "…" : ""}`,
-    `Response received: ${preview.slice(0, 90)}${preview.length > 90 ? "…" : ""}`,
+    t("terminal.detail.llmPreview", {
+      preview: `${preview}${text.length > 160 ? "…" : ""}`,
+    }),
+    t("terminal.plain.responseReceived", { preview: shortPreview }),
   );
   return text;
 }

@@ -29,6 +29,7 @@ type Row = {
   ts: string;
   feature: string;
   sync_mode: string | null;
+  run_id: string | null;
   model: string;
   price_version: string;
   input_tokens: number;
@@ -52,6 +53,7 @@ function toWire(r: Row) {
     ts: r.ts,
     feature: r.feature,
     sync_mode: r.sync_mode,
+    run_id: r.run_id || null,
     model: r.model,
     price_version: r.price_version,
     input_tokens: r.input_tokens,
@@ -120,7 +122,7 @@ export async function uploadPending(
     for (let i = 0; i < MAX_BATCHES_PER_RUN; i++) {
       const rows = db
         .prepare(
-          `SELECT event_id, ts, feature, sync_mode, model, price_version,
+          `SELECT event_id, ts, feature, sync_mode, run_id, model, price_version,
                   input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
                   reasoning_tokens, cost_micro_usd, duration_ms, status,
                   usage_missing, cache_hit, saved_input_tokens, saved_cost_micro_usd

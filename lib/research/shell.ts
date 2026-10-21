@@ -1,7 +1,9 @@
 import { spawn } from "child_process";
+import { t } from "@/lib/i18n/t";
 import { getJobSignal } from "./abort";
 import { JobCanceledError, throwIfCanceled } from "./cancel";
 import { emitLine } from "./events";
+import { withAgent } from "./plain";
 
 export async function runCurl(
   jobId: string,
@@ -16,11 +18,15 @@ export async function runCurl(
     emitLine(
       jobId,
       "curl",
-      `$ ${display}`,
+      t("terminal.detail.curlCmd", { cmd: display }),
       undefined,
-      targetUrl
-        ? `Downloading web page: ${targetUrl}. (Scout)`
-        : "Fetching data from the internet. (Scout)",
+      withAgent(
+        targetUrl
+          ? t("terminal.plain.downloadingPageScout", { url: targetUrl })
+          : t("terminal.plain.fetchingDataScout"),
+        "scout",
+        t,
+      ),
     );
   }
 
@@ -67,9 +73,18 @@ export async function runCurl(
       emitLine(
         jobId,
         "err",
-        `  ✖ curl failed (${err.code ?? "?"}): ${compact(stderr, 200)}`,
+        t("terminal.detail.curlFailed", {
+          code: err.code ?? "?",
+          msg: compact(stderr, 200),
+        }),
         undefined,
-        `Could not download page: ${compact(stderr, 100)}. (Scout)`,
+        withAgent(
+          t("terminal.plain.downloadPageFailed", {
+            msg: compact(stderr, 100),
+          }),
+          "scout",
+          t,
+        ),
       );
     }
     return { stdout, stderr, code: err.code ?? 1 };

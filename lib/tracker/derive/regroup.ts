@@ -14,6 +14,7 @@ import {
 import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
 import { classifyMailSignals } from "../agents/mail-signals";
+import { DEFAULT_FOLLOW_UP_DAYS } from "../status-constants";
 import { throwIfSyncCanceled } from "../cancel";
 import { normalizeCompanyKey, parseEmailAddr } from "../identity";
 import { matchMailsToGroups, type AiGroup, type MailBrief } from "../match";
@@ -178,7 +179,7 @@ export async function regroupTrackerItems(opts?: {
   const log = opts?.onProgress;
   const signal = opts?.signal;
   const settings = getSettingsRow();
-  const followUpDays = settings?.followUpDays ?? 5;
+  const followUpDays = settings?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
 
   throwIfSyncCanceled(signal);
   const allMails = getDb().select().from(mailMessages).all();

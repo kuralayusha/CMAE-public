@@ -149,7 +149,7 @@ export function wipeDatabaseContents(opts?: {
     PRAGMA foreign_keys = ON;
     INSERT INTO sync_state (id, window_days) VALUES (1, 30);
     INSERT INTO settings (id, follow_up_days, preferred_language, usage_telemetry_enabled)
-      VALUES (1, 5, 'en', ${telemetryEnabled});
+      VALUES (1, 7, 'en', ${telemetryEnabled});
     INSERT INTO app_meta (key, value) VALUES ('tracker_revision', '0');
     INSERT INTO app_meta (key, value) VALUES ('db_epoch', '${dbEpoch}');
     INSERT INTO app_meta (key, value) VALUES ('credentials_version', '${credentialsVersion}');

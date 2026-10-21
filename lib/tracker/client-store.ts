@@ -260,7 +260,7 @@ export async function refreshTrackerList(opts?: {
         setSnapshot({
           ...snapshot,
           loading: false,
-          error: data.error || "Failed to load tracker",
+          error: data.error || "tracker.error.loadList",
         });
         return;
       }

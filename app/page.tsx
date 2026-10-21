@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { DownloadLanding } from "@/components/DownloadLanding";
 import { isVercelRuntime } from "@/lib/i18n/remote";
+import { t } from "@/lib/i18n/t";
 import { loadBestPolicy } from "@/lib/version/cdn-policy";
 import {
   applyCdnDownloads,
@@ -12,15 +13,20 @@ import {
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export const metadata: Metadata = {
-  title: "CMAE",
-  description: "Cold Mail AI Engine — download the desktop app",
-  openGraph: {
-    title: "CMAE",
-    description: "Cold Mail AI Engine — download the desktop app",
-    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "CMAE" }],
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const title = t("meta.title");
+  const description = t("meta.homeDescription");
+  const ogAlt = t("meta.ogAlt");
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: ogAlt }],
+    },
+  };
+}
 
 async function policyForLanding(): Promise<VersionPolicy> {
   try {

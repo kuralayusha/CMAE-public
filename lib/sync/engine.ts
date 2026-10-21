@@ -33,6 +33,7 @@ import {
 import { notifyOperationsChanged } from "@/lib/operations/bus";
 import { computeTrackerFreshness } from "./freshness";
 import { appendSyncLog } from "./jsonl-log";
+import { withUsageRunAsync } from "@/lib/ai-usage/run-context";
 
 /** Stuck = no progress for this long (IMAP batch 180s / LLM 90s). */
 const PHASE_BUDGET_MS = 180_000;
@@ -629,10 +630,11 @@ function requestSyncImmediate(opts: {
     if (running) {
       joined = true;
       jobId = running.id;
-      // Soft nudge during an in-flight job: join UI, but do not request a
-      // follow-up empty sync when the previous success was < 60s ago.
-      const skipRerun =
-        isSoftRecentSkipReason(reason) && lastMailSyncSuccessAgeMs() < 60_000;
+      // Soft nudge during an in-flight job: join UI only. The running sync
+      // already covers mail; requesting a follow-up after a long hard sync
+      // just produces an empty "0 new mail" echo (reasons still contain the
+      // original "manual", so the soft-only coalesce at finish cannot drop it).
+      const skipRerun = isSoftRecentSkipReason(reason);
       if (!skipRerun) {
         const reasons = mergeReasons(parseReasons(running.reasons), reason);
         const nextMode = maxMode(
@@ -854,6 +856,11 @@ function claimNextJob(): JobRow | null {
 }
 
 async function runClaimedJob(job: JobRow): Promise<void> {
+  // One sync job = one usage run (many LLM calls share job.id).
+  return withUsageRunAsync(job.id, () => runClaimedJobBody(job));
+}
+
+async function runClaimedJobBody(job: JobRow): Promise<void> {
   const abort = new AbortController();
   const now = Date.now();
   const session: SyncSession = {
@@ -997,7 +1004,7 @@ async function runClaimedJob(job: JobRow): Promise<void> {
       const { fullWorkspaceScan } = await import(
         "@/lib/tracker/workspace-index"
       );
-      appendLine(session, "think", "Scanning workspace folders…");
+      appendLine(session, "think", t("sync.workspaceScanStart"));
       const result = fullWorkspaceScan();
       assertFencing(job);
       finishJob(job, "succeeded", {
@@ -1356,7 +1363,7 @@ export function startTrackerSyncSession(opts?: {
     id: randomUUID(),
     status: "error",
     lines: [],
-    error: "Could not start sync",
+    error: t("tracker.error.startSync"),
     result: null,
     createdAt: Date.now(),
   };

@@ -29,8 +29,6 @@ export async function POST(req: Request) {
             : undefined,
         cursorApiKey:
           typeof body.cursorApiKey === "string" ? body.cursorApiKey : undefined,
-        followUpDays:
-          body.followUpDays != null ? Number(body.followUpDays) : undefined,
         preferredLanguage:
           typeof body.preferredLanguage === "string"
             ? body.preferredLanguage

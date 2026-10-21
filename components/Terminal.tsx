@@ -343,7 +343,9 @@ export function Terminal({
                   }`}
                   style={{ color: line.color }}
                 >
-                  <span className="term-stamp">{line.stamp}</span>
+                  <span className="term-stamp" suppressHydrationWarning>
+                    {line.stamp}
+                  </span>
                   <span className="term-line-main">
                     {logMode === "detail"
                       ? renderDetailText(line.text, line.agent)

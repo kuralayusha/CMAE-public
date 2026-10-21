@@ -16,7 +16,7 @@
     "lint": "eslint",
     "db:migrate": "tsx scripts/migrate.ts",
     "test:ai-usage": "node --conditions=react-server --import tsx --test test/ai-usage/ai-usage.test.ts",
-    "test:tracker-state": "node --conditions=react-server --import tsx --test test/tracker-state/effective.test.ts",
+    "test:tracker-state": "node --conditions=react-server --import tsx --test test/tracker-state/effective.test.ts test/tracker-state/status-days.test.ts",
     "desktop:dev": "node scripts/desktop-dev.mjs",
     "desktop:obfuscate": "node scripts/obfuscate-desktop.mjs",
     "version:sync-policy": "node scripts/bump-version-policy.mjs",

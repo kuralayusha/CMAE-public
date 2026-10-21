@@ -21,16 +21,17 @@ const PRICE_REFRESH_MS = 24 * 60 * 60 * 1000;
 export function insertUsageEvent(db: Database.Database, e: UsageEvent): void {
   db.prepare(
     `INSERT OR IGNORE INTO ai_usage_events
-      (event_id, ts, feature, sync_mode, model, price_version,
+      (event_id, ts, feature, sync_mode, run_id, model, price_version,
        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
        reasoning_tokens, cost_micro_usd, duration_ms, status, usage_missing,
        cache_hit, saved_input_tokens, saved_cost_micro_usd, uploaded_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,
   ).run(
     e.eventId,
     e.ts,
     e.feature,
     e.syncMode,
+    e.runId,
     e.model,
     e.priceVersion,
     e.tokens.inputTokens,

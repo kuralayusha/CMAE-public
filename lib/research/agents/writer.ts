@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import { sameLanguage } from "@/lib/mail/lang";
 import {
   applySignatureToMailDraft,
@@ -90,11 +91,22 @@ COLD vs OPEN ROLE
 
 export async function runWriter(ctx: RunContext) {
   const { jobId, user } = ctx;
-  speak(jobId, "writer", "system", "── writer online · application mail");
+  speak(
+    jobId,
+    "writer",
+    "system",
+    t("terminal.detail.writerOnline"),
+    t("terminal.plain.startedTask"),
+  );
   throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.writer) {
-    speak(jobId, "writer", "think", `Reviewer feedback: ${ctx.redoFeedback.writer}`);
+    speak(
+      jobId,
+      "writer",
+      "think",
+      t("terminal.detail.reviewerFeedback", { msg: ctx.redoFeedback.writer }),
+    );
   }
 
   const jobContext = ctx.jobFit?.hasMatchingJob
@@ -142,7 +154,7 @@ ${MAIL_CRAFT_GUIDE}
 ${MAIL_FIELD_RULES}
 
 Short, concrete, no fabricated experience. Follow MAIL CRAFT structure and length limits.`,
-    `Mail draft (${ctx.siteLanguage})…`,
+    t("terminal.llm.mailDraft", { lang: ctx.siteLanguage }),
     "writer",
   );
 
@@ -171,7 +183,7 @@ ${ctx.redoFeedback.writer ? `Also fix: ${ctx.redoFeedback.writer}\n` : ""}
 ${MAIL_CRAFT_GUIDE}
 
 ${MAIL_FIELD_RULES}`,
-      `Mail (${user.preferredLang})…`,
+      t("terminal.llm.mailLang", { lang: user.preferredLang }),
       "writer",
     );
     ctx.draftPreferred = canonicalizeMailDraft(
@@ -198,7 +210,10 @@ ${MAIL_FIELD_RULES}`,
     "writer",
     "ok",
     sameLang
-      ? "draft written (original; user language matches site)"
-      : "drafts written (original + translated for user)",
+      ? t("terminal.detail.draftOriginalOnly")
+      : t("terminal.detail.draftBoth"),
+    sameLang
+      ? t("terminal.plain.draftOriginalOnly")
+      : t("terminal.plain.draftBoth"),
   );
 }

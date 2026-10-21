@@ -243,7 +243,8 @@ export function computeTrackerFreshness(now = new Date()): TrackerFreshness {
   const ageMs = now.getTime() - Date.parse(dataAsOf);
   const mins = formatRelativeMinutes(dataAsOf, now) ?? 0;
 
-  // Faz 4: visible degrade when classify / unassigned / merge queues are non-empty.
+  // Faz 4: visible degrade when classify / unassigned queues are non-empty.
+  // Pending merges are a dedicated Manage banner on Tracker — not a freshness state.
   try {
     // Lazy repair: AI skips must not sit in mail_unassigned forever (banner lie).
     try {
@@ -252,22 +253,6 @@ export function computeTrackerFreshness(now = new Date()): TrackerFreshness {
       /* ignore mid-upgrade / locked */
     }
     const db = getSqlite();
-    const mergePending = db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM merge_proposals WHERE state = 'pending'`,
-      )
-      .get() as { n: number } | undefined;
-    if ((mergePending?.n || 0) > 0) {
-      return {
-        state: "merge_pending",
-        dataAsOf,
-        lastErrorKind: null,
-        lastErrorMessage: null,
-        activeIntervalMs: intervalMs,
-        messageKey: "tracker.freshness.mergePending",
-        messageParams: { count: mergePending!.n },
-      };
-    }
     const needsClass = db
       .prepare(
         `SELECT COUNT(*) AS n FROM mail_messages WHERE derive_state = 'needs_classification'`,

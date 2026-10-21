@@ -3,8 +3,6 @@ import { settingsBusyResponse } from "@/lib/operations/status";
 import { persistEnvCursorKeyIfNeeded } from "@/lib/onboarding/verify";
 import { t } from "@/lib/i18n/t";
 import {
-  CLOSE_DAYS_MAX,
-  CLOSE_DAYS_MIN,
   getPublicSettings,
   updateSettings,
   wouldSwitchGmailAccount,
@@ -15,11 +13,47 @@ import {
 } from "@/lib/tracker/account-switch";
 import { cancelTrackerSyncSession } from "@/lib/sync/engine";
 import { getOperationsStatus } from "@/lib/operations/status";
+import {
+  FOLLOW_UP_DAYS_MAX,
+  FOLLOW_UP_DAYS_MIN,
+  REJECTION_CLOSE_DAYS_MAX,
+  REJECTION_CLOSE_DAYS_MIN,
+  STALE_CLOSE_DAYS_MAX,
+  STALE_CLOSE_DAYS_MIN,
+  validateStatusDaySettings,
+} from "@/lib/tracker/status-constants";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   return NextResponse.json(getPublicSettings());
+}
+
+function dayErrorResponse(code: string) {
+  switch (code) {
+    case "followUpDaysRange":
+      return t("settings.error.followUpDaysRange", {
+        min: FOLLOW_UP_DAYS_MIN,
+        max: FOLLOW_UP_DAYS_MAX,
+      });
+    case "rejectionCloseDaysRange":
+      return t("settings.error.rejectionCloseDaysRange", {
+        min: REJECTION_CLOSE_DAYS_MIN,
+        max: REJECTION_CLOSE_DAYS_MAX,
+      });
+    case "staleCloseDaysRange":
+      return t("settings.error.staleCloseDaysRange", {
+        min: STALE_CLOSE_DAYS_MIN,
+        max: STALE_CLOSE_DAYS_MAX,
+      });
+    case "followUpBeforeStale":
+      return t("settings.error.followUpBeforeStale");
+    default:
+      return t("settings.error.closeDaysRange", {
+        min: STALE_CLOSE_DAYS_MIN,
+        max: STALE_CLOSE_DAYS_MAX,
+      });
+  }
 }
 
 export async function PUT(req: Request) {
@@ -28,24 +62,30 @@ export async function PUT(req: Request) {
     typeof body.gmailAddress === "string" ? body.gmailAddress : undefined;
   const confirmAccountSwitch = Boolean(body.confirmAccountSwitch);
 
-  const closeDays = (raw: unknown): number | undefined | null => {
-    if (raw == null || raw === "") return undefined;
-    const n = Number(raw);
-    if (!Number.isInteger(n) || n < CLOSE_DAYS_MIN || n > CLOSE_DAYS_MAX) {
-      return null;
-    }
-    return n;
-  };
-  const rejectionCloseDays = closeDays(body.rejectionCloseDays);
-  const staleCloseDays = closeDays(body.staleCloseDays);
-  if (rejectionCloseDays === null || staleCloseDays === null) {
+  const current = getPublicSettings();
+  const touchedDays =
+    (body.followUpDays != null && body.followUpDays !== "") ||
+    (body.rejectionCloseDays != null && body.rejectionCloseDays !== "") ||
+    (body.staleCloseDays != null && body.staleCloseDays !== "");
+  const dayCheck = touchedDays
+    ? validateStatusDaySettings({
+        followUpDays:
+          body.followUpDays != null && body.followUpDays !== ""
+            ? Number(body.followUpDays)
+            : current.followUpDays,
+        rejectionCloseDays:
+          body.rejectionCloseDays != null && body.rejectionCloseDays !== ""
+            ? Number(body.rejectionCloseDays)
+            : (current.rejectionCloseDays ?? 10),
+        staleCloseDays:
+          body.staleCloseDays != null && body.staleCloseDays !== ""
+            ? Number(body.staleCloseDays)
+            : (current.staleCloseDays ?? 20),
+      })
+    : null;
+  if (dayCheck && !dayCheck.ok) {
     return NextResponse.json(
-      {
-        error: t("settings.error.closeDaysRange", {
-          min: CLOSE_DAYS_MIN,
-          max: CLOSE_DAYS_MAX,
-        }),
-      },
+      { error: dayErrorResponse(dayCheck.code), code: dayCheck.code },
       { status: 400 },
     );
   }
@@ -66,7 +106,7 @@ export async function PUT(req: Request) {
     if (preview.required && !confirmAccountSwitch) {
       return NextResponse.json(
         {
-          error: "Account switch confirmation required",
+          error: t("settings.error.accountSwitchRequired"),
           code: "ACCOUNT_SWITCH_REQUIRED",
           preview,
         },
@@ -105,12 +145,9 @@ export async function PUT(req: Request) {
     gmailAddress,
     gmailAppPassword,
     cursorApiKey,
-    followUpDays:
-      body.followUpDays != null && body.followUpDays !== ""
-        ? Number(body.followUpDays)
-        : undefined,
-    rejectionCloseDays,
-    staleCloseDays,
+    followUpDays: dayCheck?.ok ? dayCheck.followUpDays : undefined,
+    rejectionCloseDays: dayCheck?.ok ? dayCheck.rejectionCloseDays : undefined,
+    staleCloseDays: dayCheck?.ok ? dayCheck.staleCloseDays : undefined,
     preferredLanguage:
       typeof body.preferredLanguage === "string"
         ? body.preferredLanguage

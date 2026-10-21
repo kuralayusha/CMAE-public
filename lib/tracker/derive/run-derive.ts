@@ -1,9 +1,8 @@
 /**
  * Sync derivation (architecture §2.6.5–§2.6.10): dirty derive_state queue →
  * stage 0 structural attach → conversation AI stages (triage, identity,
- * events) → facts. Hard mode re-checks every conversation (stale prompt
- * versions re-run) instead of rebuilding; only rows it empties without
- * user traces are soft-deleted.
+ * events) → facts. Hard mode re-runs every conversation through AI (cache
+ * ignored), like a first sync; rows are kept and re-attached, not wiped.
  */
 
 import { eq, inArray } from "drizzle-orm";
@@ -12,6 +11,7 @@ import { getDb, getSqlite } from "@/lib/db/client";
 import { mailMessages, mailUnassigned, trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
+import { DEFAULT_FOLLOW_UP_DAYS } from "../status-constants";
 import { throwIfSyncCanceled } from "../cancel";
 import { normalizeMailText } from "../signals";
 import type { MailIntentMap } from "../mail-kind";
@@ -89,7 +89,7 @@ export async function derivePendingMails(
   // / path flip can closeDb mid-job).
   let db = getDb();
   const settings = getSettingsRow();
-  const followUpDays = settings?.followUpDays ?? 5;
+  const followUpDays = settings?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS;
   const userEmail = (settings?.gmailAddress || "").toLowerCase();
 
   // Older builds parked AI `skip` as unassigned(ambiguous) — drain to noise

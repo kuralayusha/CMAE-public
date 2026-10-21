@@ -1,3 +1,4 @@
+import { t } from "@/lib/i18n/t";
 import { throwIfCanceled } from "../cancel";
 import { extractEmails, rankEmailsWithAi } from "../discover";
 import type { RunContext } from "../context";
@@ -6,11 +7,22 @@ import { writeFile } from "../workspace";
 
 export async function runContact(ctx: RunContext) {
   const { jobId } = ctx;
-  speak(jobId, "contact", "system", "── contact online · hiring email hunt");
+  speak(
+    jobId,
+    "contact",
+    "system",
+    t("terminal.detail.contactOnline"),
+    t("terminal.plain.startedTask"),
+  );
   throwIfCanceled(jobId);
 
   if (ctx.redoFeedback.contact) {
-    speak(jobId, "contact", "think", `Reviewer feedback: ${ctx.redoFeedback.contact}`);
+    speak(
+      jobId,
+      "contact",
+      "think",
+      t("terminal.detail.reviewerFeedback", { msg: ctx.redoFeedback.contact }),
+    );
   }
 
   const roleByUrl = new Map(
@@ -65,7 +77,10 @@ export async function runContact(ctx: RunContext) {
     "contact",
     ctx.primaryEmail ? "ok" : "think",
     ctx.primaryEmail
-      ? `recommended: ${ctx.primaryEmail}`
-      : "no direct email — writer will use a generic greeting",
+      ? t("terminal.detail.recommendedEmail", { email: ctx.primaryEmail })
+      : t("terminal.detail.noDirectEmail"),
+    ctx.primaryEmail
+      ? t("terminal.plain.recommendedEmail", { email: ctx.primaryEmail })
+      : t("terminal.plain.noDirectEmail"),
   );
 }

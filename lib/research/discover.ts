@@ -1,7 +1,9 @@
 import * as cheerio from "cheerio";
+import { t } from "@/lib/i18n/t";
 import { runCurl } from "./shell";
 import { emitLine } from "./events";
 import { askLlm, extractJson } from "./llm";
+import { withAgent } from "./plain";
 
 export type DiscoveredPage = {
   url: string;
@@ -148,7 +150,7 @@ Rules:
 - pathGuesses: invent locale-appropriate paths (e.g. Chinese site might use /招聘 or /join-us — decide from context). Max 8.
 - Max 12 routes. priority 1 = visit first.
 - Only same-origin hrefs.`,
-    "AI route plan (language-agnostic)…",
+    t("terminal.llm.routePlan"),
     "scout",
   );
 
@@ -246,7 +248,7 @@ Return ONLY JSON:
     }
   ]
 }`,
-    "AI email prioritization…",
+    t("terminal.llm.emailRank"),
     "contact",
   );
 
@@ -285,7 +287,7 @@ Mix languages if useful (local press + English). Include platforms that make sen
 HARD RULE: Queries must research the entity that owns ${baseUrl} ("${companyName}"). Do not pivot to employers, clients, or partners merely mentioned on that site. External search is enrichment for the same target — never a new target.
 
 Return ONLY JSON: { "queries": ["...", "..."] }`,
-    "AI external search queries…",
+    t("terminal.llm.externalQueries"),
     "research",
   );
   const parsed = extractJson<{ queries?: string[] }>(raw);
@@ -298,20 +300,30 @@ export async function extractEmails(jobId: string, htmlOrText: string, sourceUrl
   emitLine(
     jobId,
     "think",
-    `Email pattern scan: ${sourceUrl}`,
+    t("terminal.detail.emailScan", { url: sourceUrl }),
     "contact",
-    `Scanning text for emails and patterns. (Contact)`,
+    withAgent(t("terminal.plain.emailScan"), "contact", t),
   );
 
   const emails = extractEmailsJs(htmlOrText).slice(0, 40);
+  const list = emails.length
+    ? `: ${emails.slice(0, 5).join(", ")}${emails.length > 5 ? "…" : ""}`
+    : "";
   emitLine(
     jobId,
     "system",
-    `  ↳ ${emails.length} candidate(s)${emails.length ? `: ${emails.slice(0, 5).join(", ")}${emails.length > 5 ? "…" : ""}` : ""}`,
+    t("terminal.detail.emailCandidates", {
+      count: emails.length,
+      list,
+    }),
     "contact",
-    emails.length
-      ? `Scan finished. ${emails.length} results. (Contact)`
-      : `Scan finished. No emails on this page. (Contact)`,
+    withAgent(
+      emails.length
+        ? t("terminal.plain.emailScanDone", { count: emails.length })
+        : t("terminal.plain.emailScanEmpty"),
+      "contact",
+      t,
+    ),
   );
   return emails;
 }

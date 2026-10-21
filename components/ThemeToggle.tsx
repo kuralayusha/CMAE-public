@@ -46,7 +46,8 @@ function SystemIcon() {
 
 export function ThemeToggle({ disabled }: { disabled?: boolean }) {
   const t = useT();
-  const [preference, setPreference] = useState<ThemePreference>("system");
+  // null until mount — avoid SSR/client icon mismatch from localStorage.
+  const [preference, setPreference] = useState<ThemePreference | null>(null);
 
   useEffect(() => {
     setPreference(getThemePreference());
@@ -77,12 +78,12 @@ export function ThemeToggle({ disabled }: { disabled?: boolean }) {
         type="button"
         className="cmae-btn cmae-btn-ghost cmae-theme-toggle"
         aria-label={modeLabel}
-        disabled={disabled}
+        disabled={disabled || preference == null}
         onClick={() => {
           setPreference(cycleThemePreference());
         }}
       >
-        {icon}
+        <span suppressHydrationWarning>{icon}</span>
       </button>
     </HoverTip>
   );

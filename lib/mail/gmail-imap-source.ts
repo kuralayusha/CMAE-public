@@ -337,6 +337,8 @@ async function fetchUidBatch(
   userEmail: string,
   onProgress?: SyncProgressFn,
   signal?: AbortSignal,
+  /** When the caller already chunks UIDs, pass mailbox-wide progress here. */
+  progress?: { doneBefore: number; total: number },
 ): Promise<{ mails: SourceMail[]; failures: { uid: number; error: string }[] }> {
   const out: SourceMail[] = [];
   const failures: { uid: number; error: string }[] = [];
@@ -346,13 +348,16 @@ async function fetchUidBatch(
   for (let i = 0; i < sorted.length; i += FETCH_BATCH_SIZE) {
     throwIfSyncCanceled(signal);
     const chunk = sorted.slice(i, i + FETCH_BATCH_SIZE);
-    const doneAfter = Math.min(i + chunk.length, sorted.length);
+    const doneAfter = progress
+      ? Math.min(progress.doneBefore + i + chunk.length, progress.total)
+      : Math.min(i + chunk.length, sorted.length);
+    const total = progress?.total ?? sorted.length;
     onProgress?.(
       "think",
       t("sync.fetchingBatch", {
         folder: role.toUpperCase(),
         current: doneAfter,
-        total: sorted.length,
+        total,
       }),
     );
 
@@ -881,6 +886,7 @@ export class GmailImapSource implements MailSource {
           opts.userEmail,
           log,
           signal,
+          { doneBefore: i, total: sorted.length },
         );
 
         const abandonedUids: number[] = [];

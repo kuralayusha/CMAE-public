@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
 import { getJob } from "@/lib/research/events";
 
@@ -13,7 +14,10 @@ export async function GET(
   const { id } = await ctx.params;
   const job = getJob(id);
   if (!job) {
-    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: t("research.error.jobNotFound") },
+      { status: 404 },
+    );
   }
   return NextResponse.json({
     id: job.id,

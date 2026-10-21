@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { t } from "@/lib/i18n/t";
 import { getResearchJobsDir } from "@/lib/paths";
 import type { ResearchJob } from "./types";
 
@@ -77,7 +78,7 @@ export function hydrateJobsFromDisk(store: Map<string, ResearchJob>) {
     if (store.has(job.id)) continue;
     if (job.status === "queued" || job.status === "running") {
       job.status = "error";
-      job.error = "Interrupted (server restarted) — re-run from Research if needed";
+      job.error = t("research.error.interrupted");
       job.cancelRequested = false;
       persistJobNow(job);
     }

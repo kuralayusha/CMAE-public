@@ -11,6 +11,7 @@ const EMBEDDED = {
   anonKey:
     "REDACTED_JWT",
   pricesUrl: "https://your-project-ref.supabase.co/functions/v1/cmae-prices",
+  reportUrl: "https://your-project-ref.supabase.co/functions/v1/cmae-report",
 };
 
 const env = (name: string) => process.env[name]?.trim() ?? "";
@@ -20,5 +21,8 @@ export function usageConfig() {
     ingestUrl: env("CMAE_USAGE_INGEST_URL") || EMBEDDED.ingestUrl,
     anonKey: env("CMAE_USAGE_ANON_KEY") || EMBEDDED.anonKey,
     pricesUrl: env("CMAE_USAGE_PRICES_URL") || EMBEDDED.pricesUrl,
+    reportUrl: env("CMAE_USAGE_REPORT_URL") || EMBEDDED.reportUrl,
+    /** Admin report secret — never embedded; set CMAE_USAGE_REPORT_SECRET. */
+    reportSecret: env("CMAE_USAGE_REPORT_SECRET"),
   };
 }

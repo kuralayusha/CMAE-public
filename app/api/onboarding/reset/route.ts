@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { t } from "@/lib/i18n/t";
 import { resetAppForOnboarding } from "@/lib/onboarding/reset";
 import { isOnboardingComplete, isOnboardingFlagSet } from "@/lib/onboarding/status";
 
@@ -10,7 +11,7 @@ export async function POST() {
     await resetAppForOnboarding();
     if (isOnboardingFlagSet() || isOnboardingComplete()) {
       return NextResponse.json(
-        { error: "Onboarding still appears complete after reset" },
+        { error: t("onboarding.error.resetIncomplete") },
         { status: 500 },
       );
     }

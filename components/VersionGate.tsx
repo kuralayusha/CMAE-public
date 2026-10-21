@@ -52,7 +52,10 @@ function isDesktopRuntime(): boolean {
   );
 }
 
-async function fetchStatus(signal?: AbortSignal): Promise<StatusPayload> {
+async function fetchStatus(
+  signal?: AbortSignal,
+  formatCheckFailed?: (status: number) => string,
+): Promise<StatusPayload> {
   const { platform, arch } = desktopPlatform();
   const qs = new URLSearchParams({ platform, arch });
   const res = await fetch(`/api/version?${qs}`, {
@@ -64,7 +67,11 @@ async function fetchStatus(signal?: AbortSignal): Promise<StatusPayload> {
     error?: string;
   };
   if (!res.ok) {
-    throw new Error(data.error || `Version check failed (${res.status})`);
+    throw new Error(
+      data.error ||
+        formatCheckFailed?.(res.status) ||
+        `Version check failed (${res.status})`,
+    );
   }
   if (data.status) return { ...data.status };
   return data;
@@ -99,14 +106,16 @@ export function VersionGate({ children }: { children: ReactNode }) {
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      const next = await fetchStatus(signal);
+      const next = await fetchStatus(signal, (status) =>
+        t("versionGate.checkFailed", { status }),
+      );
       applyStatus(next);
     } catch {
       // Network failure: do not lock. Keep previous status if any.
     } finally {
       busyRef.current = false;
     }
-  }, []);
+  }, [t]);
 
   const startUpdateDownload = useCallback(async () => {
     if (updateReadyRef.current) return;

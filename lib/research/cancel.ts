@@ -50,7 +50,7 @@ export async function cancelJob(jobId: string): Promise<{
 }> {
   const job = getJob(jobId);
   if (!job) {
-    throw new Error("Job not found");
+    throw new Error(t("research.error.jobNotFound"));
   }
 
   // Idempotent: already fully canceled — don't spam logs / re-rename.
@@ -60,7 +60,13 @@ export async function cancelJob(jobId: string): Promise<{
 
   job.cancelRequested = true;
   abortJob(jobId);
-  emitLine(jobId, "err", "[conductor] CANCEL requested by user — killing specialists…");
+  emitLine(
+    jobId,
+    "err",
+    t("terminal.detail.cancelRequested"),
+    undefined,
+    t("terminal.plain.jobCanceled"),
+  );
 
   let folderName = job.folderName;
   let folderPath = job.folderPath;

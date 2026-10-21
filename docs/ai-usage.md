@@ -18,9 +18,13 @@ integer micro-USD. Embedded Composer 2.5: input 0.50, cache read 0.20, output
 cached in `app_meta.ai_prices_json`) overrides it; `price_version` is stored per
 row so old rows keep the price of their day.
 
-## Local store (migration `012_ai_usage`)
+## Local store (migrations `012_ai_usage`, `014_ai_usage_run_id`)
 - `ai_usage_events`: counters + labels only, doubles as the upload queue
   (`uploaded_at`). Kept across account switch; removed only by a full wipe.
+  `run_id` groups many LLM calls into one UI-level run (sync job id, research
+  job id, or a translate-batch UUID). Set via `promptWithUsage({ runId })` or
+  `withUsageRun` / `withUsageRunAsync`. Absent → `NULL` (not a fake per-call
+  id): only real sync/research/translate sessions count as runs.
 - `ai_response_cache`: key = sha256(model | feature | prompt_version |
   normalized prompt). Cached features: `tracker.sync.{triage,identity,events}`,
   `i18n.translate`, `research.{discover,jobfit}`. Never: `research.writer`,
@@ -42,6 +46,12 @@ re-sends idempotent. Exponential backoff offline (1 min → 1 h). Skipped when
 telemetry is off (Settings → Privacy, default on) or the URL is unset. No text is
 ever sent. Env: `CMAE_USAGE_INGEST_URL`, `CMAE_USAGE_ANON_KEY`,
 `CMAE_USAGE_PRICES_URL` (or the embedded defaults in `lib/ai-usage/config.ts`).
+
+## Admin report
+`/usage` (nav: Usage) lists anonymous `user_id` cards from Supabase and, on
+click, shows run count, token mix, feature breakdown, and cost. Proxied via
+`GET /api/usage-report` → Edge Function `cmae-report`. Requires
+`CMAE_USAGE_REPORT_SECRET` (sha256 stored in `cmae_report_auth`).
 
 ## Tests
 `npm run test:ai-usage`; eval: `node --import tsx test/tracker-eval/run-eval.ts`.

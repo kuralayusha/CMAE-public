@@ -1,6 +1,6 @@
 import "server-only";
 
-import { promptWithUsage } from "@/lib/ai-usage";
+import { promptWithUsage, withUsageRunAsync } from "@/lib/ai-usage";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
@@ -204,24 +204,27 @@ export async function translateLocalePack(
     } else {
       await resolveApiKey();
       const out: LocalePack = {};
-      for (const [sectionKey, sectionVal] of Object.entries(missing)) {
-        if (typeof sectionVal === "string") {
-          const tiny = await translateSection(
-            sectionKey,
-            { value: sectionVal },
-            code,
-          );
-          out[sectionKey] =
-            typeof tiny.value === "string" ? tiny.value : sectionVal;
-        } else {
-          out[sectionKey] = await translateSection(
-            sectionKey,
-            sectionVal,
-            code,
-          );
+      const translateRunId = globalThis.crypto.randomUUID();
+      await withUsageRunAsync(translateRunId, async () => {
+        for (const [sectionKey, sectionVal] of Object.entries(missing)) {
+          if (typeof sectionVal === "string") {
+            const tiny = await translateSection(
+              sectionKey,
+              { value: sectionVal },
+              code,
+            );
+            out[sectionKey] =
+              typeof tiny.value === "string" ? tiny.value : sectionVal;
+          } else {
+            out[sectionKey] = await translateSection(
+              sectionKey,
+              sectionVal,
+              code,
+            );
+          }
         }
-      }
-      pack = mergeShape(en, deepMergePack(prior, out));
+        pack = mergeShape(en, deepMergePack(prior, out));
+      });
     }
   }
 

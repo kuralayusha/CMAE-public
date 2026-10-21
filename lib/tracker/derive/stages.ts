@@ -274,18 +274,24 @@ async function runTriage(
 ): Promise<Map<string, TriageResult | null>> {
   const out = new Map<string, TriageResult | null>();
   const todo: ConversationTranscript[] = [];
+  const hard = ctx.mode === "hard";
   for (const conv of convs) {
-    const cached = getCachedTriage(conv.key, conv.fingerprint, TRIAGE_PROMPT_VERSION);
+    // Hard sync ignores a fresh cache so every conversation is re-read by AI
+    // (same as a first-time sync). Incremental keeps the fingerprint cache.
+    const cached = hard
+      ? null
+      : getCachedTriage(conv.key, conv.fingerprint, TRIAGE_PROMPT_VERSION);
     if (cached) {
       out.set(conv.key, cached);
       continue;
     }
     const state = getTriageState(conv.key);
     if (
+      !hard &&
       state?.state === "failed" &&
       state.fingerprint === conv.fingerprint &&
       state.promptVersion === TRIAGE_PROMPT_VERSION &&
-      !retryDue(state, ctx.mode === "hard")
+      !retryDue(state, false)
     ) {
       out.set(conv.key, null);
       continue;
@@ -294,8 +300,13 @@ async function runTriage(
   }
   if (!todo.length) return out;
 
-  ctx.log?.("think", t("sync.stageTriageStart", { count: todo.length }));
+  // Hard sync already announced the work above; skip the duplicate start line.
+  if (ctx.mode !== "hard") {
+    ctx.log?.("think", t("sync.stageTriageStart", { count: todo.length }));
+  }
   let aiError: string | null = null;
+  let triageDone = 0;
+  const triageTotal = todo.length;
   const outcomes = await triageConversations(todo, {
     llm: ctx.llmFor("tracker.sync.triage", TRIAGE_PROMPT_VERSION),
     userEmails: ctx.userEmails,
@@ -315,6 +326,7 @@ async function runTriage(
       }
     },
     onCall: (info) => {
+      triageDone += info.conversations;
       if (info.error) {
         aiError = info.error;
         ctx.log?.("system", t("sync.stageTriageBatchFailed", { msg: info.error }));
@@ -322,8 +334,8 @@ async function runTriage(
         ctx.log?.(
           "ok",
           t("sync.stageTriageBatch", {
-            ok: info.ok,
-            count: info.conversations,
+            done: triageDone,
+            total: triageTotal,
             seconds: Math.round(info.ms / 1000),
           }),
         );
@@ -808,15 +820,16 @@ function eventsStale(conv: Conversation, force: boolean): { stale: boolean; fail
     .where(eq(mailConversations.id, conv.key))
     .get();
   if (!row) return { stale: true, failed: false };
+  // Hard sync = first-sync semantics: re-run AI even when the cache is fresh.
+  if (force) return { stale: true, failed: row.eventsState === "failed" };
   const sameKey =
     row.eventsFingerprint === conv.fingerprint &&
     row.eventsPromptVersion === EVENTS_PROMPT_VERSION;
   if (sameKey && row.eventsState === "ok") return { stale: false, failed: false };
   if (sameKey && row.eventsState === "failed") {
     const due =
-      force ||
-      (row.eventsAttempts < MAX_FAILED_ATTEMPTS &&
-        Date.now() - Date.parse(row.eventsAt || "1970-01-01") >= FAILED_RETRY_MS);
+      row.eventsAttempts < MAX_FAILED_ATTEMPTS &&
+      Date.now() - Date.parse(row.eventsAt || "1970-01-01") >= FAILED_RETRY_MS;
     return { stale: due, failed: true };
   }
   return { stale: true, failed: false };
@@ -898,19 +911,22 @@ async function runEvents(
     transcript: ctx.transcript(j.conv, mails),
     context: eventContext(j.conv, j.itemId, mails),
   }));
+  let eventsDone = 0;
+  const eventsTotal = jobs.length;
   const outcomes = await extractConversationEvents(prepared, {
     llm: ctx.llmFor("tracker.sync.events", EVENTS_PROMPT_VERSION),
     userEmails: ctx.userEmails,
     concurrency: LLM_CONCURRENCY,
     signal: ctx.signal,
     onCall: (info) => {
+      eventsDone += info.conversations;
       ctx.log?.(
         info.error ? "system" : "ok",
         info.error
           ? t("sync.stageEventsBatchFailed", { msg: info.error })
           : t("sync.stageEventsBatch", {
-              ok: info.ok,
-              count: info.conversations,
+              done: eventsDone,
+              total: eventsTotal,
               seconds: Math.round(info.ms / 1000),
             }),
       );
@@ -947,8 +963,9 @@ async function runEvents(
 
 /**
  * Stages 1–3 after stage 0. `dirtyMailIds` = mails of this derive run;
- * incremental mode only looks at their conversations (plus due retries),
- * hard mode at every conversation (stale prompt versions re-run).
+ * incremental mode only looks at their conversations (plus due retries);
+ * hard mode re-runs every conversation through AI (cache ignored), like a
+ * first sync — existing rows are kept and re-attached, not wiped.
  */
 export async function runConversationStages(opts: {
   mode: StageMode;
@@ -973,10 +990,10 @@ export async function runConversationStages(opts: {
   );
 
   // Conversations to triage: unassigned ones touched by this run / due for
-  // retry; hard sync additionally re-checks every assigned conversation.
+  // retry; hard sync re-analyses every conversation (AI cache ignored).
   const triageSet: Conversation[] = [];
   let capped = 0;
-  // The cap bounds AI work; cached answers are free.
+  // The cap bounds AI work; incremental cached answers are free, hard is not.
   let needsAi = 0;
   const relevant = convs.filter((c) => {
     if (hard) return true;
@@ -1005,7 +1022,9 @@ export async function runConversationStages(opts: {
       }
       continue;
     }
-    const cached = getCachedTriage(conv.key, conv.fingerprint, TRIAGE_PROMPT_VERSION);
+    const cached = hard
+      ? null
+      : getCachedTriage(conv.key, conv.fingerprint, TRIAGE_PROMPT_VERSION);
     if (!cached && needsAi >= MAX_TRIAGE_PER_RUN) {
       capped += 1;
       // Unowned mail stays in the derive queue for the next run.
@@ -1024,7 +1043,21 @@ export async function runConversationStages(opts: {
     if (!cached) needsAi += 1;
     triageSet.push(conv);
   }
-  if (capped) ctx.log?.("system", t("sync.stageCapped", { count: capped }));
+  // One clear line for hard sync (count being worked + deferred), instead of
+  // "375 / 22 next / Reading 300" which reads as contradictory.
+  if (hard && triageSet.length) {
+    ctx.log?.(
+      "think",
+      capped
+        ? t("sync.hardAiReanalyzePartial", {
+            count: triageSet.length,
+            deferred: capped,
+          })
+        : t("sync.hardAiReanalyze", { count: triageSet.length }),
+    );
+  } else if (capped) {
+    ctx.log?.("system", t("sync.stageCapped", { count: capped }));
+  }
   const meta = loadMails(triageSet.flatMap((c) => c.mailIds));
 
   let triage = new Map<string, TriageResult | null>();

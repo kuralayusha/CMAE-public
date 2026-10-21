@@ -8,6 +8,7 @@ import { getDb, getSqlite } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
 import { notifyCredentialsChanged } from "@/lib/sync/credentials";
 import {
+  DEFAULT_FOLLOW_UP_DAYS,
   DEFAULT_REJECTION_CLOSE_DAYS,
   DEFAULT_STALE_CLOSE_DAYS,
   statusSettingsFromRow,
@@ -60,7 +61,7 @@ function ensureSettingsRow() {
   db.insert(settings)
     .values({
       id: 1,
-      followUpDays: 5,
+      followUpDays: DEFAULT_FOLLOW_UP_DAYS,
       preferredLanguage: "en",
       updatedAt: new Date().toISOString(),
     })
@@ -80,7 +81,7 @@ export function getPublicSettings(): SettingsPublic {
     cursorApiKeyFromEnv: Boolean(process.env.CURSOR_API_KEY?.trim()),
     cvFileName: row?.cvFileName ?? null,
     hasCv: Boolean(row?.cvText),
-    followUpDays: row?.followUpDays ?? 5,
+    followUpDays: row?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS,
     rejectionCloseDays:
       row?.rejectionCloseDays ?? DEFAULT_REJECTION_CLOSE_DAYS,
     staleCloseDays: row?.staleCloseDays ?? DEFAULT_STALE_CLOSE_DAYS,
@@ -149,7 +150,8 @@ export function updateSettings(input: {
       input.cursorApiKey !== undefined && input.cursorApiKey !== ""
         ? encryptOptional(input.cursorApiKey)
         : current?.cursorApiKeyEnc,
-    followUpDays: input.followUpDays ?? current?.followUpDays ?? 5,
+    followUpDays:
+      input.followUpDays ?? current?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS,
     rejectionCloseDays:
       input.rejectionCloseDays ??
       current?.rejectionCloseDays ??
@@ -264,5 +266,7 @@ export function getStatusSettings(): StatusSettings {
   return statusSettingsFromRow(ensureSettingsRow());
 }
 
+/** @deprecated use STALE_CLOSE_DAYS_* / REJECTION_CLOSE_DAYS_* in status-constants. */
 export const CLOSE_DAYS_MIN = 1;
+/** @deprecated use STALE_CLOSE_DAYS_* / REJECTION_CLOSE_DAYS_* in status-constants. */
 export const CLOSE_DAYS_MAX = 90;
