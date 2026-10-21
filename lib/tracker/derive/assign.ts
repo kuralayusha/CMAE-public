@@ -3,7 +3,8 @@
  */
 
 import { and, eq, inArray, ne } from "drizzle-orm";
-import { getDb } from "@/lib/db/client";
+import { getAppMeta, setAppMeta } from "@/lib/db/app-meta";
+import { getDb, getSqlite } from "@/lib/db/client";
 import { getTrackerRevision } from "@/lib/db/revision";
 import {
   mailAssignments,
@@ -12,6 +13,8 @@ import {
   trackerItems,
 } from "@/lib/db/schema";
 import { emailDomain, parseEmailAddr } from "../identity";
+
+const AMBIGUOUS_SKIP_DRAIN_META = "drain_ambiguous_ai_skips_v1";
 
 export type AssignSource =
   | "thread"
@@ -114,6 +117,52 @@ export function markUnassigned(
       })
       .run();
   }
+}
+
+export function clearUnassigned(mailId: number): void {
+  getDb()
+    .delete(mailUnassigned)
+    .where(eq(mailUnassigned.mailId, mailId))
+    .run();
+}
+
+/**
+ * AI routing `skip` = non-job (architecture noise path), not human-review queue.
+ * Keeps `mail_unassigned` for unmatched_outbound / ai_unavailable / true ambiguity only.
+ */
+export function markRoutingSkipAsNoise(mailId: number): void {
+  const db = getDb();
+  clearUnassigned(mailId);
+  db.update(mailMessages)
+    .set({ deriveState: "noise" })
+    .where(eq(mailMessages.id, mailId))
+    .run();
+}
+
+/**
+ * One-shot repair: older builds parked AI skips as mail_unassigned(ambiguous),
+ * which permanently inflated the ai_degraded banner. Convert those to noise.
+ * Later `ambiguous` rows (e.g. attach to a missing item) are left alone.
+ */
+export function drainAmbiguousRoutingSkips(): number {
+  if (getAppMeta(AMBIGUOUS_SKIP_DRAIN_META, getSqlite()) === "1") return 0;
+  const db = getDb();
+  const rows = db
+    .select()
+    .from(mailUnassigned)
+    .where(eq(mailUnassigned.reason, "ambiguous"))
+    .all();
+  let n = 0;
+  for (const row of rows) {
+    if (getAssignment(row.mailId)) {
+      clearUnassigned(row.mailId);
+      continue;
+    }
+    markRoutingSkipAsNoise(row.mailId);
+    n += 1;
+  }
+  setAppMeta(AMBIGUOUS_SKIP_DRAIN_META, "1", getSqlite());
+  return n;
 }
 
 export function getAssignment(mailId: number): {

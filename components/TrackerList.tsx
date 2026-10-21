@@ -1685,6 +1685,10 @@ export function TrackerList() {
                 ...(freshness.messageParams || {}),
                 minutes: Number(freshness.messageParams?.minutes ?? 0),
                 count: Number(freshness.messageParams?.count ?? 0),
+                classCount: Number(freshness.messageParams?.classCount ?? 0),
+                unassignedCount: Number(
+                  freshness.messageParams?.unassignedCount ?? 0,
+                ),
                 when: freshness.dataAsOf
                   ? formatWhen(freshness.dataAsOf, locale)
                   : String(freshness.messageParams?.when ?? "—"),

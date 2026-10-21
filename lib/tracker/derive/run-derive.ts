@@ -26,7 +26,9 @@ import {
 } from "../identity";
 import type { SyncProgressFn } from "../types";
 import {
+  drainAmbiguousRoutingSkips,
   getAssignment,
+  markRoutingSkipAsNoise,
   markUnassigned,
   tryRuleBasedAssign,
   writeAssignment,
@@ -209,6 +211,11 @@ export async function derivePendingMails(
   const settings = getSettingsRow();
   const followUpDays = settings?.followUpDays ?? 5;
   const userEmail = (settings?.gmailAddress || "").toLowerCase();
+
+  // Older builds parked AI `skip` as unassigned(ambiguous) — drain to noise
+  // so the freshness banner only reflects actionable review queues.
+  drainAmbiguousRoutingSkips();
+  db = getDb();
 
   const existingCount = db
     .select()
@@ -505,12 +512,9 @@ export async function derivePendingMails(
           continue;
         }
 
-        markUnassigned(mail.id, "ambiguous");
-        markDeriveState(
-          [mail.id],
-          stateAfter(mail, chunkNeedsClass.has(mail.id)),
-        );
-        unassigned += 1;
+        // AI skip = non-job → noise (not permanent unassigned review queue).
+        markRoutingSkipAsNoise(mail.id);
+        skipped += 1;
         log?.(
           "system",
           t("sync.incrementalSkippedNoise", {

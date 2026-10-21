@@ -1,4 +1,5 @@
 import { getSqlite } from "@/lib/db/client";
+import { drainAmbiguousRoutingSkips } from "@/lib/tracker/derive/assign";
 import { getSyncState } from "@/lib/tracker/sync";
 
 export type FreshnessState =
@@ -244,6 +245,12 @@ export function computeTrackerFreshness(now = new Date()): TrackerFreshness {
 
   // Faz 4: visible degrade when classify / unassigned / merge queues are non-empty.
   try {
+    // Lazy repair: AI skips must not sit in mail_unassigned forever (banner lie).
+    try {
+      drainAmbiguousRoutingSkips();
+    } catch {
+      /* ignore mid-upgrade / locked */
+    }
     const db = getSqlite();
     const mergePending = db
       .prepare(
@@ -266,19 +273,57 @@ export function computeTrackerFreshness(now = new Date()): TrackerFreshness {
         `SELECT COUNT(*) AS n FROM mail_messages WHERE derive_state = 'needs_classification'`,
       )
       .get() as { n: number } | undefined;
-    const unassigned = db
-      .prepare(`SELECT COUNT(*) AS n FROM mail_unassigned`)
+    const unmatched = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM mail_unassigned WHERE reason = 'unmatched_outbound'`,
+      )
       .get() as { n: number } | undefined;
-    const degraded = (needsClass?.n || 0) + (unassigned?.n || 0);
+    const aiUnavail = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM mail_unassigned WHERE reason = 'ai_unavailable'`,
+      )
+      .get() as { n: number } | undefined;
+    const otherUnassigned = db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM mail_unassigned
+         WHERE reason NOT IN ('unmatched_outbound', 'ai_unavailable')`,
+      )
+      .get() as { n: number } | undefined;
+    const needs = needsClass?.n || 0;
+    const unmatchedN = unmatched?.n || 0;
+    const aiUnavailN = aiUnavail?.n || 0;
+    const otherN = otherUnassigned?.n || 0;
+    const unassignedN = unmatchedN + aiUnavailN + otherN;
+    const degraded = needs + unassignedN;
     if (degraded > 0) {
+      let messageKey = "tracker.freshness.aiDegraded";
+      let count = degraded;
+      if (needs === 0 && unmatchedN > 0 && aiUnavailN === 0 && otherN === 0) {
+        // Honest UX for unmatched sent (architecture §2.6.1) — not "temporary".
+        messageKey = "tracker.freshness.unmatchedOutbound";
+        count = unmatchedN;
+      } else if (needs === 0 && aiUnavailN > 0 && unmatchedN === 0 && otherN === 0) {
+        messageKey = "tracker.freshness.aiUnavailable";
+        count = aiUnavailN;
+      } else if (needs === 0 && unassignedN > 0) {
+        messageKey = "tracker.freshness.unassignedPending";
+        count = unassignedN;
+      } else if (needs > 0 && unassignedN > 0) {
+        messageKey = "tracker.freshness.aiDegradedAndUnassigned";
+        count = degraded;
+      }
       return {
         state: "ai_degraded",
         dataAsOf,
         lastErrorKind: null,
         lastErrorMessage: null,
         activeIntervalMs: intervalMs,
-        messageKey: "tracker.freshness.aiDegraded",
-        messageParams: { count: degraded },
+        messageKey,
+        messageParams: {
+          count,
+          classCount: needs,
+          unassignedCount: unassignedN,
+        },
       };
     }
   } catch {

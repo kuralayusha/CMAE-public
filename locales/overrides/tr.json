@@ -55,6 +55,10 @@
       "partial": "Mailler güncel; bazı kaynaklar (ör. Gmail taslakları) doğrulanamadı.",
       "throttled": "Gmail geçici olarak istekleri sınırladı; kısa süre sonra tekrar denenecek.",
       "aiDegraded": "{count} mail henüz tam sınıflandırılmadı — ilgili satırların durumu geçici olabilir.",
+      "unmatchedOutbound": "{count} gönderilmiş mail hiçbir başvuruya bağlı değil — takip etmek istiyorsanız satır oluşturun.",
+      "aiUnavailable": "AI {count} maili yerleştiremedi — eşleşme bekliyor.",
+      "unassignedPending": "{count} mail hâlâ bir başvuruya yerleştirilmeyi bekliyor (eşleşmeyen veya belirsiz).",
+      "aiDegradedAndUnassigned": "{classCount} mail sınıflandırma bekliyor; {unassignedCount} inceleme bekliyor.",
       "mergePending": "{count} birleştirme kararınızı bekliyor."
     },
     "chip": {

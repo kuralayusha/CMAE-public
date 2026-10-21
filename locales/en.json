@@ -285,6 +285,10 @@
       "partial": "Mail is up to date; some sources (e.g. Gmail drafts) could not be verified.",
       "throttled": "Gmail temporarily limited requests; sync will retry shortly.",
       "aiDegraded": "{count} mail(s) not fully classified yet — status on those rows may be temporary.",
+      "unmatchedOutbound": "{count} sent mail(s) are not linked to any application — create a row if you want them tracked.",
+      "aiUnavailable": "AI could not place {count} mail(s) — they are waiting to be matched.",
+      "unassignedPending": "{count} mail(s) still need a place on an application (unmatched or unclear).",
+      "aiDegradedAndUnassigned": "{classCount} mail(s) need classification; {unassignedCount} waiting for review.",
       "mergePending": "{count} merge decision(s) waiting for you."
     },
     "unknownCompany": "Unknown",
