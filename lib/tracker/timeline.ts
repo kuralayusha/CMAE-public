@@ -61,6 +61,8 @@ export type TrackerDetailItem = {
   updatedAt: string;
   unverified: boolean;
   mailAfterClose?: boolean;
+  waitingUntil?: string | null;
+  waitingReason?: "interview" | "ooo" | "offer" | null;
   channel: string | null;
 };
 
@@ -113,6 +115,8 @@ export function loadTrackerItem(itemId: number): TrackerDetailItem | null {
       resolved.mailAfterClose ||
       parseFlagsJson(row.flagsJson).mailAfterClose ||
       undefined,
+    waitingUntil: resolved.waitingUntil,
+    waitingReason: resolved.waitingReason || null,
     channel: row.channel,
   };
 }

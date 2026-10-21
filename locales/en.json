@@ -313,6 +313,7 @@
       "needs_action": "Link / form",
       "follow_up_due": "Follow-up",
       "waiting": "Waiting",
+      "interview": "Interview",
       "in_progress": "Active",
       "rejected": "Rejected",
       "closed": "Closed",

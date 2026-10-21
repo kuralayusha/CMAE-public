@@ -812,7 +812,7 @@ Olay zaman bağımsız bir fact'tir; item başına kronolojik zaman çizelgesi `
 | 5 | Teklif sonrası bizim yanıt (withdrawn değil) | `waiting` (pozitif); `staleCloseDays` sonra `closed` — `follow_up_due` üretilmez |
 | 6 | Son gidenden sonra `action_required` / `assessment` | `needs_action`; `staleCloseDays` sonra `closed` |
 | 7 | Son gidenden sonra `interview_invite` / `info_request` / `offer` | `needs_reply` (davet/teklif pozitif) |
-| 8 | `scheduledAt` (mülakat günü) gelecekte | gün sonuna kadar `waiting` |
+| 8 | `scheduledAt` (mülakat günü) gelecekte | gün sonuna kadar `waiting` (`waitingReason=interview`); gün sonrası sessizlik çapası = mülakat günü (son giden değil) |
 | 9 | Sessizlik çapası = son giden; yoksa son `ack`/`auto_ack`; yoksa son gelen (`min(at, now)`). Çapadan `staleCloseDays` (20) geçti | `closed` (`ignored` yok) |
 | 10 | Son gelen `ooo` ve dönüş tarihi var | gün sonuna kadar `waiting`, sonra `follow_up_due` |
 | 11 | Çapadan `followUpDays` (art arda follow-up varsa 7 gün bekleme) geçti | `follow_up_due`, değilse `in_progress` |

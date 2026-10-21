@@ -145,9 +145,14 @@ function mapRow(
     updatedAt: row.updatedAt,
     createdAt: row.createdAt,
     lastActivityAt,
-    statusLabel: statusTitle(status),
+    statusLabel:
+      status === "waiting" && resolved.waitingReason === "interview"
+        ? t("tracker.chip.interview")
+        : statusTitle(status),
     gmailUrls,
-    waitingUntil: parseWaitingUntil(row.notesJson, row.waitingUntil),
+    waitingUntil:
+      resolved.waitingUntil ||
+      parseWaitingUntil(row.notesJson, row.waitingUntil),
     pendingGmailDraft: live ? toPendingInfo(live, gmailAddress) : null,
     recipientOptions: recipients.candidates,
     recommendedTo: recipients.recommended,
@@ -158,6 +163,7 @@ function mapRow(
       resolved.mailAfterClose ||
       parseFlagsJson(row.flagsJson).mailAfterClose ||
       undefined,
+    waitingReason: resolved.waitingReason || undefined,
     channel: row.channel,
     nextTransitionAt: resolved.nextTransitionAt,
   };

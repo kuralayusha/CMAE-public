@@ -49,6 +49,8 @@ export type EffectiveInput = {
   now?: number;
 };
 
+export type WaitingReason = "interview" | "ooo" | "offer";
+
 export type EffectiveResult = {
   status: TrackerStatus;
   sentiment: TrackerSentiment | null;
@@ -60,6 +62,8 @@ export type EffectiveResult = {
   waitingUntil: string | null;
   /** Closed row received a later human inbound — UI badge only. */
   mailAfterClose?: boolean;
+  /** Why status is waiting — drives Interview vs OOO labels. */
+  waitingReason?: WaitingReason | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -116,8 +120,10 @@ export type MachineState = {
   /** We replied to an offer (accept / negotiate); not withdrawn. */
   offerRepliedAt: string | null;
   mailAfterClose: boolean;
-  /** Latest future interview / meeting day from scheduledAt. */
+  /** Latest interview / meeting / assessment day from scheduledAt. */
   scheduledUntil: string | null;
+  /** scheduledUntil came from an interview_invite (UI: Interview). */
+  scheduledFromInterview: boolean;
 };
 
 function isAiStored(e: EventTimelineEntry): boolean {
@@ -162,12 +168,17 @@ export function foldTimeline(timeline: EventTimelineEntry[]): MachineState {
     offerRepliedAt: null,
     mailAfterClose: false,
     scheduledUntil: null,
+    scheduledFromInterview: false,
   };
   const sorted = [...timeline].sort(compareTimelineEntries);
   for (const e of sorted) {
     const day = e.scheduledAt?.slice(0, 10) || null;
     if (day && (!s.scheduledUntil || day > s.scheduledUntil)) {
       s.scheduledUntil = day;
+      s.scheduledFromInterview =
+        e.event === "interview_invite" ||
+        e.event === "other" ||
+        e.event === "ack";
     }
 
     if (e.dir === "out") {
@@ -327,19 +338,44 @@ function resolveFromState(
       waitingOn: "them",
       sentiment: "positive",
       nextTransitionAt: toIso(staleAt),
+      waitingReason: "offer",
     });
   }
 
   if (s.scheduledUntil) {
     const eod = endOfDayUtc(s.scheduledUntil);
+    const interviewReason: WaitingReason | null = s.scheduledFromInterview
+      ? "interview"
+      : null;
     if (nowMs <= eod) {
       return result("waiting", {
         waitingOn: "them",
         nextFollowUpAt: nextBusinessDayAfter(s.scheduledUntil),
         nextTransitionAt: toIso(eod + 1000),
         waitingUntil: s.scheduledUntil,
+        waitingReason: interviewReason,
       });
     }
+    // After the scheduled day: silence clock starts from the interview day,
+    // not the last confirmation outbound (avoids instant follow_up_due).
+    const needed = followUpSilenceDays(s.trailingFollowUps, followUpDays);
+    const followAt = plusDays(s.scheduledUntil, needed);
+    const staleAt = plusDays(s.scheduledUntil, staleCloseDays);
+    if (nowMs >= staleAt) return result("closed");
+    if (nowMs >= followAt) {
+      return result("follow_up_due", {
+        waitingOn: "them",
+        nextFollowUpAt: toIso(followAt),
+        nextTransitionAt: toIso(staleAt),
+        waitingUntil: s.scheduledUntil,
+      });
+    }
+    return result("in_progress", {
+      waitingOn: "them",
+      nextFollowUpAt: toIso(followAt),
+      nextTransitionAt: toIso(Math.min(followAt, staleAt)),
+      waitingUntil: s.scheduledUntil,
+    });
   }
 
   const rawAnchor = s.lastOut?.at ?? s.lastAck?.at ?? s.lastIn?.at ?? null;
@@ -363,6 +399,7 @@ function resolveFromState(
         nextFollowUpAt,
         nextTransitionAt: toIso(Math.min(eod + 1000, staleAt)),
         waitingUntil: oooUntil,
+        waitingReason: "ooo",
       });
     }
     return result("follow_up_due", {

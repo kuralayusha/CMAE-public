@@ -292,16 +292,75 @@ describe("position groups", () => {
 });
 
 describe("scheduledAt interview wait", () => {
-  it("waits until scheduled day end", () => {
-    const tl = [
-      e(1, "2026-10-01T00:00:00.000Z", "in", "interview_invite", {
-        scheduledAt: "2026-10-28",
-      }),
-      e(2, "2026-10-02T00:00:00.000Z", "out", "other"),
-    ];
-    // Pending cleared by outbound; scheduledUntil still set → waiting
-    const r = status(tl);
+  /** examplecorp-like: invite with date, then confirmation outbound. */
+  const examplecorp = [
+    e(1, "2026-10-16T09:31:03.000Z", "in", "interview_invite", {
+      scheduledAt: "2026-11-05",
+    }),
+    e(2, "2026-10-16T09:54:49.000Z", "out", "other"),
+    e(3, "2026-10-16T10:32:19.000Z", "in", "other", {
+      scheduledAt: "2026-11-05",
+    }),
+    e(4, "2026-10-16T13:07:20.000Z", "out", "other"),
+  ];
+
+  it("examplecorp: waiting until interview day (not follow_up_due)", () => {
+    const r = status(examplecorp, Date.parse("2026-10-21T12:00:00.000Z"));
     assert.equal(r.status, "waiting");
-    assert.equal(r.waitingUntil, "2026-10-28");
+    assert.equal(r.waitingUntil, "2026-11-05");
+    assert.equal(r.waitingReason, "interview");
+  });
+
+  it("day after interview: in_progress until followUpDays from interview", () => {
+    const r = status(examplecorp, Date.parse("2026-11-06T12:00:00.000Z"));
+    assert.equal(r.status, "in_progress");
+  });
+
+  it("interview + followUpDays → follow_up_due", () => {
+    const r = status(examplecorp, Date.parse("2026-11-11T12:00:00.000Z"));
+    assert.equal(r.status, "follow_up_due");
+  });
+});
+
+describe("scheduledAt backfill", () => {
+  it("infers German interview date from invite body", async () => {
+    const { inferScheduledAt } = await import(
+      "../../lib/tracker/derive/scheduled-at"
+    );
+    const day = inferScheduledAt({
+      event: "interview_invite",
+      subject: "Einladung zum persönlichen Gespräch",
+      body: "Dafür kann ich Ihnen den 5.11.2026 um 11 Uhr als Terminvorschlag anbieten.",
+      mailAt: "2026-10-16T09:31:03.000Z",
+    });
+    assert.equal(day, "2026-11-05");
+  });
+
+  it("backfillScheduledAt fills missing invite scheduledAt", async () => {
+    const { backfillScheduledAt } = await import(
+      "../../lib/tracker/derive/scheduled-at"
+    );
+    const events = new Map([
+      [
+        390,
+        {
+          event: "interview_invite" as const,
+          source: "ai" as const,
+          scheduledAt: null,
+        },
+      ],
+    ]);
+    const updated = backfillScheduledAt(events, [
+      {
+        id: 390,
+        subject: "Einladung zum persönlichen Gespräch",
+        bodyText:
+          "Dafür kann ich Ihnen den 5.11.2026 um 11 Uhr als Terminvorschlag anbieten.",
+        snippet: "",
+        dateIso: "2026-10-16T09:31:03.000Z",
+      },
+    ]);
+    assert.deepEqual(updated, [390]);
+    assert.equal(events.get(390)?.scheduledAt, "2026-11-05");
   });
 });

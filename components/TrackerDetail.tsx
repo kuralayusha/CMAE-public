@@ -35,6 +35,8 @@ type DetailItem = {
   recommendedTo?: string | null;
   unverified?: boolean;
   mailAfterClose?: boolean;
+  waitingUntil?: string | null;
+  waitingReason?: "interview" | "ooo" | "offer" | null;
   channel?: string | null;
 };
 
@@ -418,7 +420,10 @@ export function TrackerDetail({
     );
   }
 
-  const chipKey = `tracker.chip.${item.status}`;
+  const chipKey =
+    item.status === "waiting" && item.waitingReason === "interview"
+      ? "tracker.chip.interview"
+      : `tracker.chip.${item.status}`;
   const chip = t(chipKey);
   const statusLabel =
     chip === chipKey ? item.status.replace(/_/g, " ") : chip;

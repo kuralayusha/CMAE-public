@@ -3,7 +3,7 @@
  */
 
 import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/lib/db/client";
+import { getDb, getSqlite } from "@/lib/db/client";
 import {
   conversationAnalysis,
   mailAssignments,
@@ -32,6 +32,7 @@ import {
   factsToFlagsJson,
   type FactMail,
 } from "./facts";
+import { backfillScheduledAt } from "./scheduled-at";
 
 function loadAssignedMails(itemId: number): FactMail[] {
   const db = getDb();
@@ -163,10 +164,21 @@ export function refreshItemFacts(
   const assigned = loadAssignedMails(itemId);
   const mailIds = assigned.map((m) => m.id);
   const positionByMail = loadPositionsByMail(mailIds);
+  const events = loadStoredEvents(mailIds);
+  const filled = backfillScheduledAt(events, assigned);
+  if (filled.length) {
+    const stamp = getSqlite().prepare(
+      `UPDATE mail_events SET scheduled_at = ? WHERE mail_id = ?`,
+    );
+    for (const id of filled) {
+      const day = events.get(id)?.scheduledAt;
+      if (day) stamp.run(day, id);
+    }
+  }
   let facts = computeFacts({
     assignedMails: assigned,
     intents: loadIntents(mailIds, intents),
-    events: loadStoredEvents(mailIds),
+    events,
     researchCandidate: Boolean(item.researchJobId || item.originResearchJobId),
     aiStatusHint: item.aiStatus,
     positionByMail,

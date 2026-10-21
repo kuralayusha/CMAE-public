@@ -91,6 +91,7 @@
       "needs_reply": "Yanıt",
       "closed": "Kapalı",
       "waiting": "Beklemede",
+      "interview": "Mülakat",
       "in_progress": "Aktif",
       "ignored": "Yoksayılan"
     },

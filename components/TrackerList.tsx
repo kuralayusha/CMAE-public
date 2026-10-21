@@ -210,6 +210,7 @@ type TrackerItem = {
   warnings?: { code: string; message: string }[];
   unverified?: boolean;
   mailAfterClose?: boolean;
+  waitingReason?: "interview" | "ooo" | "offer" | null;
   channel?: string | null;
 };
 

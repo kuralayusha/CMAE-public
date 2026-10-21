@@ -121,6 +121,8 @@ export type TrackerListItem = TrackerItemRow & {
   unverified?: boolean;
   /** Closed row later received human inbound (badge only). */
   mailAfterClose?: boolean;
+  /** Why waiting: interview | ooo | offer — drives chip label. */
+  waitingReason?: "interview" | "ooo" | "offer" | null;
   /** ATS / agency / job board the process runs through (stage 2). */
   channel?: string | null;
 };
