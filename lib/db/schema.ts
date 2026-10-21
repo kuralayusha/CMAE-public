@@ -17,6 +17,10 @@ export const settings = sqliteTable("settings", {
   cvText: text("cv_text"),
   cvFileName: text("cv_file_name"),
   followUpDays: integer("follow_up_days").notNull().default(5),
+  /** Rejected → closed after this many days without a thank-you */
+  rejectionCloseDays: integer("rejection_close_days").notNull().default(10),
+  /** No human reply this many days after the last outbound → closed */
+  staleCloseDays: integer("stale_close_days").notNull().default(20),
   preferredLanguage: text("preferred_language").notNull().default("en"),
   /** Plain-text email signature; newlines preserved. Appended verbatim after mail closing. */
   emailSignature: text("email_signature"),
@@ -130,6 +134,8 @@ export const trackerItems = sqliteTable("tracker_items", {
   waitingUntil: text("waiting_until"),
   lastIntent: text("last_intent"),
   flagsJson: text("flags_json"),
+  /** Serialized per-mail event timeline (derive/events.ts); time-independent fact */
+  eventsJson: text("events_json"),
   needsClassification: integer("needs_classification").notNull().default(0),
   derivedVersion: integer("derived_version").notNull().default(1),
   derivedAt: text("derived_at"),
@@ -180,6 +186,67 @@ export const mailIntents = sqliteTable("mail_intents", {
   promptVersion: integer("prompt_version").notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+/** Stage 0: deterministic conversation (thread + reply links). id = stable key. */
+export const mailConversations = sqliteTable("mail_conversations", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id"),
+  threadKey: text("thread_key"),
+  /** JSON number[] of mail_messages.id */
+  mailIds: text("mail_ids").notNull().default("[]"),
+  /** sha256(sorted mail ids | latest date) — AI caches key off this */
+  fingerprint: text("fingerprint").notNull(),
+  itemId: integer("item_id"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** Stage 1 triage output per conversation (AI). */
+export const conversationAnalysis = sqliteTable("conversation_analysis", {
+  conversationId: text("conversation_id").primaryKey(),
+  isJobProcess: integer("is_job_process").notNull().default(1),
+  employer: text("employer"),
+  intermediary: text("intermediary"),
+  /** ats | agency | job_board */
+  intermediaryKind: text("intermediary_kind"),
+  position: text("position"),
+  refCode: text("ref_code"),
+  counterpartEmail: text("counterpart_email"),
+  model: text("model").notNull(),
+  promptVersion: integer("prompt_version").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+/** Stage 3 per-mail process event (see lib/tracker/derive/events.ts). */
+export const mailEvents = sqliteTable("mail_events", {
+  mailId: integer("mail_id")
+    .primaryKey()
+    .references(() => mailMessages.id, { onDelete: "cascade" }),
+  conversationId: text("conversation_id"),
+  event: text("event").notNull(),
+  /** ooo: ISO day the sender is back */
+  waitingUntil: text("waiting_until"),
+  confidence: real("confidence"),
+  /** ai | regex | header | rule */
+  source: text("source").notNull(),
+  model: text("model"),
+  promptVersion: integer("prompt_version"),
+  createdAt: text("created_at").notNull(),
+});
+
+/** Per-account sender domain role; intermediary domains never key identity. */
+export const senderRoles = sqliteTable(
+  "sender_roles",
+  {
+    accountId: text("account_id").notNull(),
+    domain: text("domain").notNull(),
+    /** employer | ats | agency | job_board | personal */
+    role: text("role").notNull(),
+    source: text("source").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.accountId, t.domain] })],
+);
 
 export const mergeProposals = sqliteTable("merge_proposals", {
   id: text("id").primaryKey(),

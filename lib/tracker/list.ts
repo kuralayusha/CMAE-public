@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
+import { statusSettingsFromRow, type StatusSettings } from "./status-constants";
 import { effective, factsFromItemRow } from "./derive/effective";
 import { buildGmailThreadUrls } from "./gmail-links";
 import {
@@ -88,10 +89,10 @@ function mapRow(
     hasThanksDraft: boolean;
     hasReplyDraft: boolean;
   },
-  followUpDays: number,
+  statusSettings: StatusSettings,
   nowMs?: number,
   gmailAddress?: string | null,
-): TrackerListItem {
+): TrackerListItem & { nextTransitionAt: string | null } {
   // Computed-on-read: follow-up / OOO transitions without waiting for sync.
   const facts = factsFromItemRow(row);
   const userState =
@@ -99,7 +100,7 @@ function mapRow(
   const resolved = effective({
     facts,
     userState,
-    followUpDays,
+    ...statusSettings,
     now: nowMs,
   });
   const status = resolved.status;
@@ -151,6 +152,7 @@ function mapRow(
     recommendedTo: recipients.recommended,
     userVersion: row.userVersion || 1,
     warnings: warnings.length ? warnings : undefined,
+    nextTransitionAt: resolved.nextTransitionAt,
   };
 }
 
@@ -219,12 +221,15 @@ export function listTrackerSections(opts?: { now?: number }): {
   sections: TrackerSection[];
   sync: ReturnType<typeof getSyncState>;
   total: number;
+  /** Earliest clock-only status change across rows (validUntil cap). */
+  nextTransitionAt: string | null;
 } {
   const db = getDb();
   const urlsMap = gmailUrlsByItemId();
   const settings = getSettingsRow();
-  const followUpDays = settings?.followUpDays ?? 5;
+  const statusSettings = statusSettingsFromRow(settings);
   const gmailAddress = settings?.gmailAddress?.trim() || null;
+  let nextTransitionAt: string | null = null;
   const rows = db
     .select()
     .from(trackerItems)
@@ -233,14 +238,18 @@ export function listTrackerSections(opts?: { now?: number }): {
     .map((row) => {
       // Index-derived flags only — no fs, never persist on GET.
       const flags = reconcileDraftFlagsForRow(row, { persist: false });
-      return mapRow(
+      const { nextTransitionAt: rowNext, ...item } = mapRow(
         row,
         urlsMap.get(row.id) || [],
         flags,
-        followUpDays,
+        statusSettings,
         opts?.now,
         gmailAddress,
       );
+      if (rowNext && (!nextTransitionAt || rowNext < nextTransitionAt)) {
+        nextTransitionAt = rowNext;
+      }
+      return item as TrackerListItem;
     });
   const byStatus = new Map<TrackerStatus, TrackerListItem[]>();
   for (const s of STATUS_ORDER) byStatus.set(s, []);
@@ -265,5 +274,6 @@ export function listTrackerSections(opts?: { now?: number }): {
     sections,
     sync: getSyncState(),
     total: rows.length,
+    nextTransitionAt,
   };
 }

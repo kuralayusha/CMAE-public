@@ -144,7 +144,8 @@
     "accountSwitchBody": "{old} hesabından geçiyorsunuz. Bu cihazda o hesaba ait {mails} mail, {items} takip satırı ve {drafts} taslak kaydı kalıcı olarak silinecek. Gmail’deki mailleriniz etkilenmez. {kept} yalnızca-araştırma satırı korunacak. Devam edilsin mi?",
     "accountSwitchConfirm": "Evet, değiştir ve eski veriyi sil",
     "error": {
-      "opsBusy": "Gmail senkronizasyonu, araştırma veya taslak hazırlama çalışırken ayarlar değiştirilemez"
+      "opsBusy": "Gmail senkronizasyonu, araştırma veya taslak hazırlama çalışırken ayarlar değiştirilemez",
+      "closeDaysRange": "Gün değerleri {min} ile {max} arasında tam sayı olmalı"
     },
     "cvHint": "En fazla {max} PDF. Taslaklar önce rol etiketine, sonra aile içindeki dile göre seçer (aynı aile = bir CV’nin dil varyantları)."
   },
@@ -152,7 +153,11 @@
     "cvFamily": "Aile",
     "cvFamilyHint": "Aynı CV’nin dil varyantları için aynı id (ör. general). Bu dosya ayrı bir rolse boş bırak.",
     "cvFamilyPlaceholder": "ör. general, frontend",
-    "cvTagsHint": "İlan başlığıyla eşleşen rol kelimeleri — ör. odoo, frontend. Pozisyon eşleşmesi dili ezer."
+    "cvTagsHint": "İlan başlığıyla eşleşen rol kelimeleri — ör. odoo, frontend. Pozisyon eşleşmesi dili ezer.",
+    "rejectionCloseDays": "Retten sonra kapat (gün)",
+    "rejectionCloseHint": "Ret gelince satır, teşekkür maili gönderebilmen için Reddedildi bölümünde kalır. Teşekkür maili gönderirsen hemen kapanır; göndermezsen bu kadar gün sonra kapanır. Aynı şirkete yeni bir başvuru veya soru gönderirsen süreç devam eder.",
+    "staleCloseDays": "Cevap gelmezse kapat (gün)",
+    "staleCloseHint": "Son gönderdiğin mailden (başvuru veya takip) itibaren sayılır. Bu süre içinde kimse cevap vermezse, takip göndermiş olsan bile satır kapanır."
   },
   "errors": {
     "llmTimeout": "AI {seconds} sn içinde yanıt vermedi"

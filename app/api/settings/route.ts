@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { settingsBusyResponse } from "@/lib/operations/status";
 import { persistEnvCursorKeyIfNeeded } from "@/lib/onboarding/verify";
+import { t } from "@/lib/i18n/t";
 import {
+  CLOSE_DAYS_MAX,
+  CLOSE_DAYS_MIN,
   getPublicSettings,
   updateSettings,
   wouldSwitchGmailAccount,
@@ -24,6 +27,28 @@ export async function PUT(req: Request) {
   const gmailAddress =
     typeof body.gmailAddress === "string" ? body.gmailAddress : undefined;
   const confirmAccountSwitch = Boolean(body.confirmAccountSwitch);
+
+  const closeDays = (raw: unknown): number | undefined | null => {
+    if (raw == null || raw === "") return undefined;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < CLOSE_DAYS_MIN || n > CLOSE_DAYS_MAX) {
+      return null;
+    }
+    return n;
+  };
+  const rejectionCloseDays = closeDays(body.rejectionCloseDays);
+  const staleCloseDays = closeDays(body.staleCloseDays);
+  if (rejectionCloseDays === null || staleCloseDays === null) {
+    return NextResponse.json(
+      {
+        error: t("settings.error.closeDaysRange", {
+          min: CLOSE_DAYS_MIN,
+          max: CLOSE_DAYS_MAX,
+        }),
+      },
+      { status: 400 },
+    );
+  }
 
   // K2: different Gmail address requires explicit confirm + wipe.
   if (gmailAddress !== undefined && wouldSwitchGmailAccount(gmailAddress)) {
@@ -74,6 +99,8 @@ export async function PUT(req: Request) {
       body.followUpDays != null && body.followUpDays !== ""
         ? Number(body.followUpDays)
         : undefined,
+    rejectionCloseDays,
+    staleCloseDays,
     preferredLanguage:
       typeof body.preferredLanguage === "string"
         ? body.preferredLanguage

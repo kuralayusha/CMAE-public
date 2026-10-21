@@ -8,8 +8,9 @@ import { listTrackerSections } from "@/lib/tracker/list";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/** validUntil far enough that idle clients get 304; Faz 2 will use nextTransitionAt. */
+/** validUntil far enough that idle clients get 304; capped by the next status transition. */
 const VALID_UNTIL_MS = 60_000;
+const VALID_UNTIL_MIN_MS = 1_000;
 
 function buildEtag(rev: number, validUntilEpoch: number): string {
   return `W/"r${rev}-v${validUntilEpoch}"`;
@@ -21,9 +22,6 @@ export async function GET(request: Request) {
   try {
     const rev = getTrackerRevision();
     const serverNow = new Date();
-    const validUntil = new Date(serverNow.getTime() + VALID_UNTIL_MS);
-    const validUntilEpoch = Math.floor(validUntil.getTime() / 1000);
-    const etag = buildEtag(rev, validUntilEpoch);
 
     const ifNoneMatch = request.headers.get("if-none-match");
     if (ifNoneMatch) {
@@ -42,7 +40,7 @@ export async function GET(request: Request) {
           return new NextResponse(null, {
             status: 304,
             headers: {
-              ETag: etag,
+              ETag: buildEtag(clientRev, clientValidUntil),
               "Cache-Control": "no-store",
             },
           });
@@ -51,7 +49,17 @@ export async function GET(request: Request) {
     }
 
     // Pure read — Gmail Drafts reconcile runs at sync end / after draft create.
-    const data = listTrackerSections();
+    const data = listTrackerSections({ now: serverNow.getTime() });
+    const transitionMs = data.nextTransitionAt
+      ? Date.parse(data.nextTransitionAt)
+      : Number.POSITIVE_INFINITY;
+    const validUntil = new Date(
+      Math.max(
+        serverNow.getTime() + VALID_UNTIL_MIN_MS,
+        Math.min(serverNow.getTime() + VALID_UNTIL_MS, transitionMs),
+      ),
+    );
+    const etag = buildEtag(rev, Math.floor(validUntil.getTime() / 1000));
     return NextResponse.json(
       {
         ...data,

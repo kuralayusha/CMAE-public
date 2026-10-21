@@ -41,6 +41,13 @@
     - [2.6.2 Açık yeniden gruplama: stable-id diff](#262-açık-yeniden-gruplama-stable-id-diff)
     - [2.6.3 Zamana bağlı status: okumada hesaplama](#263-zamana-bağlı-status-okumada-hesaplama)
     - [2.6.4 LLM intent önbelleği](#264-llm-intent-önbelleği)
+    - [2.6.5 Konuşma bazlı sınıflandırma: Aşama 0 — konuşma birleştirme](#265-konuşma-bazlı-sınıflandırma-aşama-0--konuşma-birleştirme)
+    - [2.6.6 Aşama 1: triage (AI)](#266-aşama-1-triage-ai)
+    - [2.6.7 Aşama 2: kimlik çözümleme](#267-aşama-2-kimlik-çözümleme)
+    - [2.6.8 Aşama 3: olay çıkarımı](#268-aşama-3-olay-çıkarımı)
+    - [2.6.9 Aşama 4: durum makinesi](#269-aşama-4-durum-makinesi)
+    - [2.6.10 Fingerprint önbelleği ve prompt_version](#2610-fingerprint-önbelleği-ve-prompt_version)
+    - [2.6.11 Değerlendirme düzeneği (eval)](#2611-değerlendirme-düzeneği-eval)
   - [2.7 Mutasyonlar](#27-mutasyonlar)
     - [2.7.1 Gmail draft: tam olarak bir kez oluşturma](#271-gmail-draft-tam-olarak-bir-kez-oluşturma)
     - [2.7.2 Farklı Gmail hesabına geçiş (K2)](#272-farklı-gmail-hesabına-geçiş-k2)
@@ -678,10 +685,11 @@ flowchart TD
 
 - **25 eşiği kalkıyor** (`incremental.ts:43`). Her zaman artımlı çalışılır; büyük girişlerde 200'lük parçalar halinde.
 - **Sadece belirleyici mailler sınıflandırılır:** her item'ın son inbound maili, son anlamlı inbound adayı ve atanmamış inbound mailler. Bugün full rebuild'de tüm inbox LLM'den geçiyor (`rebuild.ts:115`).
-- **Fact hesaplama** item başına saftır (pure): `facts = computeFacts(assignedMails, intents, researchCandidate)`. `resolveStatus`'tan zamandan bağımsız kısım ayrılır. `gone_at` dolu mailler hesaba **dahildir** (K1).
+- **Fact hesaplama** item başına saftır (pure): `facts = computeFacts({ assignedMails, intents, events, researchCandidate })`. Çıktının çekirdeği mail başına olay zaman çizelgesidir (§2.6.8); `tracker_items.events_json` olarak saklanır. Eski `resolveStatus` (`status.ts`) kaldırıldı; zamana bağlı her şey `effective()` içindedir (§2.6.9). `gone_at` dolu mailler hesaba **dahildir** (K1).
 - **Kullanıcı kolonları asla yazılmaz.** Derivation `user_state`, `selected_recipient` ve kullanıcı atamalarına (`locked=1`) dokunmaz.
 - **İkiz birleştirme otomatik olmaktan çıkıyor.** `collapseInactiveActiveTwins` (`inactive.ts:110`) kaldırılır. Aynı kimlik şüphesi bir `merge_proposals(origin='twin_suggestion')` kaydı olarak "Bu iki satır aynı şirket olabilir — birleştir?" önerisiyle gösterilir. E-posta eşleşmesi tek başına asla birleştirme sebebi değildir.
-- **Eşleşmeyen giden mailler** (bugün `incremental.ts:561-571`'de atılıyor) `mail_unassigned(reason='unmatched_outbound')` olur. UI'da "Takip edilmeyen 2 gönderilmiş mail — satır oluştur?" diye sorulur.
+- **Atama konuşma düzeyindedir** (§2.6.5): bir konuşmanın herhangi bir maili bir item'a bağlıysa, konuşmanın atanmamış tüm mailleri (SENT dahil) aynı transaction'da o item'a bağlanır.
+- **Eşleşmeyen giden mailler** önce ertelenir; bütün parçalar işlendikten sonra konuşma birleştirme yeniden çalışır ve hâlâ bağlanamayanlar `mail_unassigned(reason='unmatched_outbound')` olur. Bu kuyruk her derive başında yeniden denenir. UI'da "Takip edilmeyen 2 gönderilmiş mail — satır oluştur?" diye sorulur. (Eski `incremental.ts` / `patchTrackerWithNewMails` yolu kaldırıldı.)
 
 #### 2.6.2 Açık yeniden gruplama: stable-id diff
 
@@ -711,6 +719,8 @@ Seçim **okumada hesaplama**. Gerekçeler:
 effective(facts, user_state, settings, now) -> { status, waitingOn, nextFollowUpAt, nextTransitionAt }
 ```
 
+- `settings` = `followUpDays`, `rejectionCloseDays` (varsayılan 10), `staleCloseDays` (varsayılan 20). Liste, detay API'si ve inactive yolu dahil `effective()`'i çağıran her yer aynı ayarları okur. Kurallar §2.6.9'dadır.
+
 - `nextTransitionAt`: Bu satırın status'unun kendiliğinden değişeceği en yakın an (follow-up zamanı, OOO bitişi, rejected → closed vb.).
 - GET yanıtı `validUntil = min(nextTransitionAt)` döndürür. İstemci bu ana bir zamanlayıcı kurar ve `If-None-Match` ile yeniden ister. Sunucu ayrıca bu ana bir `tick` SSE olayı planlar.
 - `user_state='inactive'` bir kaplamadır (overlay): status `inactive` gösterilir ama fact'ler hesaplanmaya devam eder. Aktive edilince eski status'u saklamaya gerek kalmadan doğru status görünür.
@@ -725,6 +735,103 @@ effective(facts, user_state, settings, now) -> { status, waitingOn, nextFollowUp
 - `source='header'`: `Auto-Submitted: auto-replied` (RFC 3834) veya `multipart/report; report-type=delivery-status` (bounce) deterministik olarak belirlenir; LLM'e gerek kalmaz.
 - `source='regex'` sonucu **geçici** sayılır: item'da `needs_classification=1` olur ve `classify_retry` job'u backoff ile tekrar dener.
 - Her LLM çağrısına 90 sn timeout konur (`llm.ts:21` sarmalanır) ve geçersiz JSON şemayla (zod) reddedilir.
+- Konuşma bazlı hatta (§2.6.5–§2.6.9) `mail_intents` yalnızca **geri dönüş** (fallback) kaynağıdır: Aşama 3'ün `mail_events` kaydı olmayan inbound mailler için intent → olay eşlemesi kullanılır.
+
+#### 2.6.5 Konuşma bazlı sınıflandırma: Aşama 0 — konuşma birleştirme
+
+Mail başına tek tek sınıflandırma; bir başvurunun gönderimini, onayını, takip mailini ve reddini aynı süreç olarak göremiyordu (yinelenen satırlar, satıra bağlanmayan SENT mailleri, yanlış status). Yeni hat beş aşamadır:
+
+```mermaid
+flowchart LR
+  S0[Aşama 0: konuşma birleştirme<br/>deterministik] --> S1[Aşama 1: triage<br/>AI, konuşma başına]
+  S1 --> S2[Aşama 2: kimlik çözümleme<br/>anahtarlar + top-k AI]
+  S2 --> S3[Aşama 3: olay çıkarımı<br/>AI, mail başına olay]
+  S3 --> S4[Aşama 4: durum makinesi<br/>saf, okumada]
+```
+
+**Aşama 0** (`lib/tracker/derive/conversations.ts`, saf kısım `conversation-graph.ts`) deterministiktir ve LLM kullanmaz:
+
+- Union-find: aynı Gmail `thread_id` → aynı konuşma; `In-Reply-To` / `References` içindeki message-id'ler bilinen bir maile işaret ediyorsa birleştirilir. Konuşma anahtarı `account|t:<en küçük thread_id>` veya `account|m:<en küçük mail id>` olur.
+- `mail_conversations(id, account_id, thread_key, mail_ids, fingerprint, item_id)` her derive başında ve sonunda güncellenir; değişmeyen satır yazılmaz.
+- **Konuşma düzeyinde atama:** konuşmada atanmış mail varsa çoğunluk item'ı (eşitlikte küçük id) konuşmanın sahibidir; atanmamış mailler `source='thread'` ile o item'a tek transaction'da bağlanır ve `mail_unassigned` kayıtları silinir. Atanmış bir mail asla taşınmaz (bölme/birleştirme §2.6.2'nin işidir).
+- `fingerprint = sha256(sıralı mail id'leri | en son mail zamanı)`; Aşama 1 ve 3 önbelleklerinin anahtarıdır (§2.6.10).
+- **Sıra:** derive başında onarım (`repairConversations`) → parça parça kural/AI atama (eşleşmeyen SENT ertelenir) → yeniden konuşma onarımı → ertelenen SENT'ler için `unmatched_outbound` → dokunulan item'ların fact'leri yenilenir. İlk çalıştırmada tek seferlik (`app_meta: derive_events_timeline_v1`) tüm canlı item'lar yenilenir ki `events_json` dolsun.
+
+#### 2.6.6 Aşama 1: triage (AI)
+
+Konuşma başına bir LLM çağrısı (dalga 2). Girdi: temizlenmiş transkript (alıntılanan geçmiş ve kullanıcının imzası atılır; `ConversationTranscript`). Çıktı (`TriageResult`) `conversation_analysis` tablosuna yazılır:
+
+| Alan | Anlam |
+|------|-------|
+| `is_job_process` | Konuşma bir iş başvuru süreci mi (bülten, iş ilanı uyarısı, hesap doğrulama değil) |
+| `employer` | **Gerçek işveren.** Ajans veya platform asla işveren olmaz |
+| `intermediary`, `intermediary_kind` | Kanal: `ats` (personio, ashby, greenhouse…), `agency` (acmestaffing…), `job_board` (examplejobboard…) |
+| `position`, `ref_code` | Pozisyon ve ilan/kennziffer kodu (Aşama 2 anahtarı) |
+| `counterpart_email` | Süreçteki insan muhatap |
+
+Model ayrıca gördüğü domain'lerin rolünü döndürür; bunlar `sender_roles(account_id, domain, role, source)` tablosuna yazılır. Kullanıcı kararı (`source='user'`) AI tarafından ezilmez. Arayüz: `ConversationTriageProvider` + `saveTriage` / `getCachedTriage` (`lib/tracker/derive/stage-store.ts`).
+
+#### 2.6.7 Aşama 2: kimlik çözümleme
+
+Ürün kararı: **gerçek işveren başına tek satır**; ajans/platform satırın kanalıdır.
+
+1. **Deterministik anahtarlar** (sırayla): konuşmanın zaten bir item'ı var (Aşama 0); `ref_code` eşleşmesi; araştırma kişisi e-postası; işveren domain'i. `sender_roles` içinde aracı (`ats` / `agency` / `job_board`) olarak işaretli domain'ler (`intermediaryDomains()`) **asla** kimlik anahtarı olarak kullanılmaz — personio.de veya smartrecruiters.com üzerinden gelen iki farklı şirket bu yüzden birleşmez.
+2. Anahtar tek item gösteriyorsa bağlanır. Hiçbiri yoksa veya birden çok aday varsa normalize edilmiş işveren adıyla **top-k** aday (k ≤ 5) seçilir ve küçük bir AI çağrısı "bunlardan biri mi, yeni mi?" diye karar verir (tie-break). AI hatası → `mail_unassigned`, sessiz tahmin yok.
+3. Aynı işverene ait farklı pozisyonlar aynı satırda kalır; satır sayısı işveren sayısına yakınsar.
+
+#### 2.6.8 Aşama 3: olay çıkarımı
+
+Konuşma başına bir LLM çağrısı, transkriptteki **her mail için bir olay** döndürür (`ExtractedEvent`) ve `mail_events(mail_id, conversation_id, event, waiting_until, confidence, source, model, prompt_version)` tablosuna yazılır (`saveMailEvents`). Olay kümesi (`lib/tracker/derive/events.ts`):
+
+| Yön | Olaylar |
+|-----|---------|
+| Giden | `application_sent`, `follow_up_sent`, `thanks_sent`, `withdrawn`, `other` |
+| Gelen | `ack`, `auto_ack`, `ooo`, `info_request`, `interview_invite`, `assessment`, `action_required`, `rejection`, `offer`, `other` |
+
+Olay zaman bağımsız bir fact'tir; item başına kronolojik zaman çizelgesi `tracker_items.events_json` olarak saklanır. Öncelik: `mail_events` kaydı → (giden) yapısal kural → (gelen) intent eşlemesi.
+
+- **Gelen geri dönüş** (`eventFromIntent`): `human_reply→info_request`, `rejection→rejection`, `ack`/`optional_portal→ack`, `auto_ack→auto_ack`, `ooo→ooo`, `click_action→action_required`, `unknown→other`; `non_job` / `bounce` zaman çizelgesine girmez.
+- **Giden geri dönüş** (`structuralOutboundEvent`, aynı konuşma içinde, son gidenden sonraki gelenlere bakılır): son anlamlı gelen `rejection` ise `thanks_sent`; başka anlamlı gelen varsa teşekkür kalıbı → `thanks_sent`, değilse `other`; gelen yok ama önceki giden varsa `follow_up_sent`; hiçbir şey yoksa `application_sent`.
+
+#### 2.6.9 Aşama 4: durum makinesi
+
+`effective()` (`lib/tracker/derive/effective.ts`) zaman çizelgesini kronolojik olarak katlar (`foldTimeline`) ve `now` ile sonucu verir. Saftır; DB'ye yazmaz.
+
+| Sıra | Koşul | Status |
+|------|-------|--------|
+| 1 | `user_state` inactive/dismissed | `inactive` |
+| 2 | Sadece araştırma, giden yok | `ready_to_send` |
+| 3 | `withdrawn` veya ret sonrası `thanks_sent` | `closed` (hemen) |
+| 4 | Son anlamlı gelen `rejection` | `rejected`; giden yoksa `rejectionCloseDays` (10) sonra `closed`. Ret sonrası yeni başvuru, soru veya davet süreci devam ettirir |
+| 5 | Son gidenden sonra `action_required` / `assessment` | `needs_action`; `staleCloseDays` sonra `closed` |
+| 6 | Son gidenden sonra `interview_invite` / `info_request` / `offer` | `needs_reply` (davet/teklif pozitif) |
+| 7 | Sessizlik çapası = son giden; yoksa son `ack`/`auto_ack`; yoksa son gelen. Çapadan `staleCloseDays` (20) geçti | `closed` (`ignored` yok) |
+| 8 | Son gelen `ooo` ve dönüş tarihi var | gün sonuna kadar `waiting`, sonra `follow_up_due` |
+| 9 | Çapadan `followUpDays` (art arda follow-up varsa 7 gün bekleme) geçti | `follow_up_due`, değilse `in_progress` |
+
+- Pasif gelen olaylar (`ack`, `auto_ack`, `ooo`, `other`) sadece sessizlik saatini başlatır/korur; status'u kendisi değiştirmez.
+- `nextTransitionAt` her dalda bir sonraki saat geçişidir (ret kapanışı, stale kapanışı, follow-up zamanı, OOO bitişi); `GET /api/tracker` `validUntil`'i bunlardan hesaplar.
+- `rejectionCloseDays` ve `staleCloseDays` Ayarlar'dan değiştirilebilir (1–90 gün, API doğrular).
+- `refreshItemFacts` artık `ai_status` yazmaz; cache kolonları (status, waitingOn…) yalnızca sıralama/geri uyumluluk içindir, okunan değer her zaman `effective()`'tir. Detay API'si de `effective()` kullanır.
+
+#### 2.6.10 Fingerprint önbelleği ve prompt_version
+
+- Aşama 1 ve 3 sonuçları `(conversation_id, fingerprint, prompt_version)` ile önbelleğe alınır. Konuşmaya yeni mail gelmedikçe fingerprint değişmez ve LLM çağrılmaz; prompt sürümü artınca sadece etkilenen konuşmalar tembel olarak yeniden analiz edilir.
+- `mail_events.source`: `ai` | `regex` | `header` | `rule`; `model` + `prompt_version` her satırda saklanır. Hard sync önbelleği bypass eder.
+- Tablolar migration `010_conversations` ile gelir; hesap değişiminde silinen tablolar listesine eklendi.
+
+#### 2.6.11 Değerlendirme düzeneği (eval)
+
+`test/tracker-eval/` gerçek bir posta kutusunun anonimleştirilmiş görüntüsünü (`fixture.json`, gövdeler yok, kişisel adresler ve message-id'ler maskeli) ve mail başına doğru cevapları (işveren grubu, olay, sabit `now` anındaki beklenen status) içerir.
+
+```bash
+npx tsx test/tracker-eval/run-eval.ts [--events=fallback|oracle|llm] [--verbose] [--json]
+```
+
+- **Hatlar:** `before` (eski atama + eski API status), `after` (Aşama 0 + 4, eski kimlik eşleştirmesi), `ideal` (beklenen gruplar = kusursuz Aşama 1/2, sadece Aşama 4'ü ölçer).
+- **Olay sağlayıcıları:** `fallback` (intent eşlemesi + yapısal kural, deterministik), `oracle` (fixture olayları = kusursuz Aşama 3), `llm` (dalga 2).
+- **Metrikler:** satır sayısı, yinelenen satır, yanlış birleşme (birden fazla işveren içeren satır), atanmış konuşmada atanmamış SENT, olay doğruluğu, status doğruluğu (satır ve işveren bazında; satırı olmayan işveren yanlış sayılır).
+- Prompt veya kural değişikliği bu metrikleri düşürmemelidir.
 
 ### 2.7 Mutasyonlar
 

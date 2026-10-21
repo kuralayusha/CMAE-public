@@ -6,15 +6,20 @@ import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import {
   mailAssignments,
+  mailEvents,
+  mailIntents,
   mailMessages,
   trackerItems,
 } from "@/lib/db/schema";
-import type { MailIntentMap } from "../mail-kind";
+import { getSettingsRow } from "@/lib/settings/service";
+import { normalizeIntent, type MailIntentMap } from "../mail-kind";
 import {
   parsePendingGmailDraft,
   shouldClearPendingGmailDraft,
 } from "../pending-draft";
+import { statusSettingsFromRow } from "../status-constants";
 import { effective } from "./effective";
+import { normalizeMailEvent, serializeTimeline, type StoredMailEvent } from "./events";
 import {
   computeFacts,
   factsToFlagsJson,
@@ -44,12 +49,54 @@ function loadAssignedMails(itemId: number): FactMail[] {
       dateIso: m.internalDate || m.dateIso,
       bodyText: m.bodyText,
       snippet: m.snippet,
+      threadId: m.threadId,
+      messageId: m.messageId,
+      inReplyTo: m.inReplyTo,
+      referencesHdr: m.referencesHdr,
+      direction: m.direction,
       goneAt: m.goneAt,
     }));
 }
 
+/** Cached intents from mail_intents, overlaid by the caller's fresher map. */
+function loadIntents(mailIds: number[], overlay: MailIntentMap): MailIntentMap {
+  const map: MailIntentMap = new Map();
+  if (mailIds.length) {
+    for (const row of getDb()
+      .select()
+      .from(mailIntents)
+      .where(inArray(mailIntents.mailId, mailIds))
+      .all()) {
+      map.set(row.mailId, {
+        mailId: row.mailId,
+        intent: normalizeIntent(row.intent),
+        waitingUntil: row.waitingUntil,
+      });
+    }
+  }
+  for (const [id, rec] of overlay) {
+    if (mailIds.includes(id)) map.set(id, rec);
+  }
+  return map;
+}
+
+function loadStoredEvents(mailIds: number[]): Map<number, StoredMailEvent> {
+  const map = new Map<number, StoredMailEvent>();
+  if (!mailIds.length) return map;
+  for (const row of getDb()
+    .select()
+    .from(mailEvents)
+    .where(inArray(mailEvents.mailId, mailIds))
+    .all()) {
+    const event = normalizeMailEvent(row.event);
+    if (event) map.set(row.mailId, { event, waitingUntil: row.waitingUntil });
+  }
+  return map;
+}
+
 /**
- * Persist facts + status_cached. Does not write user_state / selected_recipient.
+ * Persist facts + cached status. Does not write user_state / selected_recipient,
+ * and never writes the time-dependent resolved status into ai_status.
  */
 export function refreshItemFacts(
   itemId: number,
@@ -66,21 +113,25 @@ export function refreshItemFacts(
   if (!item || item.deletedAt) return;
 
   const assigned = loadAssignedMails(itemId);
+  const mailIds = assigned.map((m) => m.id);
   const facts = computeFacts({
     assignedMails: assigned,
-    intents,
+    intents: loadIntents(mailIds, intents),
+    events: loadStoredEvents(mailIds),
     researchCandidate: Boolean(item.researchJobId || item.originResearchJobId),
-    priorFollowUpCount: item.followUpCount,
-    aiStatusHint: item.aiStatus || (item.status !== "inactive" ? item.status : null),
+    aiStatusHint: item.aiStatus,
   });
 
   const userState =
     item.userState || (item.status === "inactive" ? "inactive" : "active");
 
+  const statusSettings = statusSettingsFromRow(getSettingsRow());
   const resolved = effective({
     facts,
     userState,
     followUpDays,
+    rejectionCloseDays: statusSettings.rejectionCloseDays,
+    staleCloseDays: statusSettings.staleCloseDays,
     now: opts?.now,
   });
 
@@ -121,18 +172,18 @@ export function refreshItemFacts(
   const now = new Date().toISOString();
   db.update(trackerItems)
     .set({
-      // Fact columns
-      aiStatus: facts.aiStatus || resolved.status,
+      // Fact columns (time-independent)
       lastMeaningfulInboundAt: facts.lastMeaningfulInboundAt,
       waitingUntil: facts.waitingUntil || resolved.waitingUntil,
       lastIntent: facts.lastIntent,
       flagsJson: factsToFlagsJson(facts.flags),
+      eventsJson: serializeTimeline(facts.timeline),
       needsClassification: opts?.needsClassification
         ? 1
         : item.needsClassification,
       derivedVersion: (item.derivedVersion || 1) + 1,
       derivedAt: now,
-      // Cached status for legacy readers (inactive overlay honored)
+      // Cached status for legacy readers; list/detail recompute via effective()
       status: resolved.status,
       sentiment: resolved.sentiment,
       waitingOn: resolved.waitingOn,

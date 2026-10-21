@@ -7,6 +7,7 @@ import { migration006GmailDrafts } from "./006_gmail_drafts";
 import { migration007ItemOps } from "./007_item_ops";
 import { migration008WorkspaceIndex } from "./008_workspace_index";
 import { migration009CleanupLegacy } from "./009_cleanup_legacy";
+import { migration010Conversations } from "./010_conversations";
 import type { Migration } from "./types";
 
 export const MIGRATIONS: Migration[] = [
@@ -19,4 +20,5 @@ export const MIGRATIONS: Migration[] = [
   migration007ItemOps,
   migration008WorkspaceIndex,
   migration009CleanupLegacy,
+  migration010Conversations,
 ];

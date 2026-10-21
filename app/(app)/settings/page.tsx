@@ -34,6 +34,8 @@ type Settings = {
   cvFileName: string | null;
   hasCv: boolean;
   followUpDays: number;
+  rejectionCloseDays?: number;
+  staleCloseDays?: number;
   preferredLanguage: string;
   emailSignature: string | null;
   jobPreferences?: JobPreferences;
@@ -105,6 +107,8 @@ export default function SettingsPage() {
     gmailAppPassword: "",
     cursorApiKey: "",
     followUpDays: 5,
+    rejectionCloseDays: 10,
+    staleCloseDays: 20,
     preferredLanguage: "en",
     emailSignature: "",
   });
@@ -225,6 +229,8 @@ export default function SettingsPage() {
       fullName: data.fullName || "",
       gmailAddress: data.gmailAddress || "",
       followUpDays: data.followUpDays || 5,
+      rejectionCloseDays: data.rejectionCloseDays || 10,
+      staleCloseDays: data.staleCloseDays || 20,
       preferredLanguage: data.preferredLanguage || "en",
       emailSignature: data.emailSignature || "",
     }));
@@ -571,6 +577,42 @@ export default function SettingsPage() {
                   setForm({
                     ...form,
                     followUpDays: Number(e.target.value) || 5,
+                  })
+                }
+              />
+            </Field>
+            <Field
+              label={t("fields.rejectionCloseDays")}
+              hint={t("fields.rejectionCloseHint")}
+            >
+              <input
+                className="cmae-input"
+                type="number"
+                min={1}
+                max={90}
+                value={form.rejectionCloseDays}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    rejectionCloseDays: Number(e.target.value) || 10,
+                  })
+                }
+              />
+            </Field>
+            <Field
+              label={t("fields.staleCloseDays")}
+              hint={t("fields.staleCloseHint")}
+            >
+              <input
+                className="cmae-input"
+                type="number"
+                min={1}
+                max={90}
+                value={form.staleCloseDays}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    staleCloseDays: Number(e.target.value) || 20,
                   })
                 }
               />

@@ -8,7 +8,8 @@ import {
   trackerTimelines,
 } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
-import { getSettingsRow } from "@/lib/settings/service";
+import { getSettingsRow, getStatusSettings } from "@/lib/settings/service";
+import { effective, factsFromItemRow } from "./derive/effective";
 import {
   attachMailsToEvents,
   eventsMissingMailLinks,
@@ -83,13 +84,20 @@ export function loadTrackerItem(itemId: number): TrackerDetailItem | null {
     .where(eq(trackerItems.id, itemId))
     .get();
   if (!row) return null;
+  // Same computed-on-read status as the list (cached row.status may be stale).
+  const resolved = effective({
+    facts: factsFromItemRow(row),
+    userState:
+      row.userState || (row.status === "inactive" ? "inactive" : "active"),
+    ...getStatusSettings(),
+  });
   return {
     id: row.id,
     company: row.company,
     position: row.position,
-    status: row.status as TrackerStatus,
-    sentiment: row.sentiment,
-    waitingOn: row.waitingOn,
+    status: resolved.status,
+    sentiment: resolved.sentiment || row.sentiment,
+    waitingOn: resolved.waitingOn,
     primaryTo: row.primaryTo,
     researchJobId: row.researchJobId,
     workspaceFolder: row.workspaceFolder,

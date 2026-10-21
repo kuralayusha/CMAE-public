@@ -53,6 +53,10 @@
     "followUpDay": "Follow-up day",
     "followUpDays": "Follow-up days",
     "followUpHint": "After this many days without a reply, Tracker marks the application as ready for follow-up so you can prepare a draft. CMAE never sends emails or notifications — you always send from Gmail yourself. Recommended: 4–7 days.",
+    "rejectionCloseDays": "Close after rejection (days)",
+    "rejectionCloseHint": "After a rejection, Tracker keeps the row under Rejected so you can send a thank-you. A thank-you closes it right away; otherwise it closes after this many days. A new application or question to the same company keeps the process open.",
+    "staleCloseDays": "Close when silent (days)",
+    "staleCloseHint": "Counted from your last sent mail (application or follow-up). If nobody replies within this many days, the row closes — even if you already followed up.",
     "emailSignature": "Email signature",
     "emailSignatureHint": "Line breaks are kept as you type them; AI will not change this text",
     "workType": "Work type",
@@ -647,7 +651,8 @@
       "cvNotFound": "CV not found",
       "cvParseFailed": "Could not extract text from PDF",
       "cvLimitReached": "At most {max} CVs allowed",
-      "opsBusy": "Settings can’t be changed while Gmail sync, research, or draft preparation is running"
+      "opsBusy": "Settings can’t be changed while Gmail sync, research, or draft preparation is running",
+      "closeDaysRange": "Day values must be whole numbers between {min} and {max}"
     }
   },
   "workspaceFiles": {

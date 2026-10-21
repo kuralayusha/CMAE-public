@@ -4,7 +4,8 @@
  */
 
 import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/lib/db/client";
+import { getAppMeta, setAppMeta } from "@/lib/db/app-meta";
+import { getDb, getSqlite } from "@/lib/db/client";
 import { mailMessages, trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
@@ -33,6 +34,7 @@ import {
   tryRuleBasedAssign,
   writeAssignment,
 } from "./assign";
+import { attachConversationMails } from "./conversations";
 import { resolveIntentFast, upsertMailIntent } from "./intent";
 import { suggestTwinMerges } from "./merge-suggestions";
 import { isNoiseMail, parseAutoFlags } from "./noise";
@@ -40,6 +42,33 @@ import { refreshItemFacts } from "./refresh-item";
 
 /** Architecture: process dirty queue in chunks of 200; no 25-mail full-rebuild threshold. */
 export const DERIVE_CHUNK_SIZE = 200;
+
+/** One-shot: recompute every item once so events_json (stage 4 input) exists. */
+const EVENTS_BACKFILL_META = "derive_events_timeline_v1";
+
+function liveItemIds(): number[] {
+  return getDb()
+    .select({ id: trackerItems.id, deletedAt: trackerItems.deletedAt })
+    .from(trackerItems)
+    .all()
+    .filter((i) => !i.deletedAt)
+    .map((i) => i.id);
+}
+
+/**
+ * Stage 0 repair (architecture §2.6.5): attach unassigned mails (SENT
+ * included) of conversations that already belong to an item. Also re-tries
+ * `mail_unassigned(unmatched_outbound)`.
+ */
+function repairConversations(touched: Set<number>): number {
+  const before = touched.size;
+  for (const id of attachConversationMails()) touched.add(id);
+  if (getAppMeta(EVENTS_BACKFILL_META, getSqlite()) !== "1") {
+    for (const id of liveItemIds()) touched.add(id);
+    setAppMeta(EVENTS_BACKFILL_META, "1", getSqlite());
+  }
+  return touched.size - before;
+}
 
 function toBrief(m: typeof mailMessages.$inferSelect): MailBrief {
   return {
@@ -217,16 +246,16 @@ export async function derivePendingMails(
   drainAmbiguousRoutingSkips();
   db = getDb();
 
-  const existingCount = db
-    .select()
-    .from(trackerItems)
-    .all()
-    .filter((i) => !i.deletedAt).length;
+  const touched = new Set<number>();
+  repairConversations(touched);
 
   if (!pendingIds.length) {
+    for (const itemId of touched) {
+      refreshItemFacts(itemId, new Map(), followUpDays);
+    }
     log?.("ok", t("sync.incrementalNoNew"));
     return {
-      itemCount: existingCount,
+      itemCount: liveItemIds().length,
       attached: 0,
       created: 0,
       skipped: 0,
@@ -240,8 +269,9 @@ export async function derivePendingMails(
   let created = 0;
   let skipped = 0;
   let unassigned = 0;
-  const touched = new Set<number>();
   const allIntents: MailIntentMap = new Map();
+  /** SENT without a rule match — parked only after INBOX of the same conversation was routed. */
+  const deferredSent: (typeof mailMessages.$inferSelect)[] = [];
 
   // Process in chunks of 200
   for (let i = 0; i < pendingIds.length; i += DERIVE_CHUNK_SIZE) {
@@ -342,18 +372,10 @@ export async function derivePendingMails(
         continue;
       }
 
-      // Unmatched SENT → visible unassigned queue (architecture §2.6.1)
+      // Unmatched SENT: decided after routing + conversation attach (§2.6.1)
       if (mail.folder === "SENT") {
-        markUnassigned(mail.id, "unmatched_outbound");
         markDeriveState([mail.id], deferForBody ? "pending" : "done");
-        unassigned += 1;
-        skipped += 1;
-        log?.(
-          "system",
-          t("sync.incrementalQueuedUnmatched", {
-            subject: mail.subject.slice(0, 60) || t("mail.noSubject"),
-          }),
-        );
+        deferredSent.push(mail);
         continue;
       }
 
@@ -541,6 +563,28 @@ export async function derivePendingMails(
     }
   }
 
+  // Conversation-scoped attach: SENT (and any other mail) of a conversation
+  // follows the item its INBOX mails were just routed to.
+  repairConversations(touched);
+  for (const mail of deferredSent) {
+    const assigned = getAssignment(mail.id);
+    if (assigned) {
+      attached += 1;
+      touched.add(assigned.itemId);
+      continue;
+    }
+    // Unmatched SENT → visible unassigned queue (architecture §2.6.1)
+    markUnassigned(mail.id, "unmatched_outbound");
+    unassigned += 1;
+    skipped += 1;
+    log?.(
+      "system",
+      t("sync.incrementalQueuedUnmatched", {
+        subject: mail.subject.slice(0, 60) || t("mail.noSubject"),
+      }),
+    );
+  }
+
   db = getDb();
   for (const itemId of touched) {
     refreshItemFacts(itemId, allIntents, followUpDays, {
@@ -557,11 +601,7 @@ export async function derivePendingMails(
     );
   }
 
-  const itemCount = getDb()
-    .select()
-    .from(trackerItems)
-    .all()
-    .filter((i) => !i.deletedAt).length;
+  const itemCount = liveItemIds().length;
 
   log?.(
     "ok",

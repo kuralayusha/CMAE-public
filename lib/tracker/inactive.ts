@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
-import { getSettingsRow } from "@/lib/settings/service";
+import { getStatusSettings } from "@/lib/settings/service";
 import { suggestTwinMerges } from "./derive/merge-suggestions";
 import { effective, factsFromItemRow } from "./derive/effective";
 import { withItemsTx, type UserColumnPatch } from "./item-tx";
@@ -43,7 +43,7 @@ export function setItemsActive(ids: number[]): { updated: number; rev: number } 
   const uniq = [...new Set(ids.filter((n) => Number.isFinite(n)))];
   if (!uniq.length) return { updated: 0, rev: 0 };
 
-  const followUpDays = getSettingsRow()?.followUpDays ?? 5;
+  const statusSettings = getStatusSettings();
 
   const { rev, touched } = withItemsTx(uniq, { source: "mutation" }, (_sqlite, rows) => {
     const patches = new Map<number, UserColumnPatch>();
@@ -53,7 +53,7 @@ export function setItemsActive(ids: number[]): { updated: number; rev: number } 
       const resolved = effective({
         facts,
         userState: "active",
-        followUpDays,
+        ...statusSettings,
       });
       patches.set(id, {
         userState: "active",

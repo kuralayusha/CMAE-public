@@ -8,6 +8,12 @@ import { getDb, getSqlite } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
 import { notifyCredentialsChanged } from "@/lib/sync/credentials";
 import {
+  DEFAULT_REJECTION_CLOSE_DAYS,
+  DEFAULT_STALE_CLOSE_DAYS,
+  statusSettingsFromRow,
+  type StatusSettings,
+} from "@/lib/tracker/status-constants";
+import {
   type JobPreferences,
   parseJobPreferences,
   serializeJobPreferences,
@@ -24,6 +30,10 @@ export type SettingsPublic = {
   cvFileName: string | null;
   hasCv: boolean;
   followUpDays: number;
+  /** Rejected → closed after this many days without a thank-you */
+  rejectionCloseDays: number;
+  /** No human reply this many days after the last outbound → closed */
+  staleCloseDays: number;
   preferredLanguage: string;
   /** Newlines preserved as stored */
   emailSignature: string | null;
@@ -69,6 +79,9 @@ export function getPublicSettings(): SettingsPublic {
     cvFileName: row?.cvFileName ?? null,
     hasCv: Boolean(row?.cvText),
     followUpDays: row?.followUpDays ?? 5,
+    rejectionCloseDays:
+      row?.rejectionCloseDays ?? DEFAULT_REJECTION_CLOSE_DAYS,
+    staleCloseDays: row?.staleCloseDays ?? DEFAULT_STALE_CLOSE_DAYS,
     preferredLanguage: row?.preferredLanguage ?? "en",
     emailSignature: row?.emailSignature ?? null,
     jobPreferences: parseJobPreferences(row?.jobPreferencesJson),
@@ -83,6 +96,8 @@ export function updateSettings(input: {
   gmailAppPassword?: string;
   cursorApiKey?: string;
   followUpDays?: number;
+  rejectionCloseDays?: number;
+  staleCloseDays?: number;
   preferredLanguage?: string;
   /** Pass string (incl. "") to set; omit to keep current. Newlines kept as-is. */
   emailSignature?: string;
@@ -131,6 +146,14 @@ export function updateSettings(input: {
         ? encryptOptional(input.cursorApiKey)
         : current?.cursorApiKeyEnc,
     followUpDays: input.followUpDays ?? current?.followUpDays ?? 5,
+    rejectionCloseDays:
+      input.rejectionCloseDays ??
+      current?.rejectionCloseDays ??
+      DEFAULT_REJECTION_CLOSE_DAYS,
+    staleCloseDays:
+      input.staleCloseDays ??
+      current?.staleCloseDays ??
+      DEFAULT_STALE_CLOSE_DAYS,
     preferredLanguage:
       keepOrSet(input.preferredLanguage, current?.preferredLanguage) ?? "en",
     emailSignature:
@@ -229,3 +252,11 @@ export function getGmailCredentials(): {
 export function getSettingsRow() {
   return ensureSettingsRow();
 }
+
+/** Day thresholds for computed-on-read tracker status (effective()). */
+export function getStatusSettings(): StatusSettings {
+  return statusSettingsFromRow(ensureSettingsRow());
+}
+
+export const CLOSE_DAYS_MIN = 1;
+export const CLOSE_DAYS_MAX = 90;
