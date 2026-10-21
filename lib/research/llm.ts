@@ -1,4 +1,4 @@
-import { Agent } from "@cursor/sdk";
+import { promptWithUsage, type AiFeature } from "@/lib/ai-usage";
 import { eq } from "drizzle-orm";
 import { decryptOptional } from "@/lib/crypto/encryption";
 import { getDb } from "@/lib/db/client";
@@ -21,6 +21,7 @@ async function resolveApiKey(): Promise<string> {
 
 export async function askLlm(
   jobId: string,
+  feature: AiFeature,
   prompt: string,
   label?: string,
   agent: SpecialistId | "conductor" = "conductor",
@@ -36,24 +37,21 @@ export async function askLlm(
   const apiKey = await resolveApiKey();
   throwIfCanceled(jobId);
 
-  // Agent.prompt has no abort API — race so cancel unblocks the pipeline immediately.
-  const result = await Promise.race([
-    Agent.prompt(prompt, {
-      apiKey,
-      model: { id: "composer-2.5" },
-      local: { cwd: getAgentCwd() },
-    }),
-    whenJobAborted(jobId),
-  ]);
+  // The SDK call has no abort API — promptWithUsage races it against the job
+  // abort promise so cancel unblocks the pipeline immediately.
+  const result = await promptWithUsage({
+    feature,
+    prompt,
+    apiKey,
+    cwd: getAgentCwd(),
+    model: "composer-2.5",
+    cancelRace: whenJobAborted(jobId),
+    emptyError: (status) => new Error(t("errors.llmNoResponse", { status })),
+  });
 
   throwIfCanceled(jobId);
 
-  if (result.status === "error" || !result.result) {
-    throw new Error(
-      t("errors.llmNoResponse", { status: result.status ?? "unknown" }),
-    );
-  }
-  const text = String(result.result).trim();
+  const text = result.text;
   const preview = text.replace(/\s+/g, " ").slice(0, 160);
   speak(
     jobId,

@@ -23,6 +23,7 @@ export async function runJobFit(ctx: RunContext) {
 
   const raw = await askLlm(
     jobId,
+    "research.jobfit",
     `You are a JobFit specialist. Match open roles on this site to the candidate CV.
 Target site URL: ${ctx.url} — only roles published on THIS site. Do not invent jobs at other companies mentioned in the page copy.
 

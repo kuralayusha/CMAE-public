@@ -9,6 +9,7 @@ import { migration008WorkspaceIndex } from "./008_workspace_index";
 import { migration009CleanupLegacy } from "./009_cleanup_legacy";
 import { migration010Conversations } from "./010_conversations";
 import { migration011ConversationAi } from "./011_conversation_ai";
+import { migration012AiUsage } from "./012_ai_usage";
 import type { Migration } from "./types";
 
 export const MIGRATIONS: Migration[] = [
@@ -23,4 +24,5 @@ export const MIGRATIONS: Migration[] = [
   migration009CleanupLegacy,
   migration010Conversations,
   migration011ConversationAi,
+  migration012AiUsage,
 ];

@@ -390,6 +390,10 @@ function buildProductionServerEnv(port, masterKey) {
     "PROCESSOR_ARCHITECTURE",
     "SystemRoot",
     "APPDIR",
+    // AI usage telemetry endpoints (public URLs + anon key; no secrets)
+    "CMAE_USAGE_INGEST_URL",
+    "CMAE_USAGE_ANON_KEY",
+    "CMAE_USAGE_PRICES_URL",
   ]);
 
   const env = {};

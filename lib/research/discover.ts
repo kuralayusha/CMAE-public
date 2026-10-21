@@ -111,6 +111,7 @@ export async function planRoutesWithAi(
 
   const raw = await askLlm(
     jobId,
+    "research.discover",
     `You are a multilingual web reconnaissance planner for a job-application agent.
 The site may be in ANY language (Chinese, Arabic, Italian, Turkish, English, etc.).
 Do NOT assume English path names. Infer meaning from link text + URL + page context.
@@ -220,6 +221,7 @@ export async function rankEmailsWithAi(
 
   const raw = await askLlm(
     jobId,
+    "research.discover",
     `You rank company emails for a job seeker cold/application outreach.
 Company (TARGET): ${companyName}
 Target URL: ${targetUrl || "(given site)"}
@@ -275,6 +277,7 @@ export async function planExternalQueriesWithAi(
 ): Promise<string[]> {
   const raw = await askLlm(
     jobId,
+    "research.discover",
     `Generate 2-3 web search queries to learn more about THIS target only: "${companyName}" at ${baseUrl}.
 Site language hint: ${siteLanguage}
 Mix languages if useful (local press + English). Include platforms that make sense for THAT market (not always LinkedIn/Western sites).

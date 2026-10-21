@@ -73,7 +73,7 @@ ${JSON.stringify(
 async function classifyBatch(
   mails: MailBrief[],
 ): Promise<MailIntentRecord[]> {
-  const text = await askTrackerLlm(buildPrompt(mails));
+  const text = await askTrackerLlm(buildPrompt(mails), { feature: "tracker.signals" });
   const parsed = extractJson<AiSignalsResponse>(text);
   if (!parsed?.signals || !Array.isArray(parsed.signals)) return [];
 

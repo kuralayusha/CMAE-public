@@ -39,6 +39,7 @@ ${ctx.user.cvText.slice(0, 2000)}
 
   const raw = await askLlm(
     jobId,
+    "research.reviewer",
     `You are a strict Application Package Reviewer.
 Score each specialist 0-100 and overall 0-100.
 Pass threshold = ${THRESHOLD}.

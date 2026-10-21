@@ -953,6 +953,7 @@ export function OnboardingWizard() {
                 />
               </Field>
             </div>
+            <p className="cmae-form-hint">{t("onboarding.telemetryNotice")}</p>
           </>
         ) : null}
 

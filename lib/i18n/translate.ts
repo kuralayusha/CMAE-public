@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Agent } from "@cursor/sdk";
+import { promptWithUsage } from "@/lib/ai-usage";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
@@ -54,7 +54,7 @@ async function resolveApiKey(): Promise<string> {
 
 /**
  * Cursor SDK persists under `$HOME/.cursor/projects/...`.
- * Vercel home is not writable — relocate HOME + cwd to /tmp before Agent.prompt.
+ * Vercel home is not writable — relocate HOME + cwd to /tmp before the SDK call.
  */
 function ensureWritableCursorHome(): string {
   if (isVercelRuntime()) {
@@ -85,17 +85,15 @@ function ensureWritableCursorHome(): string {
 async function askTranslateLlm(prompt: string): Promise<string> {
   const cwd = ensureWritableCursorHome();
   const apiKey = await resolveApiKey();
-  const result = await Agent.prompt(prompt, {
+  const result = await promptWithUsage({
+    feature: "i18n.translate",
+    prompt,
     apiKey,
-    model: { id: "composer-2.5" },
-    local: { cwd },
+    cwd,
+    model: "composer-2.5",
+    emptyError: (status) => new Error(t("errors.llmNoResponse", { status })),
   });
-  if (result.status === "error" || !result.result) {
-    throw new Error(
-      t("errors.llmNoResponse", { status: result.status ?? "unknown" }),
-    );
-  }
-  return String(result.result).trim();
+  return result.text;
 }
 
 function extractJsonObject(text: string): LocalePack | null {

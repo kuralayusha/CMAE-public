@@ -1,9 +1,17 @@
 /**
  * Pure LLM transport (no DB / i18n / server-only imports) so the derive
- * stages and the eval harness share one call path.
+ * stages and the eval harness share one call path. Persistence (usage rows,
+ * response cache) is injected through lib/ai-usage's registered backend — the
+ * eval harness never registers one, so it stays DB-free.
  */
 
-import { Agent } from "@cursor/sdk";
+import {
+  LlmTimeoutError,
+  promptWithUsage,
+  type PromptWithUsageInput,
+} from "../ai-usage/call";
+
+export { LlmTimeoutError };
 
 export const TRACKER_LLM_MODEL = "composer-2.5";
 export const TRACKER_LLM_TIMEOUT_MS = 90_000;
@@ -11,48 +19,18 @@ export const TRACKER_LLM_TIMEOUT_MS = 90_000;
 /** prompt → raw model text. Throws on timeout / empty response. */
 export type LlmFn = (prompt: string) => Promise<string>;
 
-export class LlmTimeoutError extends Error {
-  constructor(seconds: number) {
-    super(`LLM timeout after ${seconds}s`);
-    this.name = "LlmTimeoutError";
-  }
-}
-
-export async function promptLlm(input: {
-  prompt: string;
-  apiKey: string;
-  cwd: string;
-  model?: string;
-  timeoutMs?: number;
-  timeoutError?: () => Error;
-  emptyError?: (status: string) => Error;
-}): Promise<string> {
-  const timeoutMs = input.timeoutMs ?? TRACKER_LLM_TIMEOUT_MS;
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const result = await Promise.race([
-      Agent.prompt(input.prompt, {
-        apiKey: input.apiKey,
-        model: { id: input.model ?? TRACKER_LLM_MODEL },
-        local: { cwd: input.cwd },
-      }),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          reject(
-            input.timeoutError?.() ??
-              new LlmTimeoutError(Math.round(timeoutMs / 1000)),
-          );
-        }, timeoutMs);
-      }),
-    ]);
-    if (result.status === "error" || !result.result) {
-      const status = String(result.status ?? "unknown");
-      throw input.emptyError?.(status) ?? new Error(`LLM returned no result (${status})`);
-    }
-    return String(result.result).trim();
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-  }
+export async function promptLlm(
+  input: Omit<PromptWithUsageInput, "model" | "timeoutMs"> & {
+    model?: string;
+    timeoutMs?: number;
+  },
+): Promise<string> {
+  const r = await promptWithUsage({
+    ...input,
+    model: input.model ?? TRACKER_LLM_MODEL,
+    timeoutMs: input.timeoutMs ?? TRACKER_LLM_TIMEOUT_MS,
+  });
+  return r.text;
 }
 
 /** First JSON object / array in model text (tolerates prose and ``` fences). */

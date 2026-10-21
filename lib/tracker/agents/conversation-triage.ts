@@ -16,7 +16,12 @@ import type {
   TriageResult,
 } from "../derive/stage-store";
 
-export const TRIAGE_PROMPT_VERSION = 3;
+/**
+ * v4: prompt layout is cache-friendly — static instructions + JSON schema
+ * first, slowly-changing known roles next, the variable transcripts LAST, so
+ * the provider's prefix cache (cacheReadTokens) can hit.
+ */
+export const TRIAGE_PROMPT_VERSION = 4;
 
 const SENDER_ROLES: readonly SenderRole[] = [
   "employer",
@@ -79,11 +84,11 @@ For EACH conversation decide:
 - domains: the role of every email domain in the conversation other than ME's: "employer" | "ats" | "agency" | "job_board" | "personal" (free-mail / private person).
 
 Messages marked OUTGOING were written by ME. Quoted history and ME's signature were removed.
-${hints ? `Known domain roles from earlier conversations (use as hints): ${hints}\n` : ""}
+
 Return ONLY JSON, one entry per conversation id:
 {"conversations":[{"id":"C1","is_job_process":true,"employer":"Acme","intermediary":"Personio","intermediary_kind":"ats","position":"Frontend Developer","ref_code":null,"counterpart_email":"jobs@acme.com","domains":[{"domain":"acme.com","role":"employer"},{"domain":"personio.de","role":"ats"}]}]}
 
-${convs.map((c) => renderTranscript(`Conversation ${c.label}`, c.transcript, opts.userEmails)).join("\n")}`;
+${hints ? `Known domain roles from earlier conversations (use as hints): ${hints}\n\n` : ""}${convs.map((c) => renderTranscript(`Conversation ${c.label}`, c.transcript, opts.userEmails)).join("\n")}`;
 }
 
 function str(v: unknown, max = 200): string | null {

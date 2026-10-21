@@ -274,7 +274,7 @@ After SUBJECT/BODY, add exactly one extra line (not inside BODY):
 SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, tr, de>
 `;
 
-  const rawText = await askTrackerLlm(prompt);
+  const rawText = await askTrackerLlm(prompt, { feature: "tracker.followup" });
   const { text, language: sendLanguage } = extractSendLanguage(rawText);
   const parsed = parseSubjectBody(text);
   if (!parsed) {
@@ -323,7 +323,7 @@ Do not invent claims. Output SUBJECT:/BODY: only.
 Source:
 ${toWrite}
 `;
-      const translatedRaw = await askTrackerLlm(translatePrompt);
+      const translatedRaw = await askTrackerLlm(translatePrompt, { feature: "tracker.followup" });
       const translatedParsed = parseSubjectBody(translatedRaw);
       if (translatedParsed) {
         const translatedSigned = applySignatureToMailDraft(

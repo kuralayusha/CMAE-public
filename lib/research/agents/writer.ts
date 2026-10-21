@@ -116,6 +116,7 @@ export async function runWriter(ctx: RunContext) {
 
   ctx.draftSite = await askLlm(
     jobId,
+    "research.writer",
     `You are an Application Writer specialist.
 Write a personalized application email in language: ${ctx.siteLanguage} (match the website / company's working language).
 
@@ -157,6 +158,7 @@ Short, concrete, no fabricated experience. Follow MAIL CRAFT structure and lengt
   } else {
     ctx.draftPreferred = await askLlm(
       jobId,
+      "research.writer",
       `Rewrite the email in preferred language code "${user.preferredLang}" (natural tone for that language).
 Keep the same facts, structure, personalization, and length discipline as MAIL CRAFT.
 Do not inflate length; do not add fabricated claims.

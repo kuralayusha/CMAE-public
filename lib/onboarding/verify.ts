@@ -1,4 +1,4 @@
-import { Agent } from "@cursor/sdk";
+import { promptWithUsage } from "@/lib/ai-usage";
 import { ImapFlow } from "imapflow";
 import { eq } from "drizzle-orm";
 import { decryptOptional } from "@/lib/crypto/encryption";
@@ -89,6 +89,8 @@ export async function verifyGmailImap(): Promise<VerifyCheck> {
   }
 }
 
+class NoResponseError extends Error {}
+
 /** Live Cursor SDK call — confirms the API key works. */
 export async function verifyCursorApiKey(): Promise<VerifyCheck> {
   const apiKey = resolveCursorApiKey();
@@ -97,26 +99,20 @@ export async function verifyCursorApiKey(): Promise<VerifyCheck> {
   }
 
   try {
-    const result = await Agent.prompt(
-      "Reply with exactly one word: pong. No other text.",
-      {
-        apiKey,
-        model: { id: "composer-2.5" },
-        local: { cwd: getAgentCwd() },
-      },
-    );
-
-    if (result.status === "error" || !result.result) {
-      return {
-        ok: false,
-        error: t("onboarding.verify.cursorNoResponse", {
-          status: result.status ?? "unknown",
-        }),
-      };
-    }
+    // Live check: never cached (feature policy), but its tokens are metered.
+    await promptWithUsage({
+      feature: "onboarding.verify",
+      prompt: "Reply with exactly one word: pong. No other text.",
+      apiKey,
+      cwd: getAgentCwd(),
+      model: "composer-2.5",
+      emptyError: (status) =>
+        new NoResponseError(t("onboarding.verify.cursorNoResponse", { status })),
+    });
     persistEnvCursorKeyIfNeeded();
     return { ok: true };
   } catch (err) {
+    if (err instanceof NoResponseError) return { ok: false, error: err.message };
     const msg = err instanceof Error ? err.message : String(err);
     return { ok: false, error: humanizeCursorError(msg) };
   }

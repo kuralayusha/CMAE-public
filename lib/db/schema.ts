@@ -28,6 +28,10 @@ export const settings = sqliteTable("settings", {
   jobPreferencesJson: text("job_preferences_json"),
   /** ISO timestamp when forced onboarding wizard finished; null = locked */
   onboardingCompletedAt: text("onboarding_completed_at"),
+  /** AI usage counters upload consent (default on); local metering always runs. */
+  usageTelemetryEnabled: integer("usage_telemetry_enabled", { mode: "boolean" })
+    .notNull()
+    .default(true),
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -440,4 +444,43 @@ export const workspaceFolders = sqliteTable("workspace_folders", {
   folder: text("folder").primaryKey(),
   present: integer("present").notNull(),
   scannedAt: text("scanned_at"),
+});
+
+/** AI call measurement + upload queue. Counters/labels only — no text. */
+export const aiUsageEvents = sqliteTable("ai_usage_events", {
+  eventId: text("event_id").primaryKey(),
+  ts: text("ts").notNull(),
+  feature: text("feature").notNull(),
+  syncMode: text("sync_mode"),
+  model: text("model").notNull(),
+  priceVersion: text("price_version").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  cacheReadTokens: integer("cache_read_tokens").notNull().default(0),
+  cacheWriteTokens: integer("cache_write_tokens").notNull().default(0),
+  reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+  costMicroUsd: integer("cost_micro_usd").notNull().default(0),
+  durationMs: integer("duration_ms").notNull().default(0),
+  status: text("status").notNull(),
+  usageMissing: integer("usage_missing").notNull().default(0),
+  cacheHit: integer("cache_hit").notNull().default(0),
+  savedInputTokens: integer("saved_input_tokens").notNull().default(0),
+  savedCostMicroUsd: integer("saved_cost_micro_usd").notNull().default(0),
+  uploadedAt: text("uploaded_at"),
+});
+
+/** App-side prompt→response cache (mail-derived text; wiped on account switch). */
+export const aiResponseCache = sqliteTable("ai_response_cache", {
+  key: text("key").primaryKey(),
+  feature: text("feature").notNull(),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  response: text("response").notNull(),
+  bytes: integer("bytes").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  lastHitAt: integer("last_hit_at").notNull(),
+  hits: integer("hits").notNull().default(0),
+  ttlAt: integer("ttl_at").notNull(),
+  origInputTokens: integer("orig_input_tokens").notNull().default(0),
+  origCostMicroUsd: integer("orig_cost_micro_usd").notNull().default(0),
 });

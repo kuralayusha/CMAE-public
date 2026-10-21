@@ -50,6 +50,16 @@ export async function PUT(req: Request) {
     );
   }
 
+  if (
+    body.usageTelemetryEnabled !== undefined &&
+    typeof body.usageTelemetryEnabled !== "boolean"
+  ) {
+    return NextResponse.json(
+      { error: "usageTelemetryEnabled must be a boolean" },
+      { status: 400 },
+    );
+  }
+
   // K2: different Gmail address requires explicit confirm + wipe.
   if (gmailAddress !== undefined && wouldSwitchGmailAccount(gmailAddress)) {
     const preview = previewAccountSwitch(gmailAddress);
@@ -110,6 +120,10 @@ export async function PUT(req: Request) {
     jobPreferences:
       body.jobPreferences && typeof body.jobPreferences === "object"
         ? body.jobPreferences
+        : undefined,
+    usageTelemetryEnabled:
+      typeof body.usageTelemetryEnabled === "boolean"
+        ? body.usageTelemetryEnabled
         : undefined,
   });
   // Env-only key → copy into SQLite so desktop stays onboarded without .env

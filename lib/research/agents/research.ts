@@ -59,6 +59,7 @@ export async function runResearch(ctx: RunContext) {
   const siteLang = ctx.siteLanguage || "en";
   const researchRaw = await askLlm(
     jobId,
+    "research.research",
     `You are a Company Research specialist. Markdown research note. No fabricated metrics.
 
 CRITICAL LANGUAGE RULE: Write the ENTIRE note in language code "${siteLang}" (the company website language). Do not use any other language for headings or body text.
@@ -105,6 +106,7 @@ Required sections (## headings, in this order — translate heading text into "$
   if (!sameLang) {
     const translatedRaw = await askLlm(
       jobId,
+      "research.research",
       `Rewrite this company research note in preferred language code "${user.preferredLang}" (natural tone for that language).
 Keep the same facts, structure, and section headings (translate headings). Do not invent metrics or claims.
 

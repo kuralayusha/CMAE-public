@@ -39,6 +39,7 @@ type Settings = {
   preferredLanguage: string;
   emailSignature: string | null;
   jobPreferences?: JobPreferences;
+  usageTelemetryEnabled?: boolean;
 };
 
 type CvItem = {
@@ -216,6 +217,22 @@ export default function SettingsPage() {
       setDiagnosticsErr(
         err instanceof Error ? err.message : String(err),
       );
+    }
+  }
+
+  async function toggleTelemetry(enabled: boolean) {
+    const prev = meta?.usageTelemetryEnabled ?? true;
+    setMeta((m) => (m ? { ...m, usageTelemetryEnabled: enabled } : m));
+    try {
+      const res = await fetch("/api/settings/telemetry", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error("save failed");
+    } catch {
+      setMeta((m) => (m ? { ...m, usageTelemetryEnabled: prev } : m));
+      flash(t("settings.telemetrySaveFailed"), "err");
     }
   }
 
@@ -898,6 +915,20 @@ export default function SettingsPage() {
               </span>
             ) : null}
           </div>
+
+          <SettingsAcc title={t("settings.accPrivacy")}>
+            <label className="cmae-check">
+              <input
+                type="checkbox"
+                checked={meta?.usageTelemetryEnabled ?? true}
+                onChange={(e) => void toggleTelemetry(e.target.checked)}
+              />
+              {t("settings.telemetryToggle")}
+            </label>
+            <p className="cmae-form-hint">{t("settings.telemetrySent")}</p>
+            <p className="cmae-form-hint">{t("settings.telemetryNotSent")}</p>
+            <p className="cmae-form-hint">{t("settings.telemetryHint")}</p>
+          </SettingsAcc>
 
           <SettingsAcc title={t("settings.accDiagnostics")}>
             <p className="cmae-form-hint">{t("settings.diagnosticsHint")}</p>

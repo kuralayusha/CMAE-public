@@ -27,3 +27,10 @@ void import("./lib/sync/scheduler")
   .catch((err) => {
     console.error("[instrumentation] sync scheduler failed to start", err);
   });
+
+/** Non-blocking: AI usage upload worker (counters only; no-op when telemetry is off / unconfigured). */
+void import("./lib/ai-usage/uploader")
+  .then((u) => u.startUsageUploader())
+  .catch((err) => {
+    console.error("[instrumentation] usage uploader failed to start", err);
+  });

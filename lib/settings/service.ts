@@ -39,6 +39,8 @@ export type SettingsPublic = {
   emailSignature: string | null;
   jobPreferences: JobPreferences;
   onboardingCompletedAt: string | null;
+  /** Anonymous AI usage counters upload (default on). */
+  usageTelemetryEnabled: boolean;
   updatedAt: string | null;
 };
 
@@ -86,6 +88,7 @@ export function getPublicSettings(): SettingsPublic {
     emailSignature: row?.emailSignature ?? null,
     jobPreferences: parseJobPreferences(row?.jobPreferencesJson),
     onboardingCompletedAt: row?.onboardingCompletedAt ?? null,
+    usageTelemetryEnabled: row?.usageTelemetryEnabled ?? true,
     updatedAt: row?.updatedAt ?? null,
   };
 }
@@ -104,6 +107,7 @@ export function updateSettings(input: {
   cvText?: string;
   cvFileName?: string;
   jobPreferences?: JobPreferences | Partial<JobPreferences>;
+  usageTelemetryEnabled?: boolean;
 }) {
   const db = getDb();
   const current = ensureSettingsRow();
@@ -172,6 +176,8 @@ export function updateSettings(input: {
     cvFileName:
       input.cvFileName !== undefined ? input.cvFileName : current?.cvFileName,
     jobPreferencesJson,
+    usageTelemetryEnabled:
+      input.usageTelemetryEnabled ?? current?.usageTelemetryEnabled ?? true,
     updatedAt: new Date().toISOString(),
   };
 

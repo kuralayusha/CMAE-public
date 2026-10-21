@@ -368,7 +368,7 @@ export async function generateTimelineSummary(
   input: GenerateTimelineInput,
 ): Promise<GenerateTimelineResult> {
   const fallbackOrigin: TimelineOrigin = input.hasAppOrigin ? "mixed" : "unknown";
-  const text = await askTrackerLlm(buildPrompt(input));
+  const text = await askTrackerLlm(buildPrompt(input), { feature: "tracker.timeline" });
   const parsed = extractJson<{
     origin?: string;
     events?: unknown[];

@@ -120,6 +120,22 @@ export function wipeDatabaseContents(opts?: {
   if (!sqlite) throw new Error("SQLite handle missing");
   const dbEpoch = Math.max(1, opts?.dbEpoch ?? 1);
   const credentialsVersion = Math.max(0, opts?.credentialsVersion ?? 0);
+  // Consent + anonymous-id backup must survive a wipe (opt-out stays opted out;
+  // the userData/anon-id file is never touched here).
+  let telemetryEnabled = 1;
+  let anonBackup = "";
+  try {
+    const row = sqlite
+      .prepare(`SELECT usage_telemetry_enabled AS v FROM settings WHERE id = 1`)
+      .get() as { v: number } | undefined;
+    if (row && row.v === 0) telemetryEnabled = 0;
+    const b = sqlite
+      .prepare(`SELECT value FROM app_meta WHERE key = 'anon_id_backup'`)
+      .get() as { value: string } | undefined;
+    anonBackup = b?.value ?? "";
+  } catch {
+    /* columns/tables may not exist mid-upgrade */
+  }
   sqlite.exec(`
     PRAGMA foreign_keys = OFF;
     DELETE FROM tracker_timelines;
@@ -132,14 +148,19 @@ export function wipeDatabaseContents(opts?: {
     DELETE FROM app_meta;
     PRAGMA foreign_keys = ON;
     INSERT INTO sync_state (id, window_days) VALUES (1, 30);
-    INSERT INTO settings (id, follow_up_days, preferred_language)
-      VALUES (1, 5, 'en');
+    INSERT INTO settings (id, follow_up_days, preferred_language, usage_telemetry_enabled)
+      VALUES (1, 5, 'en', ${telemetryEnabled});
     INSERT INTO app_meta (key, value) VALUES ('tracker_revision', '0');
     INSERT INTO app_meta (key, value) VALUES ('db_epoch', '${dbEpoch}');
     INSERT INTO app_meta (key, value) VALUES ('credentials_version', '${credentialsVersion}');
     INSERT INTO app_meta (key, value) VALUES ('account_id', '');
     INSERT INTO app_meta (key, value) VALUES ('maintenance_until', '');
   `);
+  if (anonBackup) {
+    sqlite
+      .prepare(`INSERT OR REPLACE INTO app_meta (key, value) VALUES ('anon_id_backup', ?)`)
+      .run(anonBackup);
+  }
   for (const table of [
     "sync_jobs",
     "mail_assignments",
@@ -157,6 +178,8 @@ export function wipeDatabaseContents(opts?: {
     "gmail_drafts",
     "workspace_files",
     "workspace_folders",
+    // mail-derived cached model output; usage events intentionally stay
+    "ai_response_cache",
   ]) {
     try {
       sqlite.exec(`DELETE FROM ${table}`);

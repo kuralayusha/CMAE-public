@@ -181,6 +181,9 @@ function deleteOldAccountData(db: Database.Database, oldAccountId: string) {
 
   // Timelines keyed by mail fingerprint — wipe all (safe after mail delete)
   db.prepare(`DELETE FROM tracker_timelines`).run();
+  // Cached model responses hold mail-derived text of the old account.
+  // (ai_usage_events deliberately stay: spend history belongs to the user.)
+  db.prepare(`DELETE FROM ai_response_cache`).run();
 
   db.prepare(`DELETE FROM gmail_drafts WHERE account_id = ?`).run(oldAccountId);
   db.prepare(`DELETE FROM mail_fetch_failures WHERE account_id = ?`).run(

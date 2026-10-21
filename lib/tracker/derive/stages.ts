@@ -34,6 +34,7 @@ import { SyncCanceledError, throwIfSyncCanceled } from "../cancel";
 import { normalizeCompanyKey, parseEmailAddr } from "../identity";
 import { softDeleteItemInTx } from "../item-tx";
 import { askTrackerLlm, TRACKER_LLM_MODEL } from "../llm";
+import type { AiFeature } from "@/lib/ai-usage/features";
 import type { LlmFn } from "../llm-core";
 import { normalizeMailText } from "../signals";
 import type { SyncProgressFn } from "../types";
@@ -180,7 +181,7 @@ class StageContext {
   readonly userEmails: string[];
   readonly accountId: string;
   private signature: SignatureModel | null = null;
-  readonly llm: LlmFn;
+  private readonly baseLlm: LlmFn | undefined;
 
   constructor(
     readonly mode: StageMode,
@@ -191,12 +192,28 @@ class StageContext {
   ) {
     this.accountId = getFencingTokens().accountId || userEmail;
     this.userEmails = [...new Set([userEmail, this.accountId].filter(Boolean))];
-    const base = llm ?? askTrackerLlm;
-    this.llm = async (prompt) => {
+    this.baseLlm = llm;
+  }
+
+  /**
+   * LLM function for one stage. The feature label is explicit per stage; hard
+   * sync passes bypassCache so the response cache is skipped (the fresh answer
+   * still replaces the cached one).
+   */
+  llmFor(feature: AiFeature, promptVersion?: number): LlmFn {
+    const hard = this.mode === "hard";
+    return async (prompt) => {
       throwIfSyncCanceled(this.signal);
       const t0 = Date.now();
       try {
-        return await base(prompt);
+        return this.baseLlm
+          ? await this.baseLlm(prompt)
+          : await askTrackerLlm(prompt, {
+              feature,
+              syncMode: this.mode,
+              bypassCache: hard,
+              promptVersion,
+            });
       } finally {
         this.stats.llmCalls += 1;
         this.stats.llmMs += Date.now() - t0;
@@ -280,7 +297,7 @@ async function runTriage(
   ctx.log?.("think", t("sync.stageTriageStart", { count: todo.length }));
   let aiError: string | null = null;
   const outcomes = await triageConversations(todo, {
-    llm: ctx.llm,
+    llm: ctx.llmFor("tracker.sync.triage", TRIAGE_PROMPT_VERSION),
     userEmails: ctx.userEmails,
     knownRoles: () => listSenderRoles(ctx.accountId),
     concurrency: LLM_CONCURRENCY,
@@ -539,7 +556,7 @@ async function runIdentity(
     identityConversation(x.conv, x.triage, mails, ctx.userEmails),
   );
   const decisions = await resolveConversations(idConvs, items, roles, {
-    llm: ctx.llm,
+    llm: ctx.llmFor("tracker.sync.identity"),
     createItem: (c) => {
       ctx.checkpoint();
       return createItem(c);
@@ -882,7 +899,7 @@ async function runEvents(
     context: eventContext(j.conv, j.itemId, mails),
   }));
   const outcomes = await extractConversationEvents(prepared, {
-    llm: ctx.llm,
+    llm: ctx.llmFor("tracker.sync.events", EVENTS_PROMPT_VERSION),
     userEmails: ctx.userEmails,
     concurrency: LLM_CONCURRENCY,
     signal: ctx.signal,

@@ -301,7 +301,7 @@ ${JSON.stringify(
 )}
 `;
 
-  const text = await askTrackerLlm(prompt);
+  const text = await askTrackerLlm(prompt, { feature: "tracker.match" });
   const parsed = extractJson<AiResponse>(text);
   if (!parsed?.groups || !Array.isArray(parsed.groups)) return null;
 

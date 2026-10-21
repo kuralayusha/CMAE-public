@@ -118,6 +118,7 @@ export async function runScout(ctx: RunContext) {
 
   const nameRaw = await askLlm(
     jobId,
+    "research.scout",
     `Identify the TARGET entity that OWNS this exact URL. The user gave this URL as the research/application target.
 
 HARD RULES:
