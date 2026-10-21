@@ -5,9 +5,12 @@
  */
 
 const EMBEDDED = {
-  ingestUrl: "",
-  anonKey: "",
-  pricesUrl: "",
+  ingestUrl: "https://your-project-ref.supabase.co/functions/v1/cmae-ingest",
+  // Public anon key (project is test DB `example-project`); endpoints do not
+  // require a JWT, the key is only sent for gateway compatibility.
+  anonKey:
+    "REDACTED_JWT",
+  pricesUrl: "https://your-project-ref.supabase.co/functions/v1/cmae-prices",
 };
 
 const env = (name: string) => process.env[name]?.trim() ?? "";
