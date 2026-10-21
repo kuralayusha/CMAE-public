@@ -10,18 +10,47 @@ let sqlite: Database.Database | null = null;
 let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
 /** Path we opened — if getAppRoot flips (sticky/env), reopen the right file. */
 let openedDbPath: string | null = null;
+/**
+ * Inode of the file we opened. Wipe / sibling rm can replace `cmae.db` under an
+ * open handle (ghost inode); path string stays equal but directory entry is a
+ * new empty file — writes then vanish from status/CLI readers.
+ */
+let openedDbIno: number | null = null;
+let openedDbDev: number | null = null;
 
 function dbPaths() {
   const dataDir = getDataDir();
   return { dataDir, dbPath: path.join(dataDir, "cmae.db") };
 }
 
+function pathIdentity(
+  dbPath: string,
+): { ino: number; dev: number } | null {
+  try {
+    const st = fs.statSync(/*turbopackIgnore: true*/ dbPath);
+    return { ino: st.ino, dev: st.dev };
+  } catch {
+    return null;
+  }
+}
+
 export function getDb() {
   const { dbPath } = dbPaths();
-  if (dbInstance && openedDbPath === dbPath && sqlite?.open) {
-    return dbInstance;
+  const onDisk = pathIdentity(dbPath);
+  const handleLive =
+    Boolean(dbInstance && openedDbPath === dbPath && sqlite?.open);
+  const sameInode =
+    handleLive &&
+    onDisk != null &&
+    openedDbIno != null &&
+    openedDbDev != null &&
+    onDisk.ino === openedDbIno &&
+    onDisk.dev === openedDbDev;
+  if (handleLive && sameInode) {
+    return dbInstance!;
   }
-  // Path flip or closed handle — drop stale drizzle wrapper before reopen.
+  // Path flip, closed handle, or file replaced under us (ghost inode) —
+  // drop stale drizzle wrapper before reopen.
   // Callers must not cache the returned drizzle instance across awaits; a
   // concurrent closeDb()/wipe can invalidate it while IMAP sync is in flight.
   if (dbInstance || sqlite) closeDb();
@@ -34,6 +63,9 @@ export function getDb() {
 
   dbInstance = drizzle(sqlite, { schema });
   openedDbPath = dbPath;
+  const opened = pathIdentity(dbPath);
+  openedDbIno = opened?.ino ?? null;
+  openedDbDev = opened?.dev ?? null;
   runMigrations(sqlite, dbPath);
   return dbInstance;
 }
@@ -67,6 +99,8 @@ export function closeDb() {
   sqlite = null;
   dbInstance = null;
   openedDbPath = null;
+  openedDbIno = null;
+  openedDbDev = null;
 }
 
 /**

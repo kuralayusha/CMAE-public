@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/app-meta";
 import { clearMaintenance, prepareResetFencing } from "@/lib/sync/engine";
 import {
+  closeDb,
   getDb,
   wipeDatabaseContents,
   wipeDatabaseFiles,
@@ -39,15 +40,20 @@ export async function resetAppForOnboarding(): Promise<void> {
   }
 
   clearAllResearchJobs();
-  wipeWorkspaceContents();
-  wipeLegacySiblingAppData();
   try {
     clearUserPack();
   } catch {
     /* ignore */
   }
 
-  // 1) Always clear while connected (reliable). Keep elevated fencing tokens
+  // Close before any data/ deletion — otherwise macOS case-insensitive
+  // CMAE/cmae sibling wipe (or file recreate) leaves writes on a ghost inode
+  // while status/CLI open the new empty directory entry.
+  closeDb();
+  wipeWorkspaceContents();
+  wipeLegacySiblingAppData();
+
+  // 1) Reopen + clear while connected (reliable). Keep elevated fencing tokens
   // so a pre-wipe job that held epoch 0 cannot write back after wipe.
   wipeDatabaseContents({
     dbEpoch: fenceEpoch,
@@ -104,7 +110,21 @@ function wipeWorkspaceContents(): void {
  * Electron productName is "CMAE" but older builds used "cmae". If both
  * Application Support folders exist, wipe can clear one while sync still
  * reads the other — Phase A "454 mails + 100 apps after wipe" symptom.
+ *
+ * On case-insensitive volumes (typical macOS), CMAE and cmae are the same
+ * directory — string inequality is not enough; compare device+inode.
  */
+function samePathIdentity(a: string, b: string): boolean {
+  try {
+    if (path.resolve(a) === path.resolve(b)) return true;
+    const sa = fs.statSync(a);
+    const sb = fs.statSync(b);
+    return sa.ino === sb.ino && sa.dev === sb.dev;
+  } catch {
+    return false;
+  }
+}
+
 function wipeLegacySiblingAppData(): void {
   try {
     const current = path.resolve(getAppRoot());
@@ -114,10 +134,13 @@ function wipeLegacySiblingAppData(): void {
       base === "CMAE" ? "cmae" : base === "cmae" ? "CMAE" : null;
     if (!siblingName) return;
     const sibling = path.join(parent, siblingName);
-    if (!fs.existsSync(sibling) || path.resolve(sibling) === current) return;
+    if (!fs.existsSync(sibling) || samePathIdentity(sibling, current)) return;
     for (const sub of ["data", "workspace"] as const) {
       const dir = path.join(sibling, sub);
       if (!fs.existsSync(dir)) continue;
+      // Never delete the live app's own data/workspace via a case alias.
+      const live = path.join(current, sub);
+      if (fs.existsSync(live) && samePathIdentity(dir, live)) continue;
       fs.rmSync(dir, { recursive: true, force: true });
     }
   } catch {
