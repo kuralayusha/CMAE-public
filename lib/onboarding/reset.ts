@@ -96,10 +96,13 @@ export async function resetAppForOnboarding(): Promise<void> {
 function wipeWorkspaceContents(): void {
   const root = getWorkspaceRoot();
   try {
-    fs.mkdirSync(root, { recursive: true });
-    for (const name of fs.readdirSync(root)) {
+    fs.mkdirSync(/*turbopackIgnore: true*/ root, { recursive: true });
+    for (const name of fs.readdirSync(/*turbopackIgnore: true*/ root)) {
       if (name === "." || name === "..") continue;
-      fs.rmSync(path.join(root, name), { recursive: true, force: true });
+      fs.rmSync(
+        path.join(/*turbopackIgnore: true*/ root, name),
+        { recursive: true, force: true },
+      );
     }
   } catch {
     /* ignore */
@@ -116,9 +119,11 @@ function wipeWorkspaceContents(): void {
  */
 function samePathIdentity(a: string, b: string): boolean {
   try {
-    if (path.resolve(a) === path.resolve(b)) return true;
-    const sa = fs.statSync(a);
-    const sb = fs.statSync(b);
+    if (path.resolve(/*turbopackIgnore: true*/ a) === path.resolve(/*turbopackIgnore: true*/ b)) {
+      return true;
+    }
+    const sa = fs.statSync(/*turbopackIgnore: true*/ a);
+    const sb = fs.statSync(/*turbopackIgnore: true*/ b);
     return sa.ino === sb.ino && sa.dev === sb.dev;
   } catch {
     return false;
@@ -127,21 +132,31 @@ function samePathIdentity(a: string, b: string): boolean {
 
 function wipeLegacySiblingAppData(): void {
   try {
-    const current = path.resolve(getAppRoot());
+    const current = path.resolve(/*turbopackIgnore: true*/ getAppRoot());
     const parent = path.dirname(current);
     const base = path.basename(current);
     const siblingName =
       base === "CMAE" ? "cmae" : base === "cmae" ? "CMAE" : null;
     if (!siblingName) return;
-    const sibling = path.join(parent, siblingName);
-    if (!fs.existsSync(sibling) || samePathIdentity(sibling, current)) return;
+    const sibling = path.join(/*turbopackIgnore: true*/ parent, siblingName);
+    if (
+      !fs.existsSync(/*turbopackIgnore: true*/ sibling) ||
+      samePathIdentity(sibling, current)
+    ) {
+      return;
+    }
     for (const sub of ["data", "workspace"] as const) {
-      const dir = path.join(sibling, sub);
-      if (!fs.existsSync(dir)) continue;
+      const dir = path.join(/*turbopackIgnore: true*/ sibling, sub);
+      if (!fs.existsSync(/*turbopackIgnore: true*/ dir)) continue;
       // Never delete the live app's own data/workspace via a case alias.
-      const live = path.join(current, sub);
-      if (fs.existsSync(live) && samePathIdentity(dir, live)) continue;
-      fs.rmSync(dir, { recursive: true, force: true });
+      const live = path.join(/*turbopackIgnore: true*/ current, sub);
+      if (
+        fs.existsSync(/*turbopackIgnore: true*/ live) &&
+        samePathIdentity(dir, live)
+      ) {
+        continue;
+      }
+      fs.rmSync(/*turbopackIgnore: true*/ dir, { recursive: true, force: true });
     }
   } catch {
     /* best-effort */
