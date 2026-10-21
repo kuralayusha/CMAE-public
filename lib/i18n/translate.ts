@@ -223,8 +223,9 @@ export async function translateLocalePack(
             );
           }
         }
-        pack = mergeShape(en, deepMergePack(prior, out));
       });
+      // Assign outside the ALS callback so TS sees definite assignment.
+      pack = mergeShape(en, deepMergePack(prior, out));
     }
   }
 
