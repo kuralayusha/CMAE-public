@@ -145,6 +145,18 @@ export async function classifyMailSignals(
       const batch = batches[i]!;
       try {
         const rows = await classifyBatch(batch);
+        // Empty parse / model returned no labels → treat as failure so mails
+        // stay needs_classification + classify_retry (not silent "0 labels").
+        if (rows.length === 0) {
+          log?.(
+            "system",
+            t("sync.intentBatchFailed", {
+              n: i + 1,
+              msg: t("sync.intentBatchEmpty"),
+            }),
+          );
+          continue;
+        }
         for (const row of rows) aiById.set(row.mailId, row);
         log?.(
           "ok",

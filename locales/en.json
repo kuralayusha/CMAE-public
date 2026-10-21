@@ -788,6 +788,8 @@
     "incrementalCreated": "New application row → {company}",
     "incrementalSkippedNoise": "Skipped non-job mail: {subject}",
     "incrementalSkippedUnmatched": "Skipped unmatched sent mail: {subject}",
+    "incrementalQueuedUnmatched": "Queued unmatched sent mail for review: {subject}",
+    "intentBatchEmpty": "model returned 0 labels",
     "incrementalRouteStart": "Checking {count} new message(s) with AI ({batches} batch)…",
     "incrementalRouteBatchOk": "AI route batch {n}/{total} · {labels} labeled",
     "incrementalRouteBatchFailed": "AI route batch {n} failed: {msg}",

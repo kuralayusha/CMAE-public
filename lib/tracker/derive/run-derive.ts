@@ -19,7 +19,11 @@ import { throwIfSyncCanceled } from "../cancel";
 import { normalizeMailText } from "../signals";
 import type { MailBrief } from "../match";
 import type { MailIntentMap } from "../mail-kind";
-import { emailDomain, parseEmailAddr } from "../identity";
+import {
+  emailDomain,
+  parseEmailAddr,
+  sameCompanyIdentity,
+} from "../identity";
 import type { SyncProgressFn } from "../types";
 import {
   getAssignment,
@@ -85,6 +89,33 @@ function existingItemBriefs(): ExistingItemBrief[] {
     primaryTo: item.primaryTo,
     lastSubject: null,
   }));
+}
+
+/** Prefer attach when AI says create but same company already exists (this run or DB). */
+function findExistingCompanyItemId(
+  company: string,
+  preferIds?: Set<number>,
+): number | null {
+  const db = getDb();
+  const items = db
+    .select()
+    .from(trackerItems)
+    .all()
+    .filter((i) => !i.deletedAt);
+  if (preferIds?.size) {
+    for (const item of items) {
+      if (
+        preferIds.has(item.id) &&
+        sameCompanyIdentity(item.company, company)
+      ) {
+        return item.id;
+      }
+    }
+  }
+  for (const item of items) {
+    if (sameCompanyIdentity(item.company, company)) return item.id;
+  }
+  return null;
 }
 
 function createItemForMail(
@@ -304,14 +335,15 @@ export async function derivePendingMails(
         continue;
       }
 
-      // Unmatched SENT → visible unassigned queue (not silent drop)
+      // Unmatched SENT → visible unassigned queue (architecture §2.6.1)
       if (mail.folder === "SENT") {
         markUnassigned(mail.id, "unmatched_outbound");
         markDeriveState([mail.id], deferForBody ? "pending" : "done");
         unassigned += 1;
+        skipped += 1;
         log?.(
           "system",
-          t("sync.incrementalSkippedUnmatched", {
+          t("sync.incrementalQueuedUnmatched", {
             subject: mail.subject.slice(0, 60) || t("mail.noSubject"),
           }),
         );
@@ -422,6 +454,40 @@ export async function derivePendingMails(
         }
 
         if (action === "create" && decision?.company) {
+          // Same company already tracked (incl. created earlier in this chunk)
+          // → attach, do not invent duplicate rows (architecture §2.6.1).
+          const existingId = findExistingCompanyItemId(
+            decision.company,
+            touched,
+          );
+          if (existingId != null) {
+            const item = db
+              .select()
+              .from(trackerItems)
+              .where(eq(trackerItems.id, existingId))
+              .get();
+            writeAssignment({
+              mailId: mail.id,
+              itemId: existingId,
+              source: "ai",
+              confidence: 0.8,
+              mail,
+            });
+            attached += 1;
+            touched.add(existingId);
+            markDeriveState(
+              [mail.id],
+              stateAfter(mail, chunkNeedsClass.has(mail.id)),
+            );
+            log?.(
+              "ok",
+              t("sync.incrementalAttached", {
+                company: item?.company || decision.company,
+                folder: folderLabel(mail.folder),
+              }),
+            );
+            continue;
+          }
           const newId = createItemForMail(mail, userEmail, {
             company: decision.company,
             position: decision.position,

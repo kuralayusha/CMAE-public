@@ -48,6 +48,11 @@ export type TrackerClientEvent = {
   proposalId?: string;
   freshness?: TrackerFreshnessClient;
   itemOps?: TrackerItemOpClient[];
+  /** sync engine job events */
+  jobId?: string;
+  kind?: string;
+  state?: string;
+  phase?: string;
 };
 
 const empty: TrackerStoreSnapshot = {

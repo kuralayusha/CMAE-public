@@ -72,11 +72,20 @@ export function closeDb() {
 /**
  * Empty all app tables while the connection is open.
  * More reliable than file-delete when another handle may still exist.
+ *
+ * `dbEpoch` / `credentialsVersion` must stay elevated after a fenced reset
+ * (architecture §2.5.2 / edge-case #33). Resetting them to 0 lets a pre-wipe
+ * writer whose job also held epoch 0 pass fencing and repopulate the DB.
  */
-export function wipeDatabaseContents() {
+export function wipeDatabaseContents(opts?: {
+  dbEpoch?: number;
+  credentialsVersion?: number;
+}) {
   const db = getDb();
   // drizzle instance wraps better-sqlite3 — use the live handle
   if (!sqlite) throw new Error("SQLite handle missing");
+  const dbEpoch = Math.max(1, opts?.dbEpoch ?? 1);
+  const credentialsVersion = Math.max(0, opts?.credentialsVersion ?? 0);
   sqlite.exec(`
     PRAGMA foreign_keys = OFF;
     DELETE FROM tracker_timelines;
@@ -92,8 +101,8 @@ export function wipeDatabaseContents() {
     INSERT INTO settings (id, follow_up_days, preferred_language)
       VALUES (1, 5, 'en');
     INSERT INTO app_meta (key, value) VALUES ('tracker_revision', '0');
-    INSERT INTO app_meta (key, value) VALUES ('db_epoch', '0');
-    INSERT INTO app_meta (key, value) VALUES ('credentials_version', '0');
+    INSERT INTO app_meta (key, value) VALUES ('db_epoch', '${dbEpoch}');
+    INSERT INTO app_meta (key, value) VALUES ('credentials_version', '${credentialsVersion}');
     INSERT INTO app_meta (key, value) VALUES ('account_id', '');
     INSERT INTO app_meta (key, value) VALUES ('maintenance_until', '');
   `);

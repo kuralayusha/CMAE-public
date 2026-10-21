@@ -31,6 +31,7 @@ import {
   emailDomain,
   parseEmailAddr,
 } from "./identity";
+import { markUnassigned } from "./derive/assign";
 import { suggestTwinMerges } from "./derive/merge-suggestions";
 import {
   parsePendingGmailDraft,
@@ -563,12 +564,13 @@ export async function patchTrackerWithNewMails(
       continue;
     }
 
-    // Unmatched SENT — never invent a row from outbound alone
+    // Unmatched SENT — never invent a row from outbound alone; queue for review
     if (mail.folder === "SENT") {
       skipped += 1;
+      markUnassigned(mail.id, "unmatched_outbound");
       log?.(
         "system",
-        t("sync.incrementalSkippedUnmatched", {
+        t("sync.incrementalQueuedUnmatched", {
           subject: mail.subject.slice(0, 60) || t("mail.noSubject"),
         }),
       );

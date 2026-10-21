@@ -249,6 +249,34 @@ function mergeReasons(
   return [...existing, reason];
 }
 
+/** Reasons that should not start a new mail_sync within 60s of success. */
+function isSoftRecentSkipReason(reason: SyncTriggerReason): boolean {
+  return (
+    reason === "focus" ||
+    reason === "online" ||
+    reason === "wake" ||
+    reason === "resume" ||
+    reason === "interval"
+  );
+}
+
+function lastMailSyncSuccessAgeMs(): number {
+  try {
+    const row = getSqlite()
+      .prepare(
+        `SELECT finished_at AS finishedAt FROM sync_jobs
+         WHERE kind = 'mail_sync' AND state IN ('succeeded','partial')
+         ORDER BY finished_at DESC LIMIT 1`,
+      )
+      .get() as { finishedAt: string } | undefined;
+    if (!row?.finishedAt) return Number.POSITIVE_INFINITY;
+    const age = Date.now() - Date.parse(row.finishedAt);
+    return Number.isFinite(age) ? age : Number.POSITIVE_INFINITY;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 function isoNow(): string {
   return new Date().toISOString();
 }
@@ -577,35 +605,20 @@ function requestSyncImmediate(opts: {
     return { jobId: "", joined: false, session: null };
   }
 
-  // Focus/online: skip if last success < 60s
-  if (reason === "focus" || reason === "online") {
-    try {
-      const row = getSqlite()
-        .prepare(
-          `SELECT finished_at AS finishedAt FROM sync_jobs
-           WHERE kind = 'mail_sync' AND state IN ('succeeded','partial')
-           ORDER BY finished_at DESC LIMIT 1`,
-        )
-        .get() as { finishedAt: string } | undefined;
-      if (row?.finishedAt) {
-        const age = Date.now() - Date.parse(row.finishedAt);
-        if (Number.isFinite(age) && age < 60_000) {
-          const session = getActiveSyncSession();
-          return {
-            jobId: "",
-            joined: false,
-            session: session ? toPublic(session) : null,
-          };
-        }
-      }
-    } catch {
-      /* continue */
-    }
+  // Auto triggers must not open a mail_sync with missing Gmail creds
+  // (wipe→onboarding race / mid-session settings gap → Phase C gmailMissing).
+  if (
+    reason !== "manual" &&
+    reason !== "retry" &&
+    !getGmailCredentials()
+  ) {
+    return { jobId: "", joined: false, session: null };
   }
 
   const db = getSqlite();
   let jobId = "";
   let joined = false;
+  let skippedSoft = false;
 
   db.transaction(() => {
     interruptStaleLeases(db);
@@ -614,28 +627,34 @@ function requestSyncImmediate(opts: {
     if (running) {
       joined = true;
       jobId = running.id;
-      const reasons = mergeReasons(parseReasons(running.reasons), reason);
-      const nextMode = maxMode(
-        (running.mode as SyncMode) || "incremental",
-        mode,
-      );
-      const rerunMode = running.rerun_mode
-        ? maxMode(running.rerun_mode as SyncMode, mode)
-        : mode;
-      db.prepare(
-        `UPDATE sync_jobs
-         SET reasons = ?,
-             rerun_requested = 1,
-             rerun_mode = ?,
-             mode = CASE WHEN ? > 1 THEN ? ELSE mode END
-         WHERE id = ?`,
-      ).run(
-        JSON.stringify(reasons),
-        rerunMode,
-        modeRank(mode),
-        nextMode,
-        running.id,
-      );
+      // Soft nudge during an in-flight job: join UI, but do not request a
+      // follow-up empty sync when the previous success was < 60s ago.
+      const skipRerun =
+        isSoftRecentSkipReason(reason) && lastMailSyncSuccessAgeMs() < 60_000;
+      if (!skipRerun) {
+        const reasons = mergeReasons(parseReasons(running.reasons), reason);
+        const nextMode = maxMode(
+          (running.mode as SyncMode) || "incremental",
+          mode,
+        );
+        const rerunMode = running.rerun_mode
+          ? maxMode(running.rerun_mode as SyncMode, mode)
+          : mode;
+        db.prepare(
+          `UPDATE sync_jobs
+           SET reasons = ?,
+               rerun_requested = 1,
+               rerun_mode = ?,
+               mode = CASE WHEN ? > 1 THEN ? ELSE mode END
+           WHERE id = ?`,
+        ).run(
+          JSON.stringify(reasons),
+          rerunMode,
+          modeRank(mode),
+          nextMode,
+          running.id,
+        );
+      }
 
       // Manual click on stuck in-memory session: force cancel so pump can replace.
       const session = getActiveSyncSession();
@@ -673,8 +692,24 @@ function requestSyncImmediate(opts: {
       return;
     }
 
+    // Soft wakes: skip new job if last success < 60s (architecture §2.5.3
+    // focus/online; also wake/resume/interval to stop post-sync storms).
+    if (isSoftRecentSkipReason(reason) && lastMailSyncSuccessAgeMs() < 60_000) {
+      skippedSoft = true;
+      return;
+    }
+
     jobId = insertQueuedJob({ reason, mode });
   })();
+
+  if (skippedSoft) {
+    const session = getActiveSyncSession();
+    return {
+      jobId: "",
+      joined: false,
+      session: session ? toPublic(session) : null,
+    };
+  }
 
   pumpJobs();
 
@@ -728,15 +763,35 @@ function claimNextJob(): JobRow | null {
            AND state = 'interrupted'`,
       ).run();
 
-      const queued = getQueuedJobAny();
-      if (!queued) return null;
-      if (
-        isAutoSyncBlockedByAuth() &&
-        queued.kind !== "workspace_scan" &&
-        !parseReasons(queued.reasons).includes("manual")
-      ) {
-        return null;
+      let queued = getQueuedJobAny();
+      while (queued) {
+        if (
+          isAutoSyncBlockedByAuth() &&
+          queued.kind !== "workspace_scan" &&
+          !parseReasons(queued.reasons).includes("manual")
+        ) {
+          return null;
+        }
+        // Missing Gmail: cancel auto mail_sync rather than logging gmailMissing.
+        if (
+          queued.kind === "mail_sync" &&
+          !parseReasons(queued.reasons).includes("manual") &&
+          !getGmailCredentials()
+        ) {
+          db.prepare(
+            `UPDATE sync_jobs
+             SET state = 'canceled',
+                 error_kind = 'auth',
+                 error_message = ?,
+                 finished_at = ?
+             WHERE id = ? AND state = 'queued'`,
+          ).run(t("sync.gmailMissing"), isoNow(), queued.id);
+          queued = getQueuedJobAny();
+          continue;
+        }
+        break;
       }
+      if (!queued) return null;
 
       const fencing = getFencingTokens(db);
       const accountId = ensureAccountIdMeta() || fencing.accountId;
@@ -1113,11 +1168,33 @@ async function runClaimedJob(job: JobRow): Promise<void> {
           fresh.state === "failed")
       ) {
         const rerunMode = (fresh.rerun_mode as SyncMode) || "incremental";
+        const reasons = parseReasons(fresh.reasons);
+        const onlySoft =
+          reasons.length > 0 &&
+          reasons.every(
+            (r) => isSoftRecentSkipReason(r) || r === "startup" || r === "idle",
+          );
         getSqlite()
-          .prepare(`UPDATE sync_jobs SET rerun_requested = 0, rerun_mode = NULL WHERE id = ?`)
+          .prepare(
+            `UPDATE sync_jobs SET rerun_requested = 0, rerun_mode = NULL WHERE id = ?`,
+          )
           .run(job.id);
-        if (!isMaintenanceActive() && !isAutoSyncBlockedByAuth()) {
-          insertQueuedJob({ reason: "manual", mode: rerunMode });
+        // Empty echo after a just-finished success: drop soft-only reruns.
+        if (
+          onlySoft &&
+          fresh.state !== "failed" &&
+          lastMailSyncSuccessAgeMs() < 60_000
+        ) {
+          /* coalesce — do not enqueue another empty sync */
+        } else if (
+          !isMaintenanceActive() &&
+          !isAutoSyncBlockedByAuth() &&
+          (reasons.includes("manual") || getGmailCredentials())
+        ) {
+          insertQueuedJob({
+            reason: reasons.includes("manual") ? "manual" : reasons[0] || "wake",
+            mode: rerunMode,
+          });
         }
       }
     } catch {

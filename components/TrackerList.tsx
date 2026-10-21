@@ -28,6 +28,7 @@ import {
   confirmOptimisticMutation,
   refreshTrackerList,
   rollbackOptimisticMutation,
+  subscribeTrackerClientEvents,
   useTrackerListSync,
 } from "@/lib/tracker/client-store";
 import type { SyncLogLine } from "@/lib/tracker/types";
@@ -430,6 +431,7 @@ export function TrackerList() {
     Record<string, Record<string, string | null>>
   >({});
   const syncEsRef = useRef<EventSource | null>(null);
+  const syncAttachedJobRef = useRef<string | null>(null);
   const syncShowToastRef = useRef(false);
 
   useEffect(() => {
@@ -724,12 +726,17 @@ export function TrackerList() {
       syncEsRef.current.close();
       syncEsRef.current = null;
     }
+    syncAttachedJobRef.current = null;
   }, []);
 
   const attachSyncStream = useCallback(
     (id: string, opts?: { showToast?: boolean }) => {
+      if (syncAttachedJobRef.current === id && syncEsRef.current) {
+        return;
+      }
       detachSyncStream();
       syncShowToastRef.current = Boolean(opts?.showToast);
+      syncAttachedJobRef.current = id;
       setSyncSessionId(id);
       setSyncing(true);
       setSyncTermStatus("running");
@@ -783,7 +790,10 @@ export function TrackerList() {
             setSyncTermStatus(data.status);
             setSyncing(false);
             es.close();
-            if (syncEsRef.current === es) syncEsRef.current = null;
+            if (syncEsRef.current === es) {
+              syncEsRef.current = null;
+              syncAttachedJobRef.current = null;
+            }
             if (data.status === "error" || data.status === "done") {
               void load();
             }
@@ -858,8 +868,26 @@ export function TrackerList() {
       }
     })();
 
+    // Auto sync after onboarding often starts *after* this mount — join via
+    // job SSE so the terminal is visible without a tab switch remount.
+    const unsubJob = subscribeTrackerClientEvents((ev) => {
+      if (cancelled) return;
+      if (ev.type !== "job" || !ev.jobId) return;
+      if (
+        ev.kind !== "mail_sync" &&
+        ev.kind !== "workspace_scan" &&
+        ev.kind !== "drafts_reconcile" &&
+        ev.kind !== "classify_retry"
+      ) {
+        return;
+      }
+      if (ev.state !== "running" && ev.state !== "queued") return;
+      attachSyncStream(ev.jobId, { showToast: false });
+    });
+
     return () => {
       cancelled = true;
+      unsubJob();
       // Only detach UI stream — do NOT cancel the server sync
       detachSyncStream();
     };

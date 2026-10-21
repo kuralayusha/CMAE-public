@@ -6,7 +6,8 @@ import {
   markOnboardingComplete,
 } from "@/lib/onboarding/status";
 import { persistEnvCursorKeyIfNeeded } from "@/lib/onboarding/verify";
-import { updateSettings } from "@/lib/settings/service";
+import { getGmailCredentials, updateSettings } from "@/lib/settings/service";
+import { wakeScheduler } from "@/lib/sync/scheduler";
 
 export const runtime = "nodejs";
 
@@ -62,6 +63,18 @@ export async function POST(req: Request) {
     }
 
     const at = markOnboardingComplete();
+
+    // Scheduler may have started before onboarding — wake starts IDLE + sync
+    // only when Gmail creds are present (avoids Phase C gmailMissing). Soft
+    // 60s coalesce prevents a second empty sync if creds-save already synced.
+    if (getGmailCredentials()) {
+      try {
+        wakeScheduler({ reason: "wake" });
+      } catch {
+        /* best-effort */
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       onboardingCompletedAt: at,

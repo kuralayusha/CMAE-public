@@ -391,7 +391,7 @@ export default function SettingsPage() {
   }
 
   async function confirmWipe() {
-    if (formLocked) return;
+    if (localeLocked) return;
     setBusy(true);
     flash(null);
     try {
@@ -422,7 +422,7 @@ export default function SettingsPage() {
   }
 
   async function confirmUninstall() {
-    if (formLocked) return;
+    if (localeLocked) return;
     if (!window.cmaeDesktop?.uninstallApp) {
       flash(t("settings.uninstallDesktopOnly"), "err");
       setUninstallOpen(false);
@@ -945,13 +945,16 @@ export default function SettingsPage() {
               </div>
             ) : null}
           </SettingsAcc>
+        </form>
 
+        {/* Outside ops/locale inert lock — wipe / uninstall stay available during sync etc. */}
+        <div className="cmae-form">
           <SettingsAcc title={t("settings.accDanger")} danger>
             <p className="cmae-form-hint">{t("settings.dangerWipeHint")}</p>
             <Button
               type="button"
               variant="danger"
-              disabled={busy || formLocked}
+              disabled={busy || localeLocked}
               onClick={() => setWipeOpen(true)}
             >
               {t("settings.dangerWipeBtn")}
@@ -965,7 +968,7 @@ export default function SettingsPage() {
                 <Button
                   type="button"
                   variant="danger"
-                  disabled={busy || formLocked}
+                  disabled={busy || localeLocked}
                   onClick={() => setUninstallOpen(true)}
                 >
                   {t("settings.dangerUninstallBtn")}
@@ -981,7 +984,7 @@ export default function SettingsPage() {
               })}
             </p>
           ) : null}
-        </form>
+        </div>
       </PageShell>
 
       {localePrep ? (

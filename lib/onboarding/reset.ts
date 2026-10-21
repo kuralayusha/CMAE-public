@@ -1,5 +1,10 @@
 import fs from "fs";
 import path from "path";
+import {
+  bumpAppMetaInt,
+  getAppMetaInt,
+  setAppMeta,
+} from "@/lib/db/app-meta";
 import { clearMaintenance, prepareResetFencing } from "@/lib/sync/engine";
 import {
   getDb,
@@ -14,6 +19,7 @@ import {
 import { clearUserPack } from "@/lib/i18n/pack";
 import { clearAllResearchJobs } from "@/lib/research/persist";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
+import { getAppRoot } from "@/lib/paths";
 import { emitTrackerEvent } from "@/lib/tracker/events-bus";
 
 /**
@@ -22,22 +28,31 @@ import { emitTrackerEvent } from "@/lib/tracker/events-bus";
  * so any in-flight writer is fenced out before wipe.
  */
 export async function resetAppForOnboarding(): Promise<void> {
+  let fenceEpoch = 1;
+  let fenceCreds = 0;
   try {
     await prepareResetFencing();
+    fenceEpoch = Math.max(1, getAppMetaInt("db_epoch"));
+    fenceCreds = Math.max(0, getAppMetaInt("credentials_version"));
   } catch {
     /* best-effort if DB not ready */
   }
 
   clearAllResearchJobs();
   wipeWorkspaceContents();
+  wipeLegacySiblingAppData();
   try {
     clearUserPack();
   } catch {
     /* ignore */
   }
 
-  // 1) Always clear while connected (reliable)
-  wipeDatabaseContents();
+  // 1) Always clear while connected (reliable). Keep elevated fencing tokens
+  // so a pre-wipe job that held epoch 0 cannot write back after wipe.
+  wipeDatabaseContents({
+    dbEpoch: fenceEpoch,
+    credentialsVersion: fenceCreds,
+  });
   clearOnboardingCompleteMarker();
   clearMaintenance();
 
@@ -48,11 +63,18 @@ export async function resetAppForOnboarding(): Promise<void> {
     /* contents already wiped */
   }
   getDb();
+  // File recreate + migrations re-seed epoch 0 via INSERT OR IGNORE — re-apply.
+  setAppMeta("db_epoch", String(fenceEpoch));
+  setAppMeta("credentials_version", String(fenceCreds));
+  bumpAppMetaInt("db_epoch");
   clearOnboardingCompleteMarker();
 
   // 3) Belt-and-suspenders if file recreate somehow restored junk
   if (isOnboardingFlagSet() || isOnboardingComplete()) {
-    wipeDatabaseContents();
+    wipeDatabaseContents({
+      dbEpoch: Math.max(1, getAppMetaInt("db_epoch")),
+      credentialsVersion: Math.max(0, getAppMetaInt("credentials_version")),
+    });
     clearOnboardingCompleteMarker();
   }
 
@@ -75,5 +97,30 @@ function wipeWorkspaceContents(): void {
     }
   } catch {
     /* ignore */
+  }
+}
+
+/**
+ * Electron productName is "CMAE" but older builds used "cmae". If both
+ * Application Support folders exist, wipe can clear one while sync still
+ * reads the other — Phase A "454 mails + 100 apps after wipe" symptom.
+ */
+function wipeLegacySiblingAppData(): void {
+  try {
+    const current = path.resolve(getAppRoot());
+    const parent = path.dirname(current);
+    const base = path.basename(current);
+    const siblingName =
+      base === "CMAE" ? "cmae" : base === "cmae" ? "CMAE" : null;
+    if (!siblingName) return;
+    const sibling = path.join(parent, siblingName);
+    if (!fs.existsSync(sibling) || path.resolve(sibling) === current) return;
+    for (const sub of ["data", "workspace"] as const) {
+      const dir = path.join(sibling, sub);
+      if (!fs.existsSync(dir)) continue;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch {
+    /* best-effort */
   }
 }
