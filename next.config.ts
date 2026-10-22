@@ -18,18 +18,23 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  /**
+   * Keep Vercel Functions Storage small:
+   * - Never ship macOS/Windows native binaries to Linux serverless.
+   * - Scope heavy natives to the routes that need them (not "/**").
+   * Desktop Electron packs its own node_modules; these includes are for Vercel.
+   */
   outputFileTracingIncludes: {
-    "/**": [
+    "/api/**": [
       "./locales/**/*",
       "./version-policy.json",
       "./package.json",
       "./node_modules/better-sqlite3/**/*",
+    ],
+    "/api/settings/cv/**": [
       "./node_modules/pdfjs-dist/**/*",
       "./node_modules/pdf-parse/**/*",
       "./node_modules/@napi-rs/canvas/**/*",
-      "./node_modules/@napi-rs/canvas-darwin-arm64/**/*",
-      "./node_modules/@napi-rs/canvas-darwin-x64/**/*",
-      "./node_modules/@napi-rs/canvas-win32-x64-msvc/**/*",
     ],
   },
   serverExternalPackages: [
