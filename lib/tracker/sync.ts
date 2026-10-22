@@ -3,6 +3,7 @@ import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpRevision } from "@/lib/db/revision";
 import { mailMessages, mailSources, syncState } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
+import { isDraftCopyLabels } from "@/lib/mail/draft-copy";
 import { GmailImapSource, WINDOW_DAYS } from "@/lib/mail/gmail-imap-source";
 import type { MailSource, SourceMail } from "@/lib/mail/source";
 import {
@@ -106,6 +107,8 @@ export function upsertSourceMails(
 
   for (const m of mails) {
     const existing = findExistingMail(m, accountId);
+    // Unsent Gmail drafts show up in All Mail — never ingest them as mail.
+    if (!existing && isDraftCopyLabels(m.labels)) continue;
     const labelsJson = JSON.stringify(m.labels || []);
     const autoFlags = m.autoFlags ? JSON.stringify(m.autoFlags) : null;
 

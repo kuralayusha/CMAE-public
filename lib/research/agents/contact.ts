@@ -5,6 +5,26 @@ import type { RunContext } from "../context";
 import { speak } from "../speak";
 import { writeFile } from "../workspace";
 
+/** contact.md body — also rewritten after research harvests new addresses. */
+export function formatContactMarkdown(ctx: RunContext): string {
+  return `# Contact (contact agent)\n\n## Recommended\n${
+    ctx.primaryEmail || "_not found_"
+  }\n\n## Candidates\n${
+    ctx.emails.length
+      ? ctx.emails
+          .map(
+            (e) =>
+              `- ${e.email} _(role: ${e.role}, p${e.priority}, ${e.page})_ — ${e.reason}`,
+          )
+          .join("\n")
+      : "- (none)"
+  }\n${
+    ctx.redoFeedback.contact
+      ? `\n## Reviewer note\n${ctx.redoFeedback.contact}\n`
+      : ""
+  }`;
+}
+
 export async function runContact(ctx: RunContext) {
   const { jobId } = ctx;
   speak(
@@ -51,26 +71,7 @@ export async function runContact(ctx: RunContext) {
   ].sort((a, b) => a.priority - b.priority);
   ctx.primaryEmail = ctx.emails[0]?.email || null;
 
-  await writeFile(
-    ctx.folderPath,
-    "contact.md",
-    `# Contact (contact agent)\n\n## Recommended\n${
-      ctx.primaryEmail || "_not found_"
-    }\n\n## Candidates\n${
-      ctx.emails.length
-        ? ctx.emails
-            .map(
-              (e) =>
-                `- ${e.email} _(role: ${e.role}, p${e.priority}, ${e.page})_ — ${e.reason}`,
-            )
-            .join("\n")
-        : "- (none)"
-    }\n${
-      ctx.redoFeedback.contact
-        ? `\n## Reviewer note\n${ctx.redoFeedback.contact}\n`
-        : ""
-    }`,
-  );
+  await writeFile(ctx.folderPath, "contact.md", formatContactMarkdown(ctx));
 
   speak(
     jobId,

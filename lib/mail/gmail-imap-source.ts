@@ -97,7 +97,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
     promise,
     new Promise<T>((_, reject) => {
       timer = setTimeout(
-        () => reject(new Error(`IMAP timeout after ${ms}ms (${label})`)),
+        () => reject(new Error(t("sync.imapTimedOut", { ms, label }))),
         ms,
       );
     }),

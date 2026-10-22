@@ -119,12 +119,29 @@ export function PageHelpModal({
   if (!open) return null;
   if (typeof document === "undefined") return null;
 
-  const bodies = [0, 1]
+  const bodies = [0, 1, 2, 3]
     .map((i) => t(`help.${pageId}.helpBody${i}`))
     .filter((s) => s && !s.startsWith("help."));
-  const steps = [0, 1, 2, 3]
+  const steps = [0, 1, 2, 3, 4, 5]
     .map((i) => t(`help.${pageId}.helpStep${i}`))
     .filter((s) => s && !s.startsWith("help."));
+  const statusesTitle = t(`help.${pageId}.helpStatusesTitle`);
+  const statuses =
+    statusesTitle && !statusesTitle.startsWith("help.")
+      ? Array.from({ length: 16 }, (_, i) => {
+          const label = t(`help.${pageId}.status${i}Label`);
+          const text = t(`help.${pageId}.status${i}Text`);
+          if (
+            !label ||
+            !text ||
+            label.startsWith("help.") ||
+            text.startsWith("help.")
+          ) {
+            return null;
+          }
+          return { label, text };
+        }).filter((x): x is { label: string; text: string } => x != null)
+      : [];
 
   return createPortal(
     <div
@@ -133,7 +150,7 @@ export function PageHelpModal({
       onClick={onClose}
     >
       <div
-        className="cmae-help-modal"
+        className={`cmae-help-modal${statuses.length ? " is-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`cmae-help-title-${pageId}`}
@@ -156,11 +173,26 @@ export function PageHelpModal({
           {bodies.map((p) => (
             <p key={p}>{p}</p>
           ))}
-          <ol className="cmae-help-steps">
-            {steps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
+          {statuses.length > 0 ? (
+            <section className="cmae-help-statuses" aria-label={statusesTitle}>
+              <h3 className="cmae-help-statuses-title">{statusesTitle}</h3>
+              <dl className="cmae-help-status-list">
+                {statuses.map((s) => (
+                  <div key={s.label} className="cmae-help-status">
+                    <dt>{s.label}</dt>
+                    <dd>{s.text}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+          ) : null}
+          {steps.length > 0 ? (
+            <ol className="cmae-help-steps">
+              {steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          ) : null}
         </div>
         <div className="cmae-help-actions">
           <button

@@ -1,5 +1,7 @@
+import { t } from "@/lib/i18n/t";
+
 export class SyncCanceledError extends Error {
-  constructor(message = "Sync canceled") {
+  constructor(message = t("sync.canceled")) {
     super(message);
     this.name = "SyncCanceledError";
   }

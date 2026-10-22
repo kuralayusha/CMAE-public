@@ -13,6 +13,7 @@ import {
   mailMessages,
   trackerItems,
 } from "@/lib/db/schema";
+import { isDraftCopyLabels } from "@/lib/mail/draft-copy";
 import { getSettingsRow } from "@/lib/settings/service";
 import { normalizeIntent, type MailIntentMap } from "../mail-kind";
 import {
@@ -48,6 +49,7 @@ function loadAssignedMails(itemId: number): FactMail[] {
     .from(mailMessages)
     .where(inArray(mailMessages.id, mailIds))
     .all()
+    .filter((m) => !isDraftCopyLabels(m.labelsJson))
     .map((m) => ({
       id: m.id,
       folder: m.folder,

@@ -11,7 +11,11 @@ export type ParsedMailDraft = SubjectBody & {
   fileName: string;
 };
 
-export { formatSubjectBody, parseSubjectBody };
+export {
+  formatSubjectBody,
+  parseSubjectBody,
+  repairShortenedFullName,
+} from "@/lib/mail/subject-body";
 export type { SubjectBody };
 
 export function findEmailDraftInFolder(

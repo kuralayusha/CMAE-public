@@ -214,6 +214,9 @@ type TrackerItem = {
   mailAfterClose?: boolean;
   waitingReason?: "interview" | "ooo" | "offer" | null;
   channel?: string | null;
+  /** Present only on Recent-strip rows. */
+  recentReason?: "new_item" | "mail_attached";
+  recentTouchedAt?: string;
 };
 
 /** Open tab under the click gesture, then navigate after async work (avoids popup block).
@@ -293,6 +296,7 @@ type SyncStreamResult = {
   mode?: "incremental" | "hard";
   keptOutsideWindow?: number;
   sections?: Section[];
+  recent?: TrackerItem[];
   sync?: SyncMeta;
   total?: number;
 };
@@ -310,6 +314,95 @@ function formatWhen(iso: string | null, locale: string): string {
   } catch {
     return iso;
   }
+}
+
+/** Case-fold for search: ASCII + Turkish İ/I/ı → same tokens. */
+function foldForSearch(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/ı/g, "i");
+}
+
+function normalizeSearch(value: string): string {
+  return foldForSearch(value).trim().replace(/\s+/g, " ");
+}
+
+function itemSearchHaystack(
+  item: TrackerItem,
+  t: (key: string, vars?: TVars) => string,
+): string {
+  const chipKey = `tracker.chip.${item.status}`;
+  const chip = t(chipKey);
+  const chipLabel = chip === chipKey ? item.status.replace(/_/g, " ") : chip;
+  const ready =
+    item.status === "ready_to_send"
+      ? readyToSendChip(item, t, false).label
+      : null;
+  const sectionKey = `tracker.section.${item.status}`;
+  const section = t(sectionKey);
+  const sectionLabel =
+    section === sectionKey ? item.statusLabel || chipLabel : section;
+  const emails = (item.recipientOptions || [])
+    .map((o) => o.email)
+    .filter(Boolean);
+  return foldForSearch(
+    [
+      item.company,
+      item.position,
+      item.channel,
+      item.status,
+      item.statusLabel,
+      chipLabel,
+      ready,
+      sectionLabel,
+      item.primaryTo,
+      item.recommendedTo,
+      item.workspaceFolder,
+      ...emails,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  );
+}
+
+function matchesTrackerSearch(
+  item: TrackerItem,
+  query: string,
+  t: (key: string, vars?: TVars) => string,
+): boolean {
+  const normalized = normalizeSearch(query);
+  if (!normalized) return true;
+  const haystack = itemSearchHaystack(item, t);
+  return normalized.split(" ").every((token) => haystack.includes(token));
+}
+
+/** Chip copy inside Ready-to-send: research done vs saving vs already in Gmail Drafts. */
+function readyToSendChip(
+  item: TrackerItem,
+  t: (key: string, vars?: TVars) => string,
+  drafting: boolean,
+): { label: string; spinning: boolean; phase: "research" | "saving" | "draft" } {
+  if (drafting || item.pendingGmailDraft?.state === "creating") {
+    return {
+      label: t("tracker.chip.savingDraft"),
+      spinning: true,
+      phase: "saving",
+    };
+  }
+  if (item.pendingGmailDraft) {
+    return {
+      label: t("tracker.chip.mailInDraft"),
+      spinning: false,
+      phase: "draft",
+    };
+  }
+  return {
+    label: t("tracker.chip.researchDone"),
+    spinning: false,
+    phase: "research",
+  };
 }
 
 function statusDetail(
@@ -367,10 +460,14 @@ export function TrackerList() {
   const locale = useIntlLocale();
   const store = useTrackerListSync();
   const sections = (store.sections || []) as Section[];
+  const recentItems = (store.recent || []) as TrackerItem[];
   const sync = store.sync as SyncMeta | null;
   const total = store.total;
   const loading = store.loading;
   const freshness = store.freshness;
+  const serverItemOps = store.itemOps || [];
+  const [clearingRecent, setClearingRecent] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncLines, setSyncLines] = useState<SyncLogLine[]>([]);
   const [syncTermStatus, setSyncTermStatus] = useState<SyncTermStatus | null>(
@@ -415,7 +512,13 @@ export function TrackerList() {
     }
     return false;
   }
-  const [toast, setToast] = useState<string | null>(null);
+
+  /** Server-side draft lock (survives refresh / other windows). */
+  function isServerDrafting(itemId: number): boolean {
+    return serverItemOps.some(
+      (o) => o.itemId === itemId && o.op.startsWith("draft:"),
+    );
+  }
   const [gmailModal, setGmailModal] = useState<GmailModalState | null>(null);
   const [prepareModal, setPrepareModal] = useState<PrepareModalState | null>(
     null,
@@ -508,12 +611,6 @@ export function TrackerList() {
   }, [freshness, syncTermStatus, t, locale]);
 
   useEffect(() => {
-    if (!toast) return;
-    const timer = window.setTimeout(() => setToast(null), 15_000);
-    return () => window.clearTimeout(timer);
-  }, [toast]);
-
-  useEffect(() => {
     if (actionsMenuId == null) return;
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setActionsMenuId(null);
@@ -525,6 +622,32 @@ export function TrackerList() {
   const allItems = useMemo(
     () => sections.flatMap((s) => s.items),
     [sections],
+  );
+
+  const searchActive = Boolean(normalizeSearch(searchQuery));
+
+  const filteredSections = useMemo(() => {
+    if (!searchActive) return sections;
+    return sections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) =>
+          matchesTrackerSearch(item, searchQuery, t),
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [sections, searchActive, searchQuery, t]);
+
+  const filteredRecentItems = useMemo(() => {
+    if (!searchActive) return recentItems;
+    return recentItems.filter((item) =>
+      matchesTrackerSearch(item, searchQuery, t),
+    );
+  }, [recentItems, searchActive, searchQuery, t]);
+
+  const filteredCount = useMemo(
+    () => filteredSections.reduce((n, s) => n + s.items.length, 0),
+    [filteredSections],
   );
 
   const selectedItems = useMemo(
@@ -573,6 +696,7 @@ export function TrackerList() {
       if (data.sections) {
         applyTrackerListPayload({
           sections: data.sections,
+          recent: data.recent,
           sync: data.sync || null,
           total: data.total || 0,
           rev: typeof data.rev === "number" ? data.rev : undefined,
@@ -581,15 +705,6 @@ export function TrackerList() {
         await refreshTrackerList({ force: true });
       }
       if (opts?.clearSelection) setSelectedIds(new Set());
-      setToast(
-        action === "inactive"
-          ? t("tracker.toast.markedInactive", {
-              count: data.updated ?? ids.length,
-            })
-          : t("tracker.toast.markedActive", {
-              count: data.updated ?? ids.length,
-            }),
-      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -599,6 +714,31 @@ export function TrackerList() {
 
   async function bulkSet(action: "inactive" | "active") {
     await applyActiveAction([...selectedIds], action, { clearSelection: true });
+  }
+
+  async function clearRecent() {
+    if (clearingRecent || recentItems.length === 0) return;
+    setClearingRecent(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/tracker/recent", { method: "DELETE" });
+      const data = (await res.json()) as {
+        error?: string;
+        recent?: TrackerItem[];
+        rev?: number;
+      };
+      if (!res.ok) {
+        throw new Error(data.error || t("tracker.error.clearRecentFailed"));
+      }
+      applyTrackerListPayload({
+        recent: data.recent ?? [],
+        rev: typeof data.rev === "number" ? data.rev : undefined,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setClearingRecent(false);
+    }
   }
 
   useEffect(() => {
@@ -677,6 +817,7 @@ export function TrackerList() {
   const applySyncPayload = useCallback(
     (data: {
       sections?: Section[];
+      recent?: TrackerItem[];
       sync?: SyncMeta;
       total?: number;
       rev?: number;
@@ -690,6 +831,7 @@ export function TrackerList() {
     }) => {
       applyTrackerListPayload({
         sections: data.sections || [],
+        recent: data.recent,
         sync: data.sync || null,
         total: data.total || 0,
         rev: data.rev,
@@ -842,7 +984,6 @@ export function TrackerList() {
     async (opts?: { quiet?: boolean; mode?: "incremental" | "hard" }) => {
       const mode = opts?.mode ?? "incremental";
       setError(null);
-      if (!opts?.quiet) setToast(null);
       setSyncLines([]);
       setSyncTermStatus("running");
       setSyncing(true);
@@ -971,7 +1112,6 @@ export function TrackerList() {
           ? { recommendedTo: data.recommendedTo }
           : {}),
       });
-      setToast(t("tracker.recipient.saved", { email: next }));
     } catch (err) {
       rollbackOptimisticMutation(mutationId);
       setError(err instanceof Error ? err.message : String(err));
@@ -1072,7 +1212,6 @@ export function TrackerList() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("tracker.error.prepare"));
-      setToast(t("tracker.toast.draftWritten", { file: data.fileName }));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1096,15 +1235,8 @@ export function TrackerList() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("tracker.error.gmailDraft"));
-      // Stay in Tracker — Gmail opens only when the user clicks the clock.
-      const bits = [
-        t("tracker.toast.gmailDraftPending", { subject: data.subject }),
-      ];
-      if (data.attachedCv) {
-        bits.push(t("tracker.toast.attachment", { name: data.attachedCv }));
-      }
-      if (data.cvWarning) bits.push(String(data.cvWarning));
-      setToast(bits.join(" · "));
+      // Stay in Tracker — Gmail opens only when the user clicks the menu item.
+      if (data.cvWarning) setError(String(data.cvWarning));
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -1117,10 +1249,22 @@ export function TrackerList() {
   async function openPendingDraft(item: TrackerItem) {
     const pending = item.pendingGmailDraft;
     if (!pending) return;
+    // Never open a blank tab while create is still in flight.
+    if (
+      pending.state === "creating" ||
+      isServerDrafting(item.id) ||
+      isBusyKey(`${item.id}:draft:${pending.kind}`)
+    ) {
+      return;
+    }
     const key = `${item.id}:draft:${pending.kind}`;
     addBusyKey(key);
     setError(null);
-    const popup = openTabForAsyncUrl();
+    // Open placeholder under the click only for already-present drafts (fast).
+    const popup =
+      pending.state === "present" || pending.state === "unknown"
+        ? openTabForAsyncUrl()
+        : null;
     try {
       const res = await fetch(`/api/tracker/${item.id}/draft`, {
         method: "POST",
@@ -1129,13 +1273,22 @@ export function TrackerList() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("tracker.error.gmailDraft"));
-      if (data.reused === false) {
-        setToast(t("tracker.action.pendingRecreating"));
+      if (data.state === "creating" || data.state === "failed") {
+        popup?.close();
+        throw new Error(
+          data.error || t("tracker.error.gmailDraftStillCreating"),
+        );
       }
       const url = data.gmailUrl || pending.draftsUrl;
       const opened = await navigateOpenedTab(popup, url);
       if (!opened && url) {
-        setToast(t("tracker.pendingDraft.popupBlocked"));
+        // Fallback when we skipped the early blank tab (or popup was blocked).
+        if (!popup && typeof window !== "undefined") {
+          const w = window.open(url, "_blank");
+          if (!w) setError(t("tracker.pendingDraft.popupBlocked"));
+        } else {
+          setError(t("tracker.pendingDraft.popupBlocked"));
+        }
       }
       await load();
     } catch (err) {
@@ -1199,6 +1352,8 @@ export function TrackerList() {
   }
 
   function renderGmailMenuItem(item: TrackerItem) {
+    // Drafts already open via "Open in Gmail Drafts" — no need for a second Gmail link.
+    if (item.pendingGmailDraft) return null;
     const urls = [...new Set((item.gmailUrls || []).filter(Boolean))];
     if (!urls.length) return null;
 
@@ -1230,29 +1385,28 @@ export function TrackerList() {
           : st === "creating"
             ? "tracker.action.draftCreating"
             : "tracker.action.pendingSend";
+      const draftBusy =
+        spinning ||
+        isServerDrafting(item.id) ||
+        st === "creating";
       return renderMenuItem({
         label: t(labelKey),
-        icon: isBusyKey(
-          `${item.id}:draft:${item.pendingGmailDraft.kind}`,
-        ) ? (
-          <IconSpinner />
-        ) : (
-          <IconWait />
-        ),
-        disabled: spinning,
+        icon: draftBusy ? <IconSpinner /> : <IconWait />,
+        disabled: draftBusy,
         onClick: () => void openPendingDraft(item),
       });
     }
 
     if (item.status === "ready_to_send") {
+      const draftBusy =
+        isBusyKey(`${item.id}:draft:application`) ||
+        isServerDrafting(item.id);
       return renderMenuItem({
-        label: t("tracker.action.createDraft"),
-        icon: isBusyKey(`${item.id}:draft:application`) ? (
-          <IconSpinner />
-        ) : (
-          <IconDraft />
-        ),
-        disabled: spinning,
+        label: draftBusy
+          ? t("tracker.action.draftCreating")
+          : t("tracker.action.createDraft"),
+        icon: draftBusy ? <IconSpinner /> : <IconDraft />,
+        disabled: spinning || draftBusy,
         onClick: () => void draft(item, "application"),
       });
     }
@@ -1471,9 +1625,22 @@ export function TrackerList() {
   }
 
   function renderRow(item: TrackerItem) {
+    const drafting =
+      item.status === "ready_to_send" &&
+      (isBusyKey(`${item.id}:draft:application`) ||
+        isBusyItemPrefix(item.id, "draft:") ||
+        isServerDrafting(item.id));
+    const readyChip =
+      item.status === "ready_to_send"
+        ? readyToSendChip(item, t, drafting)
+        : null;
     const chipKey = `tracker.chip.${item.status}`;
     const chip = t(chipKey);
-    const label = chip === chipKey ? item.status.replace(/_/g, " ") : chip;
+    const label = readyChip
+      ? readyChip.label
+      : chip === chipKey
+        ? item.status.replace(/_/g, " ")
+        : chip;
     const sectionKey = `tracker.section.${item.status}`;
     const sectionTitle = t(sectionKey);
     const statusTitle =
@@ -1481,7 +1648,7 @@ export function TrackerList() {
         ? item.statusLabel || label
         : sectionTitle;
     const detail = statusDetail(item, t, locale);
-    const tip = [statusTitle, detail].filter(Boolean).join(" · ");
+    const tip = [statusTitle, label, detail].filter(Boolean).join(" · ");
     const checked = selectedIds.has(item.id);
     return (
       <div
@@ -1502,6 +1669,13 @@ export function TrackerList() {
         </span>
         <span className="cmae-tracker-company" role="cell">
           <TruncateTip text={item.company} />
+          {item.recentReason ? (
+            <span className="cmae-tracker-recent-badge" data-reason={item.recentReason}>
+              {item.recentReason === "new_item"
+                ? t("tracker.recent.reasonNew")
+                : t("tracker.recent.reasonMail")}
+            </span>
+          ) : null}
           {item.unverified ? (
             <HoverTip label={t("tracker.unverifiedHint")}>
               <span className="cmae-unverified-badge">
@@ -1550,7 +1724,13 @@ export function TrackerList() {
             <span
               className="cmae-status-chip"
               data-status={item.status}
+              data-phase={readyChip?.phase || undefined}
             >
+              {readyChip?.spinning ? (
+                <span className="cmae-status-chip-spin" aria-hidden>
+                  <IconSpinner />
+                </span>
+              ) : null}
               <span className="cmae-status-chip-label">{label}</span>
               {detail ? (
                 <>
@@ -1642,28 +1822,77 @@ export function TrackerList() {
 
       {!loading && total > 0 ? (
         <div className="cmae-tracker-toolbar">
-          <div className="cmae-tracker-meta">
-            <span>{t("tracker.metaCount", { count: total })}</span>
-            <span className="cmae-tracker-dot">·</span>
-            <span>
-              {t("tracker.metaLastSync")}{" "}
-              {sync?.lastSyncAt ? (
-                <ClientFormattedTime
-                  value={sync.lastSyncAt}
-                  locale={locale}
-                  format={formatWhen}
-                  fallback="…"
+          <div className="cmae-tracker-toolbar-main">
+            <div className="cmae-tracker-search">
+              <svg
+                className="cmae-tracker-search-ico"
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                aria-hidden
+              >
+                <path
+                  fill="currentColor"
+                  d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5Zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14Z"
                 />
-              ) : (
-                t("tracker.metaNoneYet")
-              )}
-            </span>
-            {sync?.lastError ? (
-              <>
-                <span className="cmae-tracker-dot">·</span>
-                <span className="cmae-tracker-err">{sync.lastError}</span>
-              </>
-            ) : null}
+              </svg>
+              <input
+                type="search"
+                className="cmae-tracker-search-input"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && searchQuery) {
+                    e.preventDefault();
+                    setSearchQuery("");
+                  }
+                }}
+                placeholder={t("tracker.searchPlaceholder")}
+                aria-label={t("tracker.searchAria")}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  className="cmae-tracker-search-clear"
+                  onClick={() => setSearchQuery("")}
+                  aria-label={t("tracker.searchClear")}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+            <div className="cmae-tracker-meta">
+              <span>
+                {searchActive
+                  ? t("tracker.metaCountFiltered", {
+                      shown: filteredCount,
+                      total,
+                    })
+                  : t("tracker.metaCount", { count: total })}
+              </span>
+              <span className="cmae-tracker-dot">·</span>
+              <span>
+                {t("tracker.metaLastSync")}{" "}
+                {sync?.lastSyncAt ? (
+                  <ClientFormattedTime
+                    value={sync.lastSyncAt}
+                    locale={locale}
+                    format={formatWhen}
+                    fallback="…"
+                  />
+                ) : (
+                  t("tracker.metaNoneYet")
+                )}
+              </span>
+              {sync?.lastError ? (
+                <>
+                  <span className="cmae-tracker-dot">·</span>
+                  <span className="cmae-tracker-err">{sync.lastError}</span>
+                </>
+              ) : null}
+            </div>
           </div>
           <div className="cmae-tracker-toolbar-right">
             <div className="cmae-tracker-sync-controls">
@@ -1719,7 +1948,6 @@ export function TrackerList() {
       ) : null}
 
       {error ? <p className="cmae-tracker-banner is-error">{error}</p> : null}
-      {toast ? <p className="cmae-tracker-banner">{toast}</p> : null}
       {!loading && mergeCount > 0 ? (
         <div className="cmae-tracker-banner cmae-tracker-freshness is-warn">
           <p>{t("tracker.merge.banner", { count: mergeCount })}</p>
@@ -1992,23 +2220,62 @@ export function TrackerList() {
             </HoverTip>
           </div>
         </div>
+      ) : searchActive && filteredCount === 0 ? (
+        <div className="cmae-tracker-empty">
+          <p>{t("tracker.searchEmpty", { query: searchQuery.trim() })}</p>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setSearchQuery("")}
+          >
+            {t("tracker.searchClear")}
+          </Button>
+        </div>
       ) : (
-        sections.map((section) => {
-          const sectionKey = `tracker.section.${section.status}`;
-          const title = t(sectionKey);
-          return (
-            <section key={section.status} className="cmae-tracker-section">
+        <>
+          {filteredRecentItems.length > 0 ? (
+            <section className="cmae-tracker-section cmae-tracker-section-recent">
               <header className="cmae-tracker-section-head">
-                <h2>
-                  {section.status === "ignored" ? "! " : ""}
-                  {upper(title === sectionKey ? section.title : title)}
-                </h2>
-                <span>{section.items.length}</span>
+                <div className="cmae-tracker-section-head-main">
+                  <h2>{upper(t("tracker.recent.title"))}</h2>
+                  <p className="cmae-tracker-recent-hint">
+                    {t("tracker.recent.hint")}
+                  </p>
+                </div>
+                <div className="cmae-tracker-section-head-actions">
+                  <span>{filteredRecentItems.length}</span>
+                  {!searchActive ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={clearingRecent}
+                      onClick={() => void clearRecent()}
+                    >
+                      {t("tracker.recent.clear")}
+                    </Button>
+                  ) : null}
+                </div>
               </header>
-              {renderTable(section.items)}
+              {renderTable(filteredRecentItems)}
             </section>
-          );
-        })
+          ) : null}
+          {filteredSections.map((section) => {
+            const sectionKey = `tracker.section.${section.status}`;
+            const title = t(sectionKey);
+            return (
+              <section key={section.status} className="cmae-tracker-section">
+                <header className="cmae-tracker-section-head">
+                  <h2>
+                    {section.status === "ignored" ? "! " : ""}
+                    {upper(title === sectionKey ? section.title : title)}
+                  </h2>
+                  <span>{section.items.length}</span>
+                </header>
+                {renderTable(section.items)}
+              </section>
+            );
+          })}
+        </>
       )}
     </div>
   );

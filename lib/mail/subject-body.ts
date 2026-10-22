@@ -51,6 +51,40 @@ export function formatSubjectBody(subject: string, body: string): string {
   return `SUBJECT: ${subject.trim()}\nBODY:\n${body.trim()}\n`;
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * LLMs sometimes shorten the candidate name ("Jane Doe" → "Jane Do").
+ * Restore any proper prefix of `fullName` that appears as its own token.
+ */
+export function repairShortenedFullName(
+  text: string,
+  fullName: string | null | undefined,
+): string {
+  const name = String(fullName || "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (name.length < 4) return text;
+  const parts = name.split(" ");
+  if (parts.length < 2) return text;
+
+  const last = parts[parts.length - 1]!;
+  const head = parts.slice(0, -1).join(" ");
+  let out = text;
+  for (let n = last.length - 1; n >= 3; n--) {
+    const partial = `${head} ${last.slice(0, n)}`;
+    const rest = last.slice(n);
+    const re = new RegExp(
+      `(?<![\\p{L}\\p{N}_])${escapeRegExp(partial)}(?!${escapeRegExp(rest)})(?![\\p{L}\\p{N}_])`,
+      "gu",
+    );
+    out = out.replace(re, name);
+  }
+  return out;
+}
+
 /** Drop leading ATX H1 lines (system already prepends the file title). */
 export function stripLeadingMarkdownH1(md: string): string {
   let s = String(md || "")

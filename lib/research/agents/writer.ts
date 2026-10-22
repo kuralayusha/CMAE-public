@@ -9,18 +9,24 @@ import { getJobPreferences, getSettingsRow } from "@/lib/settings/service";
 import {
   formatSubjectBody,
   parseSubjectBody,
+  repairShortenedFullName,
 } from "@/lib/tracker/parse-mail-md";
 import { throwIfCanceled } from "../cancel";
 import type { RunContext } from "../context";
 import { askLlm } from "../llm";
+import { OUTPUT_ONLY_RULES } from "./research";
 import { speak } from "../speak";
 import { writeFile } from "../workspace";
 
 /** Canonical SUBJECT:/BODY: so tracker draft picker never skips site language. */
-function canonicalizeMailDraft(raw: string): string {
-  const parsed = parseSubjectBody(raw);
-  if (!parsed) return raw;
-  return formatSubjectBody(parsed.subject, parsed.body);
+function canonicalizeMailDraft(raw: string, fullName?: string | null): string {
+  const repaired = repairShortenedFullName(raw, fullName);
+  const parsed = parseSubjectBody(repaired);
+  if (!parsed) return repaired;
+  return formatSubjectBody(
+    repairShortenedFullName(parsed.subject, fullName),
+    repairShortenedFullName(parsed.body, fullName),
+  );
 }
 
 /** Hard rules — draft is copy/paste or sync-to-Gmail ready. */
@@ -60,17 +66,18 @@ LENGTH & FORMAT
 - Mobile-friendly: avoid long dense paragraphs.
 
 SUBJECT LINE
-- Short and specific: max 6–8 words.
-- Prefer patterns like (fill with real role + candidate name, no brackets):
+- Short and specific: ideally under ~10 words (role + full candidate name is fine).
+- Prefer patterns like (fill with real role + candidate's EXACT full name, no brackets):
   - "Spontane Başvuru – Pazarlama Uzmanı / Ahmet Yılmaz"
   - "Experienced Marketing Candidate – Ahmet Yılmaz"
   - equivalent phrasing in the mail language
+- Copy the candidate's full name character-for-character from the Candidate line — NEVER shorten, drop syllables, or invent a nickname (e.g. if the name is "Jane Doe", write "Jane Doe", never "Jane Do").
 - Never use vague subjects: "Hello", "Hi", "Job application", "İş başvurusu", "Merhaba", "CV", "Application".
 - If applying to a known open role, name that role (or closest accurate title) in the subject.
 
 BODY STRUCTURE (in this order)
 1) Greeting: Use the recipient's real name when known ("Sayın Ayşe Hanım" / "Dear Ms. …"). If only a generic inbox (info@, careers@, hr@), use a natural generic greeting for the language ("Sayın İlgili" / "Dear Hiring Team") — never invent a name.
-2) Opening (1–2 sentences): Who you are and what you want (specific field/role — never "any position").
+2) Opening (1–2 sentences): Who you are (exact full name from Candidate line — never shortened) and what you want (specific field/role — never "any position").
 3) Value proposition (2–3 sentences): Strongest 1–2 experiences or wins from the CV; prefer quantified results when the CV has numbers. No fabricated metrics.
 4) Why this company (1–2 sentences): One specific, research-backed note (product, project, value, news). Must sound researched, not copy-paste.
 5) Closing (1–2 sentences): Open to a short conversation; if cold/no open role, state interest in being considered when a fitting role opens. Mention that the CV is attached (PDF) — do not invent attachment filenames beyond a natural "CV attached" line.
@@ -162,6 +169,7 @@ Short, concrete, no fabricated experience. Follow MAIL CRAFT structure and lengt
   const signature = getSettingsRow()?.emailSignature ?? null;
   ctx.draftSite = canonicalizeMailDraft(
     applySignatureToMailDraft(ctx.draftSite, signature),
+    user.fullName,
   );
 
   // Same language → no translate LLM call, no email_translated.md
@@ -174,6 +182,8 @@ Short, concrete, no fabricated experience. Follow MAIL CRAFT structure and lengt
       `Rewrite the email in preferred language code "${user.preferredLang}" (natural tone for that language).
 Keep the same facts, structure, personalization, and length discipline as MAIL CRAFT.
 Do not inflate length; do not add fabricated claims.
+
+${OUTPUT_ONLY_RULES}
 
 Source draft:
 ${ctx.draftSite}
@@ -188,6 +198,7 @@ ${MAIL_FIELD_RULES}`,
     );
     ctx.draftPreferred = canonicalizeMailDraft(
       applySignatureToMailDraft(ctx.draftPreferred, signature),
+      user.fullName,
     );
   }
 

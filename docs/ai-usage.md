@@ -47,11 +47,13 @@ telemetry is off (Settings → Privacy, default on) or the URL is unset. No text
 ever sent. Env: `CMAE_USAGE_INGEST_URL`, `CMAE_USAGE_ANON_KEY`,
 `CMAE_USAGE_PRICES_URL` (or the embedded defaults in `lib/ai-usage/config.ts`).
 
-## Admin report
-`/usage` (nav: Usage) lists anonymous `user_id` cards from Supabase and, on
-click, shows run count, token mix, feature breakdown, and cost. Proxied via
-`GET /api/usage-report` → Edge Function `cmae-report`. Requires
-`CMAE_USAGE_REPORT_SECRET` (sha256 stored in `cmae_report_auth`).
+## Usage page
+`/usage` always shows **this machine’s** local `ai_usage_events` (KPIs, feature
+breakdown, recent runs) via `GET /api/usage-report` — no report secret needed.
+When `CMAE_USAGE_REPORT_SECRET` is set, the same page can open an admin view
+(`?admin=1`) that proxies Edge Function `cmae-report` for the full anonymous
+user list. Without the secret the admin affordance is hidden; the UI never
+shows configuration warnings.
 
 ## Tests
 `npm run test:ai-usage`; eval: `node --import tsx test/tracker-eval/run-eval.ts`.

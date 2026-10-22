@@ -1,21 +1,16 @@
 import { usageConfig } from "@/lib/ai-usage/config";
+import { buildLocalUsageReport } from "@/lib/ai-usage/local-report";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-async function fetchReport(userId?: string | null) {
+async function fetchAdminReport(userId?: string | null) {
   const cfg = usageConfig();
-  if (!cfg.reportUrl) {
-    return NextResponse.json({ error: "unconfigured_url" }, { status: 503 });
-  }
-  if (!cfg.reportSecret) {
+  if (!cfg.reportUrl || !cfg.reportSecret) {
     return NextResponse.json(
-      {
-        error: "unconfigured_secret",
-        hint: "Set CMAE_USAGE_REPORT_SECRET in .env.local",
-      },
-      { status: 503 },
+      { error: "admin_unavailable", adminAvailable: false },
+      { status: 404 },
     );
   }
 
@@ -41,15 +36,38 @@ async function fetchReport(userId?: string | null) {
   } catch {
     body = { error: "bad_upstream", raw: text.slice(0, 200) };
   }
+
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    return NextResponse.json(
+      { ...(body as Record<string, unknown>), adminAvailable: true, scope: "admin" },
+      { status: res.status },
+    );
+  }
   return NextResponse.json(body, { status: res.status });
 }
 
+/**
+ * Default: this machine's local AI usage (always works).
+ * `?admin=1`: full Supabase user list — only when CMAE_USAGE_REPORT_SECRET is set.
+ * Never surfaces secret-configuration warnings to the UI.
+ */
 export async function GET(req: Request) {
   try {
-    const userId = new URL(req.url).searchParams.get("user_id");
-    return await fetchReport(userId);
+    const url = new URL(req.url);
+    const wantAdmin = url.searchParams.get("admin") === "1";
+    const cfg = usageConfig();
+    const adminAvailable = Boolean(cfg.reportUrl && cfg.reportSecret);
+
+    if (wantAdmin) {
+      const userId = url.searchParams.get("user_id");
+      return await fetchAdminReport(userId);
+    }
+
+    return NextResponse.json(
+      buildLocalUsageReport(undefined, { adminAvailable }),
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "proxy_failed", message: msg }, { status: 502 });
+    return NextResponse.json({ error: "report_failed", message: msg }, { status: 502 });
   }
 }

@@ -80,6 +80,7 @@ export type SyncSessionResult = {
   mode?: SyncMode;
   keptOutsideWindow?: number;
   sections: ReturnType<typeof listTrackerSections>["sections"];
+  recent: ReturnType<typeof listTrackerSections>["recent"];
   sync: ReturnType<typeof listTrackerSections>["sync"];
   total: number;
 };
@@ -674,10 +675,10 @@ function requestSyncImmediate(opts: {
           `UPDATE sync_jobs
            SET state = 'interrupted',
                error_kind = 'stuck',
-               error_message = 'phase budget exceeded',
+               error_message = ?,
                finished_at = ?
            WHERE id = ? AND state = 'running'`,
-        ).run(isoNow(), running.id);
+        ).run(t("sync.phaseBudgetExceeded"), isoNow(), running.id);
         joined = false;
         jobId = insertQueuedJob({ reason, mode });
       }
@@ -953,6 +954,7 @@ async function runClaimedJobBody(job: JobRow): Promise<void> {
           upserted: 0,
           itemCount: list.total,
           sections: list.sections,
+          recent: list.recent,
           sync: list.sync,
           total: list.total,
         },
@@ -993,6 +995,7 @@ async function runClaimedJobBody(job: JobRow): Promise<void> {
           upserted: 0,
           itemCount: list.total,
           sections: list.sections,
+          recent: list.recent,
           sync: list.sync,
           total: list.total,
         },
@@ -1021,6 +1024,7 @@ async function runClaimedJobBody(job: JobRow): Promise<void> {
           upserted: 0,
           itemCount: list.total,
           sections: list.sections,
+          recent: list.recent,
           sync: list.sync,
           total: list.total,
         },

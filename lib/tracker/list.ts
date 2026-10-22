@@ -22,10 +22,12 @@ import {
   indexedDraftContentHash,
   isWorkspaceFolderPresent,
 } from "./workspace-index";
+import { listRecentEntries } from "./recent";
 import {
   STATUS_ORDER,
   type DraftKind,
   type TrackerListItem,
+  type TrackerRecentItem,
   type TrackerRowWarning,
   type TrackerSection,
   type TrackerSentiment,
@@ -115,10 +117,14 @@ function mapRow(
 
   const recipients = loadRecipientsForItem(row);
   const live = getLiveDraftAnyKind(row.id);
+  // `creating` is not ready yet — keep chip on "research done" / spinner via
+  // item_ops until APPEND finishes and state becomes present|unknown.
+  const readyLive =
+    live && live.state !== "creating" ? live : null;
   const warnings = rowWarnings(
     row,
-    live ? (live.kind as DraftKind) : null,
-    live?.contentHash || null,
+    readyLive ? (readyLive.kind as DraftKind) : null,
+    readyLive?.contentHash || null,
   );
   return {
     id: row.id,
@@ -153,7 +159,9 @@ function mapRow(
     waitingUntil:
       resolved.waitingUntil ||
       parseWaitingUntil(row.notesJson, row.waitingUntil),
-    pendingGmailDraft: live ? toPendingInfo(live, gmailAddress) : null,
+    pendingGmailDraft: readyLive
+      ? toPendingInfo(readyLive, gmailAddress)
+      : null,
     recipientOptions: recipients.candidates,
     recommendedTo: recipients.recommended,
     userVersion: row.userVersion || 1,
@@ -232,6 +240,7 @@ function sortWithinSection(a: TrackerListItem, b: TrackerListItem): number {
 
 export function listTrackerSections(opts?: { now?: number }): {
   sections: TrackerSection[];
+  recent: TrackerRecentItem[];
   sync: ReturnType<typeof getSyncState>;
   total: number;
   /** Earliest clock-only status change across rows (validUntil cap). */
@@ -264,6 +273,7 @@ export function listTrackerSections(opts?: { now?: number }): {
       }
       return item as TrackerListItem;
     });
+  const byId = new Map(rows.map((r) => [r.id, r]));
   const byStatus = new Map<TrackerStatus, TrackerListItem[]>();
   for (const s of STATUS_ORDER) byStatus.set(s, []);
   for (const row of rows) {
@@ -283,8 +293,20 @@ export function listTrackerSections(opts?: { now?: number }): {
     });
   }
 
+  const recent: TrackerRecentItem[] = [];
+  for (const entry of listRecentEntries({ nowMs: opts?.now })) {
+    const item = byId.get(entry.itemId);
+    if (!item) continue;
+    recent.push({
+      ...item,
+      recentReason: entry.reason,
+      recentTouchedAt: entry.touchedAt,
+    });
+  }
+
   return {
     sections,
+    recent,
     sync: getSyncState(),
     total: rows.length,
     nextTransitionAt,

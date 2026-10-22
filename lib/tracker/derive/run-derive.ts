@@ -21,6 +21,7 @@ import { attachConversationMails } from "./conversations";
 import { resolveIntentFast } from "./intent";
 import { suggestTwinMerges } from "./merge-suggestions";
 import { parseAutoFlags } from "./noise";
+import { noteRecentItem } from "../recent";
 import { refreshItemFacts } from "./refresh-item";
 import { runConversationStages, type StageMode } from "./stages";
 
@@ -99,6 +100,20 @@ export async function derivePendingMails(
   const touched = new Set<number>();
   repairConversations(touched);
 
+  // Unsent Gmail drafts (All Mail `\Draft`) were once counted as sent mail —
+  // re-derive any item still carrying one so its status recovers.
+  for (const r of getSqlite()
+    .prepare(
+      `SELECT DISTINCT ma.item_id AS itemId
+         FROM mail_assignments ma
+         JOIN mail_messages mm ON mm.id = ma.mail_id
+        WHERE mm.labels_json LIKE '%Draft%'
+          AND mm.labels_json NOT LIKE '%Sent%'`,
+    )
+    .all() as { itemId: number }[]) {
+    touched.add(r.itemId);
+  }
+
   if (!pendingIds.length && mode !== "hard") {
     for (const itemId of touched) {
       refreshItemFacts(itemId, new Map(), followUpDays);
@@ -154,7 +169,14 @@ export async function derivePendingMails(
 
       const rule = tryRuleBasedAssign(mail, userEmail, { structuralOnly: true });
       if (rule.kind === "assigned" || rule.kind === "already") {
-        if (rule.kind === "assigned") attached += 1;
+        if (rule.kind === "assigned") {
+          attached += 1;
+          if (mode !== "hard") {
+            noteRecentItem(rule.itemId, "mail_attached", {
+              detail: { source: "thread", mailId: mail.id },
+            });
+          }
+        }
         touched.add(rule.itemId);
       }
       markDeriveState([mail.id], deferForBody ? "pending" : "done");

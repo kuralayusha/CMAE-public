@@ -1,3 +1,5 @@
+import { t } from "@/lib/i18n/t";
+
 export type SyncErrorKind =
   | "auth"
   | "network"
@@ -15,7 +17,7 @@ export type SyncErrorKind =
 
 export class FencedError extends Error {
   readonly kind = "fenced" as const;
-  constructor(message = "Job fenced out by epoch/credentials/account change") {
+  constructor(message = t("sync.fenced")) {
     super(message);
     this.name = "FencedError";
   }

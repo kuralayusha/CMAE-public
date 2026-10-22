@@ -1,9 +1,50 @@
 {
+  "help": {
+    "tracker": {
+      "helpTitle": "Tracker nasıl çalışır",
+      "helpBody0": "Her satır bir iş başvurusudur. CMAE ilgili Gmail yazışmalarını okur ve konuşma değiştikçe durumu günceller — durumları elle seçmezsiniz.",
+      "helpBody1": "Aşağıda geçen gün sayıları (ne zaman takip, ne zaman kapanış) Ayarlar’dan değiştirilebilir.",
+      "helpStatusesTitle": "Her durum ne anlama gelir",
+      "status0Label": "Gönderime hazır",
+      "status0Text": "Araştırma bitti; henüz gönderilmedi. Gmail taslağı yoksa durum Araştırma bitti, taslak oluşturulunca Mail taslakta olur — göndermeyi sen Gmail'den yaparsın.",
+      "status1Label": "Yanıt gerekli",
+      "status1Text": "Şirket cevap vermenizi isteyen bir şey yazdı — soru, mülakat daveti veya teklif gibi.",
+      "status2Label": "Aksiyon gerekli (link / form)",
+      "status2Text": "Bir link açmanızı, form doldurmanızı veya test tamamlamanızı istediler — sadece normal bir yanıt yazmak yetmez.",
+      "status3Label": "Takip zamanı",
+      "status3Text": "Gerçek bir cevap gelmeden yeterince beklediniz. Nazik bir hatırlatma yapmak mantıklı.",
+      "status4Label": "Beklemede (tarihli)",
+      "status4Text": "Önde bilinen bir tarih var — örneğin mülakat günü veya birinin izinden döneceği gün.",
+      "status5Label": "Aktif konuşmalar",
+      "status5Text": "Şu an top onlarda. Takip zamanı henüz gelmedi ve sizin acil yapmanız gereken bir şey yok.",
+      "status6Label": "Reddedildi",
+      "status6Text": "Hayır dediler. Kısa bir teşekkür çoğu zaman iyidir; bir süre sessiz kalırsanız satır kendiliğinden kapanır.",
+      "status7Label": "Kapalı",
+      "status7Text": "Bu başvuru bitti — vazgeçtiniz, ret sonrası teşekkür ettiniz veya uzun süre kimse yazmadı.",
+      "status8Label": "Pasif",
+      "status8Text": "Bu satırı siz duraklattınız. Tekrar açana kadar CMAE onu yapılacak iş gibi görmez.",
+      "status9Label": "Yoksayılan",
+      "status9Text": "Bir kenara bırakılmış — aktif takip listenizin parçası değil.",
+      "helpStep0": "Son mailleri yüklemek için Gmail sync çalıştırın. Bir şey eksik görünüyorsa Kapsamlı sync’i açın (son ~30 gün).",
+      "helpStep1": "Research’ten gelen şirketler de burada otomatik görünür.",
+      "helpStep2": "Takip, yanıt veya teşekkür için eylemi kullanın — CMAE taslağı Gmail Taslaklar’a yazar.",
+      "helpStep3": "Zaman çizelgesi için şirket satırına tıklayın. Gönderimi her zaman siz Gmail’den yaparsınız; CMAE sizin yerinize mail göndermez."
+    }
+  },
   "onboarding": {
     "telemetryNotice": "CMAE, maliyetleri düşük tutabilmemiz için rastgele bir kimlikle anonim AI kullanım sayılarını (token, özellik, model, maliyet) paylaşır. Mailler, prompt'lar, yanıtlar ve isimler asla gönderilmez. Ayarlar'dan kapatabilirsiniz."
   },
   "research": {
-    "inPanel": "Açık"
+    "inPanel": "Açık",
+    "contactHarvestedFromNote": "Araştırmada bulundu (name(at)domain gibi spam korumalı biçimler @ olarak normalize edildi)."
+  },
+  "terminal": {
+    "plain": {
+      "contactHarvested": "Araştırmadan contact’a {count} e-posta eklendi"
+    },
+    "detail": {
+      "contactHarvested": "contact.md güncellendi · araştırmadan {count} e-posta: {emails}"
+    }
   },
   "tracker": {
     "hardSync": "Tam sync",
@@ -11,6 +52,11 @@
     "hardSyncHint": "Yeniden çek + yeniden analiz",
     "hardSyncTitle": "Son 30 günü yeniden çeker ve her konuşmayı AI ile baştan analiz eder (ilk sync gibi). CMAE'deki daha eski mailler kalır; satırlar silinmez, güncellenir.",
     "syncTitle": "Hızlı sync — yalnızca son sync'ten sonraki yeni mailler",
+    "searchPlaceholder": "Şirket, rol, durum, alıcı ara…",
+    "searchAria": "Başvuruları ara",
+    "searchClear": "Aramayı temizle",
+    "searchEmpty": "“{query}” ile eşleşen başvuru yok.",
+    "metaCountFiltered": "{shown} / {total} başvuru",
     "detailPage": {
       "goneFromGmail": "Gmail'de silinmiş",
       "mergedRedirect": "Bu satır birleştirildi — #{id} açılıyor…",
@@ -30,6 +76,7 @@
       "itemMerged": "Bu başvuru başka bir satırla birleştirildi",
       "itemDeleted": "Bu başvuru kaldırıldı",
       "itemOpBusy": "Bu satırda zaten başka bir işlem sürüyor",
+      "gmailDraftStillCreating": "Gmail taslağı hâlâ kaydediliyor — biraz bekleyip tekrar deneyin",
       "maintenance": "Tracker bakım için geçici kilitli — kısa süre sonra deneyin",
       "mergeNotFound": "Birleştirme teklifi bulunamadı",
       "mergeNotPending": "Bu birleştirme teklifi artık bekleyen değil",
@@ -88,6 +135,9 @@
     },
     "chip": {
       "ready_to_send": "Hazır",
+      "researchDone": "Araştırma bitti",
+      "savingDraft": "Taslağa yazılıyor…",
+      "mailInDraft": "Mail taslakta",
       "needs_reply": "Yanıt",
       "closed": "Kapalı",
       "waiting": "Beklemede",

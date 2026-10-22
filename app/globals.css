@@ -322,6 +322,11 @@ select {
   box-sizing: border-box;
 }
 
+.cmae-help-modal.is-wide {
+  width: min(520px, calc(100vw - 48px));
+  max-height: min(86vh, 720px);
+}
+
 .cmae-help-head {
   display: flex;
   align-items: flex-start;
@@ -375,6 +380,52 @@ select {
   margin: 0;
   font-size: 14px;
   line-height: 1.6;
+  color: var(--ink-muted);
+}
+
+.cmae-help-statuses {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0 0;
+}
+
+.cmae-help-statuses-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.cmae-help-status-list {
+  margin: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.cmae-help-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cmae-help-status dt {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.cmae-help-status dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--ink-muted);
 }
 
@@ -897,15 +948,8 @@ select.cmae-input {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
   /* Match row left edge (16px); breathe under sticky nav */
   padding: 22px 18px 10px 16px;
-}
-
-.cmae-hist-head-mark {
-  width: 16px;
-  height: 1px;
-  background: var(--ink);
 }
 
 .cmae-hist-head h2 {
@@ -1905,7 +1949,7 @@ body:has(.term-live-page) {
 
 .cmae-tracker-toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
@@ -1913,11 +1957,89 @@ body:has(.term-live-page) {
   border-bottom: 1px solid var(--line);
 }
 
+.cmae-tracker-toolbar-main {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
 .cmae-tracker-toolbar-right {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.cmae-tracker-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 360px;
+}
+
+.cmae-tracker-search-ico {
+  position: absolute;
+  left: 10px;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.cmae-tracker-search-input {
+  width: 100%;
+  height: 36px;
+  padding: 0 32px 0 32px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--bg-elevated);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.cmae-tracker-search-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.cmae-tracker-search-input::placeholder {
+  color: var(--ink-faint);
+}
+
+.cmae-tracker-search-input:hover {
+  border-color: #cfcfcf;
+}
+
+.cmae-tracker-search-input:focus {
+  border-color: var(--ink);
+}
+
+.cmae-tracker-search-clear {
+  position: absolute;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cmae-tracker-search-clear:hover {
+  color: var(--ink);
 }
 
 .cmae-tracker-meta {
@@ -2122,11 +2244,51 @@ a.cmae-btn {
   gap: 8px;
 }
 
+.cmae-tracker-section-recent {
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
+
 .cmae-tracker-section-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+}
+
+.cmae-tracker-section-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cmae-tracker-section-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.cmae-tracker-recent-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-faint);
+  font-weight: 400;
+  letter-spacing: 0;
+  max-width: 42rem;
+}
+
+.cmae-tracker-recent-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ink-muted);
+  border: 1px solid var(--line);
+  vertical-align: middle;
 }
 
 .cmae-tracker-section-head h2 {
@@ -2399,10 +2561,36 @@ a.cmae-btn {
   overflow: hidden;
 }
 
+.cmae-status-chip-spin {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.cmae-status-chip-spin svg {
+  width: 12px;
+  height: 12px;
+}
+
 .cmae-status-chip-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.cmae-status-chip[data-phase="draft"] {
+  background: #e6f6ee;
+  color: #1f6b45;
+  border-color: #b9e0cc;
+}
+
+.cmae-status-chip[data-phase="saving"] {
+  background: #eef2f7;
+  color: #3d4f66;
+  border-color: #cfd8e6;
 }
 
 .cmae-status-chip-sep {
@@ -2799,6 +2987,72 @@ a.cmae-btn {
   margin: 0 0 10px;
 }
 
+.cmae-usage-acc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.cmae-usage-acc {
+  margin: 0;
+  border: 1px solid var(--line);
+  background: var(--bg-subtle, transparent);
+}
+
+.cmae-usage-acc[open] {
+  background: transparent;
+}
+
+.cmae-usage-acc-sum {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  padding: 14px 16px;
+  margin: 0;
+}
+
+.cmae-usage-acc-sum::-webkit-details-marker {
+  display: none;
+}
+
+.cmae-usage-acc-sum:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.cmae-usage-acc-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.cmae-usage-acc-chevron {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-right: 2px solid var(--ink-faint);
+  border-bottom: 2px solid var(--ink-faint);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+  margin-top: -4px;
+}
+
+.cmae-usage-acc[open] > .cmae-usage-acc-sum {
+  border-bottom: 1px solid var(--line);
+}
+
+.cmae-usage-acc[open] > .cmae-usage-acc-sum .cmae-usage-acc-chevron {
+  transform: rotate(225deg);
+  margin-top: 2px;
+}
+
+.cmae-usage-acc-body {
+  padding: 14px 16px 16px;
+}
+
 .cmae-usage-hint {
   margin: 0 0 12px;
 }
@@ -2846,4 +3100,115 @@ a.cmae-btn {
   max-width: 280px;
   font-size: 0.8rem;
   color: var(--ink-muted);
+}
+
+.cmae-usage-runs-toggle-col {
+  width: 28px;
+  padding-left: 10px !important;
+  padding-right: 0 !important;
+}
+
+.cmae-usage-run-row.is-expandable {
+  cursor: pointer;
+}
+
+.cmae-usage-run-row.is-expandable:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.cmae-usage-run-row.is-open {
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.cmae-usage-run-chevron {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--ink-faint);
+  border-bottom: 1.5px solid var(--ink-faint);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  margin-left: 4px;
+}
+
+.cmae-usage-run-chevron.is-open {
+  transform: rotate(45deg);
+  margin-top: -2px;
+}
+
+.cmae-usage-run-kind {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.cmae-usage-run-id {
+  margin-top: 2px;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.cmae-usage-run-child-row > td {
+  padding: 0 !important;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+}
+
+.cmae-usage-calls {
+  margin: 0;
+  border: none;
+}
+
+.cmae-usage-calls thead th {
+  background: transparent;
+  font-size: 0.7rem;
+}
+
+.cmae-usage-calls td,
+.cmae-usage-calls th {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+.cmae-usage-calls tr:last-child td {
+  border-bottom: none;
+}
+
+.cmae-usage-call-mode {
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+}
+
+.cmae-usage-call-model {
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmae-usage-call-status {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-muted);
+}
+
+.cmae-usage-call-status.is-ok {
+  color: var(--ink);
+}
+
+.cmae-usage-call-status.is-cache {
+  color: var(--ink-muted);
+}
+
+.cmae-usage-call-status.is-error,
+.cmae-usage-call-status.is-timeout,
+.cmae-usage-call-status.is-canceled {
+  color: var(--danger, #b33);
+}
+
+.cmae-usage-call-status.is-missing {
+  color: var(--ink-faint);
 }

@@ -27,6 +27,8 @@ export type TrackerStoreSnapshot = {
   rev: number;
   etag: string | null;
   sections: unknown[];
+  /** Sync highlight strip — items also remain in status sections. */
+  recent: unknown[];
   sync: TrackerStoreSyncMeta | null;
   total: number;
   loading: boolean;
@@ -59,6 +61,7 @@ const empty: TrackerStoreSnapshot = {
   rev: 0,
   etag: null,
   sections: [],
+  recent: [],
   sync: null,
   total: 0,
   loading: true,
@@ -113,6 +116,7 @@ export function subscribeTrackerStore(onStoreChange: () => void): () => void {
  */
 export function applyTrackerListPayload(data: {
   sections?: unknown[];
+  recent?: unknown[];
   sync?: TrackerStoreSyncMeta | null;
   total?: number;
   rev?: number;
@@ -130,6 +134,7 @@ export function applyTrackerListPayload(data: {
     rev: typeof data.rev === "number" ? data.rev : snapshot.rev,
     etag: data.etag !== undefined ? data.etag : snapshot.etag,
     sections: data.sections ?? snapshot.sections,
+    recent: data.recent ?? snapshot.recent,
     sync: data.sync !== undefined ? data.sync : snapshot.sync,
     total: typeof data.total === "number" ? data.total : snapshot.total,
     loading: false,
@@ -157,6 +162,13 @@ function mapSectionsItems(
   }));
 }
 
+function mapRecentItems(
+  recent: unknown[],
+  mapItem: (item: Record<string, unknown>) => Record<string, unknown>,
+): unknown[] {
+  return (recent as Record<string, unknown>[]).map((it) => mapItem({ ...it }));
+}
+
 /**
  * Apply optimistic user-column patch; returns mutationId for confirm/rollback.
  */
@@ -173,10 +185,14 @@ export function applyOptimisticItemPatch(
     }
     return { ...it, ...patch };
   });
+  const nextRecent = mapRecentItems(snapshot.recent, (it) =>
+    it.id === itemId ? { ...it, ...patch } : it,
+  );
   optimistic.set(mutationId, { mutationId, itemId, previous });
   setSnapshot({
     ...snapshot,
     sections: nextSections,
+    recent: nextRecent,
     error: null,
   });
   return mutationId;
@@ -192,7 +208,10 @@ export function confirmOptimisticMutation(
   const nextSections = mapSectionsItems(snapshot.sections, (it) =>
     it.id === entry.itemId ? { ...it, ...serverPatch } : it,
   );
-  setSnapshot({ ...snapshot, sections: nextSections });
+  const nextRecent = mapRecentItems(snapshot.recent, (it) =>
+    it.id === entry.itemId ? { ...it, ...serverPatch } : it,
+  );
+  setSnapshot({ ...snapshot, sections: nextSections, recent: nextRecent });
 }
 
 export function rollbackOptimisticMutation(mutationId: string): void {
@@ -202,7 +221,10 @@ export function rollbackOptimisticMutation(mutationId: string): void {
   const nextSections = mapSectionsItems(snapshot.sections, (it) =>
     it.id === entry.itemId ? { ...it, ...entry.previous } : it,
   );
-  setSnapshot({ ...snapshot, sections: nextSections });
+  const nextRecent = mapRecentItems(snapshot.recent, (it) =>
+    it.id === entry.itemId ? { ...it, ...entry.previous } : it,
+  );
+  setSnapshot({ ...snapshot, sections: nextSections, recent: nextRecent });
 }
 
 function nudgeServer(body: Record<string, unknown>): void {
@@ -246,6 +268,7 @@ export async function refreshTrackerList(opts?: {
       const data = (await res.json()) as {
         error?: string;
         sections?: unknown[];
+        recent?: unknown[];
         sync?: TrackerStoreSyncMeta | null;
         total?: number;
         rev?: number;
@@ -272,6 +295,7 @@ export async function refreshTrackerList(opts?: {
         rev,
         etag: res.headers.get("ETag"),
         sections: data.sections || [],
+        recent: data.recent || [],
         sync: data.sync ?? null,
         total: data.total || 0,
         loading: false,

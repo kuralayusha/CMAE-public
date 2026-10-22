@@ -137,6 +137,14 @@ export type TrackerSection = {
   items: TrackerListItem[];
 };
 
+/** Highlight strip after sync — items also remain in their status sections. */
+export type TrackerRecentReason = "new_item" | "mail_attached";
+
+export type TrackerRecentItem = TrackerListItem & {
+  recentReason: TrackerRecentReason;
+  recentTouchedAt: string;
+};
+
 export const STATUS_ORDER: TrackerStatus[] = [...TRACKER_STATUSES];
 
 export const STATUS_TITLES: Record<TrackerStatus, string> = {

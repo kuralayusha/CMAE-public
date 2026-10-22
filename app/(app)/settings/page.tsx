@@ -241,7 +241,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
       });
-      if (!res.ok) throw new Error("save failed");
+      if (!res.ok) throw new Error(t("settings.telemetrySaveFailed"));
     } catch {
       setMeta((m) => (m ? { ...m, usageTelemetryEnabled: prev } : m));
       flash(t("settings.telemetrySaveFailed"), "err");

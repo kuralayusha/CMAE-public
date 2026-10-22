@@ -328,8 +328,11 @@ export async function extractEmails(jobId: string, htmlOrText: string, sourceUrl
   return emails;
 }
 
-/** Plain + obfuscated emails: name[at]co.com, name(at)co.com, name at co.com, [dot] */
-function extractEmailsJs(text: string): string[] {
+/**
+ * Plain + obfuscated emails: name[at]co.com, name(at)co.com, name at co.com, [dot].
+ * Exported for silent harvest from research notes (no terminal spam).
+ */
+export function extractEmailsFromText(text: string): string[] {
   const normalized = deobfuscateEmailText(text);
   const out = new Set<string>();
 
@@ -362,11 +365,21 @@ function extractEmailsJs(text: string): string[] {
   return [...out];
 }
 
+function extractEmailsJs(text: string): string[] {
+  return extractEmailsFromText(text);
+}
+
 function deobfuscateEmailText(text: string): string {
   return text
     .replace(/&#64;|&at;/gi, "@")
     .replace(/&#46;/g, ".")
-    .replace(/\s*[\[({<]\s*(?:at|ät|AT)\s*[\])}>]\s*/g, "@")
+    // kontakt(at)co.com / name[at]co.com / name{at}co.com / name <at> co.com
+    .replace(/\s*[\[({<]\s*(?:at|ät|AT|@)\s*[\])}>]\s*/g, "@")
+    // kontakt at co.com (no brackets) — only when flanked by identifier chars
+    .replace(
+      /([A-Za-z0-9._%+-])\s+(?:at|ät)\s+([A-Za-z0-9.-]+\.[A-Za-z]{2,})/gi,
+      "$1@$2",
+    )
     .replace(/\s*[\[({<]\s*(?:dot|punkt|\.)\s*[\])}>]\s*/gi, ".");
 }
 

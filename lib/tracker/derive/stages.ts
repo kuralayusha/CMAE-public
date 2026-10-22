@@ -36,6 +36,7 @@ import { softDeleteItemInTx } from "../item-tx";
 import { askTrackerLlm, TRACKER_LLM_MODEL } from "../llm";
 import type { AiFeature } from "@/lib/ai-usage/features";
 import type { LlmFn } from "../llm-core";
+import { noteRecentItem } from "../recent";
 import { normalizeMailText } from "../signals";
 import type { SyncProgressFn } from "../types";
 import {
@@ -180,6 +181,8 @@ class StageContext {
   readonly stats = emptyStats();
   readonly userEmails: string[];
   readonly accountId: string;
+  /** Mail ids of this derive run — used so hard sync does not flood Recent. */
+  readonly dirtyMailIds: Set<number>;
   private signature: SignatureModel | null = null;
   private readonly baseLlm: LlmFn | undefined;
 
@@ -188,10 +191,12 @@ class StageContext {
     userEmail: string,
     readonly log: SyncProgressFn | undefined,
     readonly signal: AbortSignal | undefined,
+    dirtyMailIds: Set<number>,
     llm?: LlmFn,
   ) {
     this.accountId = getFencingTokens().accountId || userEmail;
     this.userEmails = [...new Set([userEmail, this.accountId].filter(Boolean))];
+    this.dirtyMailIds = dirtyMailIds;
     this.baseLlm = llm;
   }
 
@@ -227,7 +232,9 @@ class StageContext {
     const rows = getSqlite()
       .prepare(
         `SELECT body_text AS body FROM mail_messages
-         WHERE folder = 'SENT' OR direction = 'out'
+         WHERE (folder = 'SENT' OR direction = 'out')
+           AND (labels_json IS NULL OR labels_json NOT LIKE '%Draft%'
+                OR labels_json LIKE '%Sent%')
          ORDER BY COALESCE(internal_date, date_iso) DESC LIMIT 80`,
       )
       .all() as { body: string }[];
@@ -593,9 +600,19 @@ async function runIdentity(
       resolved.set(conv.key, itemId);
       if (d.kind === "create") {
         ctx.stats.created += 1;
+        noteRecentItem(itemId, "new_item", {
+          detail: { source: "identity", mailCount: conv.mailIds.length },
+        });
         ctx.log?.("ok", t("sync.incrementalCreated", { company: itemCompany(itemId) }));
       } else {
         ctx.stats.attached += 1;
+        // Hard sync re-attaches everyone — only surface when dirty mail landed.
+        const dirtyHit = conv.mailIds.some((id) => ctx.dirtyMailIds.has(id));
+        if (ctx.mode !== "hard" || dirtyHit) {
+          noteRecentItem(itemId, "mail_attached", {
+            detail: { source: "identity", mailCount: conv.mailIds.length },
+          });
+        }
         ctx.log?.(
           "ok",
           t("sync.stageAttachedConversation", {
@@ -976,7 +993,14 @@ export async function runConversationStages(opts: {
   signal?: AbortSignal;
   llm?: LlmFn;
 }): Promise<StageStats> {
-  const ctx = new StageContext(opts.mode, opts.userEmail, opts.onProgress, opts.signal, opts.llm);
+  const ctx = new StageContext(
+    opts.mode,
+    opts.userEmail,
+    opts.onProgress,
+    opts.signal,
+    opts.dirtyMailIds,
+    opts.llm,
+  );
   const hard = opts.mode === "hard";
   const convs = syncConversations();
   let assigned = loadAssigned();

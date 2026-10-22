@@ -3,6 +3,7 @@
  * Never called from GET /api/tracker.
  */
 
+import { isDraftCopyLabels } from "@/lib/mail/draft-copy";
 import { eq } from "drizzle-orm";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpTrackerRevision } from "@/lib/db/revision";
@@ -13,17 +14,21 @@ import {
   searchDraftByMessageId,
   type DraftMailboxMeta,
 } from "@/lib/mail/gmail-imap-source";
+import { t } from "@/lib/i18n/t";
 import { getGmailCredentials } from "@/lib/settings/service";
 import {
   LIVE_DRAFT_STATES,
   listLiveDrafts,
+  markDraftDeletedByUser,
   markDraftPresent,
   type GmailDraftRow,
 } from "./gmail-drafts-store";
 import { reconcileDraftFlagsForRow } from "./pending-draft";
 
-const MISSING_MIN_CHECKS = 2;
-const MISSING_MIN_MS = 60_000;
+// Successful Drafts scan + not in mailbox + no sent proof → gone.
+// (Scan failures use markUnknown; they never call bumpMissing.)
+const MISSING_MIN_CHECKS = 1;
+const MISSING_MIN_MS = 0;
 const CREATING_TIMEOUT_MS = 10 * 60_000;
 const RECONCILE_IMAP_TIMEOUT_MS = 45_000;
 
@@ -46,7 +51,7 @@ declare global {
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`${label} timed out after ${ms}ms`));
+      reject(new Error(t("sync.timedOut", { label, ms })));
     }, ms);
     promise.then(
       (v) => {
@@ -126,6 +131,8 @@ function findSentProof(row: GmailDraftRow): number | null {
         `SELECT id FROM mail_messages
          WHERE gone_at IS NULL
            AND thread_id = ?
+           AND (labels_json IS NULL OR labels_json NOT LIKE '%Draft%'
+                OR labels_json LIKE '%Sent%')
            AND (
              labels_json LIKE '%\\\\Sent%' OR labels_json LIKE '%Sent%'
              OR folder = 'SENT' OR direction = 'out'
@@ -147,6 +154,8 @@ function findSentProof(row: GmailDraftRow): number | null {
         `SELECT id FROM mail_messages
          WHERE gone_at IS NULL
            AND message_id = ?
+           AND (labels_json IS NULL OR labels_json NOT LIKE '%Draft%'
+                OR labels_json LIKE '%Sent%')
            AND (
              labels_json LIKE '%\\\\Sent%' OR labels_json LIKE '%Sent%'
              OR folder = 'SENT' OR direction = 'out'
@@ -166,6 +175,7 @@ function findSentProof(row: GmailDraftRow): number | null {
       .all()
       .filter((m) => {
         if (m.goneAt) return false;
+        if (isDraftCopyLabels(m.labelsJson)) return false;
         if (m.folder !== "SENT" && m.direction !== "out") {
           const labels = (m.labelsJson || "").toLowerCase();
           if (!labels.includes("sent")) return false;
@@ -207,13 +217,7 @@ function markSent(row: GmailDraftRow, mailId: number): void {
 }
 
 function markDeleted(row: GmailDraftRow): void {
-  getSqlite()
-    .prepare(
-      `UPDATE gmail_drafts SET
-         state = 'deleted_by_user', last_checked_at = ?, error = NULL
-       WHERE id = ?`,
-    )
-    .run(new Date().toISOString(), row.id);
+  markDraftDeletedByUser(row.id);
   // Re-enable prepare / create-draft from disk
   const item = getDb()
     .select()
@@ -223,7 +227,6 @@ function markDeleted(row: GmailDraftRow): void {
   if (item) {
     reconcileDraftFlagsForRow(item);
   }
-  bumpTrackerRevision("drafts", "upsert", [row.itemId]);
 }
 
 function markFailed(row: GmailDraftRow, error: string): void {
@@ -333,7 +336,7 @@ export function reconcileAgainstLiveMetas(opts: {
     if (row.state === "creating") {
       const age = now.getTime() - Date.parse(row.createdAt);
       if (Number.isFinite(age) && age >= CREATING_TIMEOUT_MS) {
-        markFailed(row, "not found in Drafts after APPEND window");
+        markFailed(row, t("sync.draftsNotFoundAfterAppend"));
         result.failed += 1;
       }
       continue;
@@ -397,7 +400,7 @@ export async function runDraftsReconcile(opts?: {
     const accountId = normalizeAccountId(creds.address);
     const liveRows = listLiveDrafts(accountId);
     if (!liveRows.length) {
-      opts?.onProgress?.("ok", "No live Gmail drafts to reconcile");
+      opts?.onProgress?.("ok", t("sync.draftsNoLive"));
       return {
         checked: 0,
         present: 0,
@@ -411,7 +414,7 @@ export async function runDraftsReconcile(opts?: {
 
     opts?.onProgress?.(
       "think",
-      `Drafts reconcile: ${liveRows.length} live row(s)`,
+      t("sync.draftsReconcileStart", { count: liveRows.length }),
     );
 
     let live: DraftMailboxMeta[] = [];
@@ -420,7 +423,7 @@ export async function runDraftsReconcile(opts?: {
       live = await withTimeout(
         listAllDraftMetas(creds.address, creds.appPassword),
         RECONCILE_IMAP_TIMEOUT_MS,
-        "Gmail Drafts full scan",
+        t("sync.draftsScanLabel"),
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -457,7 +460,12 @@ export async function runDraftsReconcile(opts?: {
 
     opts?.onProgress?.(
       "ok",
-      `Drafts: present=${result.present} sent=${result.sent} deleted=${result.deleted} failed=${result.failed}`,
+      t("sync.draftsSummary", {
+        present: result.present,
+        sent: result.sent,
+        deleted: result.deleted,
+        failed: result.failed,
+      }),
     );
     return result;
   })();

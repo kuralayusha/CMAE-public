@@ -48,7 +48,6 @@ export function ResearchHistory({
   return (
     <aside className="cmae-hist" aria-label={t("research.historyAria")}>
       <header className="cmae-hist-head">
-        <span className="cmae-hist-head-mark" aria-hidden />
         <h2>{t("research.historyTitle")}</h2>
       </header>
       <div className="cmae-hist-scroll">

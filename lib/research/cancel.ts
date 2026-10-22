@@ -82,7 +82,9 @@ export async function cancelJob(jobId: string): Promise<{
       emitLine(
         jobId,
         "err",
-        `Folder rename failed: ${err instanceof Error ? err.message : String(err)}`,
+        t("terminal.detail.folderRenameFailed", {
+          msg: err instanceof Error ? err.message : String(err),
+        }),
       );
     }
   } else if (folderName && !hasFolderStatusSuffix(folderName)) {
@@ -95,7 +97,11 @@ export async function cancelJob(jobId: string): Promise<{
     folderName,
     error: t("research.error.canceledByUser"),
   });
-  emitLine(jobId, "system", `[conductor] stopped · folder → ${folderName}`);
+  emitLine(
+    jobId,
+    "system",
+    t("terminal.detail.canceledFolder", { folder: folderName }),
+  );
 
   return { folderName };
 }

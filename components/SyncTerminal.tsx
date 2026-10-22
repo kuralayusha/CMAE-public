@@ -27,7 +27,7 @@ export function SyncTerminal({ lines, status, onCancel, onDismiss }: Props) {
   const upper = useLocaleUpper();
   const locale = useIntlLocale();
   const [stuckBottom, setStuckBottom] = useState(true);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

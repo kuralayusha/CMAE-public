@@ -10,15 +10,19 @@ import { trackerItems } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
 import { getWorkspaceRoot } from "@/lib/research/workspace";
 import { getGmailCredentials, getSettingsRow } from "@/lib/settings/service";
+import { searchDraftByMessageId } from "@/lib/mail/gmail-imap-source";
 import { appendDraft, gmailDraftsFolderUrl } from "./imap";
 import { assertItemActiveForDrafts } from "./inactive";
+import { rescanWorkspaceFolder } from "./workspace-index";
 import {
   clearHasDraftFlagsForKind,
   contentHashForDraft,
   getLiveDraftForItem,
   insertCreatingDraft,
+  markDraftDeletedByUser,
   markDraftFailed,
   markDraftPresent,
+  waitForDraftSettled,
 } from "./gmail-drafts-store";
 import {
   findEmailDraftInFolder,
@@ -191,21 +195,57 @@ export async function createGmailDraftForItem(
     const draftsUrl = gmailDraftsFolderUrl(creds.address);
 
     // Exactly-once: unique live index — return existing without second APPEND.
+    // On ensure (user opens "Gmail Drafts"), verify the message is still there;
+    // if they deleted it in Gmail, clear live state and recreate below.
     if (
       live &&
       (live.state === "creating" ||
         live.state === "present" ||
         live.state === "unknown")
     ) {
-      triggerDraftsReconcile();
-      return {
-        gmailUrl: draftsUrl,
-        subject: live.subject,
-        to: live.toAddr,
-        reused: true,
-        draftId: live.id,
-        state: live.state,
-      };
+      let row = live;
+      // Another request may still be APPENDing — never hand back "creating".
+      if (row.state === "creating") {
+        const settled = await waitForDraftSettled(row.id);
+        if (!settled || settled.state === "creating") {
+          throw new Error(t("tracker.error.gmailDraftStillCreating"));
+        }
+        row = settled;
+      }
+
+      if (row.state === "present" || row.state === "unknown") {
+        let stillLive = true;
+        if (
+          opts?.ensure &&
+          row.messageIdHdr &&
+          !row.messageIdHdr.startsWith("legacy:")
+        ) {
+          try {
+            const found = await searchDraftByMessageId(
+              creds.address,
+              creds.appPassword,
+              row.messageIdHdr,
+            );
+            if (!found) {
+              markDraftDeletedByUser(row.id);
+              stillLive = false;
+            }
+          } catch {
+            /* IMAP blip — keep live row, open Drafts folder */
+          }
+        }
+        if (stillLive) {
+          triggerDraftsReconcile();
+          return {
+            gmailUrl: draftsUrl,
+            subject: row.subject,
+            to: row.toAddr,
+            reused: true,
+            draftId: row.id,
+            state: row.state,
+          };
+        }
+      }
     }
 
     const settings = getSettingsRow();
@@ -236,17 +276,39 @@ export async function createGmailDraftForItem(
       contentHash: hash,
     });
 
+    // Index hash includes the recipient; refresh it now that the live draft's
+    // To is known, otherwise the row shows a false "differs from Gmail" warning.
+    if (created && item.workspaceFolder) {
+      try {
+        rescanWorkspaceFolder(item.workspaceFolder);
+      } catch {
+        /* index refresh is best-effort */
+      }
+    }
+
     if (!created) {
-      // Parallel POST lost the race — reuse winner's row (no APPEND).
-      triggerDraftsReconcile();
-      return {
-        gmailUrl: draftsUrl,
-        subject: row.subject,
-        to: row.toAddr,
-        reused: true,
-        draftId: row.id,
-        state: row.state,
-      };
+      // Parallel POST lost the race — wait for winner's APPEND to finish.
+      const settled = await waitForDraftSettled(row.id);
+      if (!settled || settled.state === "creating") {
+        throw new Error(t("tracker.error.gmailDraftStillCreating"));
+      }
+      if (settled.state === "failed") {
+        throw new Error(settled.error || t("tracker.error.gmailDraft"));
+      }
+      if (settled.state === "present" || settled.state === "unknown") {
+        triggerDraftsReconcile();
+        return {
+          gmailUrl: draftsUrl,
+          subject: settled.subject,
+          to: settled.toAddr,
+          reused: true,
+          draftId: settled.id,
+          state: settled.state,
+        };
+      }
+      // deleted / superseded — fall through is unreachable (unique live gone);
+      // re-enter by throwing so the client can retry.
+      throw new Error(t("tracker.error.gmailDraft"));
     }
 
     let attachedCv: string | null = null;

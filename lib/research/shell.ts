@@ -42,20 +42,37 @@ export async function runCurl(
       emitLine(
         jobId,
         "system",
-        `  ↳ stderr: ${preview.slice(0, 240)}`,
+        t("terminal.detail.curlStderr", { preview: preview.slice(0, 240) }),
         undefined,
-        `Download warning: ${preview.slice(0, 100)}. (Scout)`,
+        withAgent(
+          t("terminal.plain.downloadWarning", {
+            preview: preview.slice(0, 100),
+          }),
+          "scout",
+          t,
+        ),
       );
     }
     if (!opts?.quietLog) {
       emitLine(
         jobId,
         "system",
-        `  ↳ ${out.length} bytes${out.length ? ` · preview: ${compact(out, 120)}` : ""}`,
-        undefined,
         out.length
-          ? `Page fetched (${Math.round(out.length / 1024)} KB). (Scout)`
-          : "Page came back empty. (Scout)",
+          ? t("terminal.detail.curlBytesPreview", {
+              bytes: out.length,
+              preview: compact(out, 120),
+            })
+          : t("terminal.detail.curlBytes", { bytes: out.length }),
+        undefined,
+        withAgent(
+          out.length
+            ? t("terminal.plain.pageFetched", {
+                kb: Math.round(out.length / 1024),
+              })
+            : t("terminal.plain.pageEmpty"),
+          "scout",
+          t,
+        ),
       );
     }
     return { stdout: out, stderr: err, code };

@@ -27,14 +27,14 @@ export const PAGE_HELP: Record<AppPageId, PageHelp> = {
       "Follow every application in one list. Drafts go to Gmail; you always send them yourself.",
     helpTitle: "How Tracker works",
     helpBody: [
-      "Tracker brings together Gmail application threads and companies from Research.",
-      "Each row is one application: its status, latest activity, and the next actions you can take.",
+      "Each row is one job application. CMAE reads your related Gmail and updates the status as the conversation changes — you do not set statuses by hand.",
+      "Days mentioned below (when to follow up, when something closes) can be changed in Settings.",
     ],
     helpSteps: [
-      "Run Gmail sync to load recent mail. The first time, Full sync can look back about 30 days.",
+      "Run Gmail sync to load recent mail. Turn on Thorough sync if something looks missing (last ~30 days).",
       "Companies from Research also appear here automatically.",
       "For a follow-up, reply, or thank-you, use the action — CMAE writes a draft into Gmail Drafts.",
-      "You always open Gmail and send yourself; CMAE never sends mail for you.",
+      "Click a company row to open its timeline. You always send from Gmail yourself; CMAE never sends mail for you.",
     ],
   },
   research: {

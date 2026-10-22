@@ -159,6 +159,18 @@ export const trackerItems = sqliteTable("tracker_items", {
     .default(sql`(datetime('now'))`),
 });
 
+/** Sync "Recent" highlight strip — mirror of items newly created or that gained mail. */
+export const trackerRecent = sqliteTable("tracker_recent", {
+  itemId: integer("item_id")
+    .primaryKey()
+    .references(() => trackerItems.id, { onDelete: "cascade" }),
+  /** new_item | mail_attached */
+  reason: text("reason").notNull(),
+  detailJson: text("detail_json"),
+  firstAt: text("first_at").notNull(),
+  touchedAt: text("touched_at").notNull(),
+});
+
 /** One mail → at most one item. */
 export const mailAssignments = sqliteTable("mail_assignments", {
   mailId: integer("mail_id")

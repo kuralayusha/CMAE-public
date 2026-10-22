@@ -39,6 +39,25 @@ export function contentHashForDraft(parts: {
     .slice(0, 32);
 }
 
+/** Poll until a draft leaves `creating` (present / failed / deleted / …). */
+export async function waitForDraftSettled(
+  id: string,
+  opts?: { timeoutMs?: number; intervalMs?: number },
+): Promise<GmailDraftRow | null> {
+  const timeoutMs = opts?.timeoutMs ?? 90_000;
+  const intervalMs = opts?.intervalMs ?? 400;
+  const start = Date.now();
+  for (;;) {
+    const row =
+      getDb().select().from(gmailDrafts).where(eq(gmailDrafts.id, id)).get() ??
+      null;
+    if (!row) return null;
+    if (row.state !== "creating") return row;
+    if (Date.now() - start >= timeoutMs) return row;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+}
+
 export function getLiveDraftForItem(
   itemId: number,
   kind: DraftKind,
@@ -146,7 +165,8 @@ export function insertCreatingDraft(opts: {
     .where(eq(gmailDrafts.id, id))
     .get();
   if (!row) throw new Error("gmail_drafts insert vanished");
-  bumpTrackerRevision("drafts", "upsert", [opts.itemId]);
+  // No revision bump here — UI stays on "research done" until markDraftPresent
+  // (item_ops lock already signals "saving" via SSE).
   return { row, created: true };
 }
 
@@ -209,6 +229,24 @@ export function markDraftFailed(id: string, error: string): void {
        WHERE id = ? AND state = 'creating'`,
     )
     .run(error.slice(0, 500), new Date().toISOString(), id);
+  const row = getDb()
+    .select()
+    .from(gmailDrafts)
+    .where(eq(gmailDrafts.id, id))
+    .get();
+  if (row) bumpTrackerRevision("drafts", "upsert", [row.itemId]);
+}
+
+/** Gmail Drafts no longer has this message — clear live pending UX. */
+export function markDraftDeletedByUser(id: string): void {
+  const sqlite = getSqlite();
+  sqlite
+    .prepare(
+      `UPDATE gmail_drafts SET
+         state = 'deleted_by_user', last_checked_at = ?, error = NULL
+       WHERE id = ? AND state IN ('creating', 'present', 'unknown')`,
+    )
+    .run(new Date().toISOString(), id);
   const row = getDb()
     .select()
     .from(gmailDrafts)
