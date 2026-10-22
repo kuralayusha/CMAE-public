@@ -73,11 +73,11 @@ SUBJECT LINE
   - equivalent phrasing in the mail language
 - Copy the candidate's full name character-for-character from the Candidate line — NEVER shorten, drop syllables, or invent a nickname (e.g. if the name is "Jane Doe", write "Jane Doe", never "Jane Do").
 - Never use vague subjects: "Hello", "Hi", "Job application", "İş başvurusu", "Merhaba", "CV", "Application".
-- If applying to a known open role, name that role (or closest accurate title) in the subject.
+- If (and only if) MATCHED OPEN ROLES lists a job, you may name that exact title in the subject. Otherwise use the CV's primary field (e.g. "Frontend" / "Fullstack") — never an unmatched posting.
 
 BODY STRUCTURE (in this order)
 1) Greeting: Use the recipient's real name when known ("Sayın Ayşe Hanım" / "Dear Ms. …"). If only a generic inbox (info@, careers@, hr@), use a natural generic greeting for the language ("Sayın İlgili" / "Dear Hiring Team") — never invent a name.
-2) Opening (1–2 sentences): Who you are (exact full name from Candidate line — never shortened) and what you want (specific field/role — never "any position").
+2) Opening (1–2 sentences): Who you are (exact full name from Candidate line — never shortened) and what you want (CV-aligned field, or a MATCHED open role title only).
 3) Value proposition (2–3 sentences): Strongest 1–2 experiences or wins from the CV; prefer quantified results when the CV has numbers. No fabricated metrics.
 4) Why this company (1–2 sentences): One specific, research-backed note (product, project, value, news). Must sound researched, not copy-paste.
 5) Closing (1–2 sentences): Open to a short conversation; if cold/no open role, state interest in being considered when a fitting role opens. Mention that the CV is attached (PDF) — do not invent attachment filenames beyond a natural "CV attached" line.
@@ -85,15 +85,20 @@ BODY STRUCTURE (in this order)
 
 PERSONALIZATION & INTENT
 - Personalize every mail: company name, sector, and a concrete interest point from research. Never generic template filler that could fit any company.
-- State a clear target field/role. Prefer the matched open job when available; otherwise the closest CV-aligned field.
+- Target role/field: ONLY from MATCHED OPEN ROLES when that block is non-empty; otherwise the candidate's PRIMARY CV discipline (software/frontend/fullstack for an engineering CV). Never "any position".
 - Tone: professional but warm — not stiff, not pleading, not salesy.
 - Language: write entirely in the required language (site language or preferred language, as instructed). Match formality to that culture.
 - Spelling: flawless. Company name must match research exactly — misspelling the company is a critical failure.
 - Body is the cover letter; do not propose a separate motivation letter.
 
+ROLE CITATION — HARD RULES (critical failure if broken)
+- You may write "I am applying for / bewerbe mich auf [Title]" ONLY when [Title] appears verbatim in MATCHED OPEN ROLES.
+- If MATCHED OPEN ROLES is empty (cold / initiative): do NOT name any open vacancy from the site, careers page, or research notes (sales, HR, auditor, Meister, Produktmanager, intern, …). Write a speculative application for the CV's own field and say you know there may be no matching posting.
+- Never "force-fit" the CV into an unrelated opening. Company interest ≠ applying for that company's wrong job.
+
 COLD vs OPEN ROLE
-- Open role: reference the role naturally; show fit without repeating the whole CV.
-- Cold / no matching role: acknowledge you know there may be no open posting; still make a clear contribution case for a specific field.
+- Open role (matched list non-empty): reference the matched title naturally; show fit without repeating the whole CV.
+- Cold / no matching role: speculative / initiative for the CV field; acknowledge no matching posting if true; still make a contribution case for that field.
 `.trim();
 
 export async function runWriter(ctx: RunContext) {
@@ -116,9 +121,13 @@ export async function runWriter(ctx: RunContext) {
     );
   }
 
-  const jobContext = ctx.jobFit?.hasMatchingJob
-    ? `Open roles:\n${JSON.stringify(ctx.jobFit.jobs, null, 2)}`
-    : "No matching open role — write a cold/initiative application.";
+  const matchedJobs =
+    ctx.jobFit?.hasMatchingJob && ctx.jobFit.jobs.length
+      ? ctx.jobFit.jobs
+      : [];
+  const jobContext = matchedJobs.length
+    ? `MATCHED OPEN ROLES (you may name ONLY these titles as the role you apply for):\n${JSON.stringify(matchedJobs, null, 2)}\n\nJobFit notes (context only — do NOT apply to roles merely mentioned here as rejects):\n${ctx.jobFit?.notes || "—"}`
+    : `MATCHED OPEN ROLES: (none)\nCold / initiative application only.\nInfer the target field from the CV's primary discipline (e.g. frontend/fullstack software engineering) — NOT from unmatched openings on the site.\nJobFit notes (rejects / no-match explanations — do NOT apply to those roles):\n${ctx.jobFit?.notes || "—"}`;
 
   const recipient =
     ctx.primaryEmail ||

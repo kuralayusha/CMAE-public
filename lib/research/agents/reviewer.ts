@@ -55,7 +55,7 @@ TARGET LOCK: The user-given URL is the only application/research target. Company
 
 Check:
 - scout: useful pages found? company name matches the given URL host (HARD FAIL / rewindTo=scout if name is a different organization than the URL owner)?
-- jobfit: jobs claim match CV? cold path justified? (only roles on the target site)
+- jobfit: every listed job a REAL CV match (same job family + core skills + seniority)? Weak/stretch/unrelated openings must NOT be in jobs[] (notes only). Cold path when nothing fits. (only roles on the target site)
 - contact: best email for hiring at the TARGET company (careers > generic)? Do NOT demand emails for a different company/domain than the given URL.
 - research: concrete, non-hallucinated, about the TARGET URL entity only, useful for personalization?
 - writer: email matches CV + research + job/cold intent for the TARGET company? correct language? no fake claims? tone?
@@ -67,6 +67,8 @@ Check:
   · personalized to this company (not copy-paste generic); clear target role/field (not "any position")
   · professional-warm tone; company name spelled correctly; plain text only
 - writer HARD FAIL (score writer ≤ 40 and rewindTo=writer) if SUBJECT/BODY contain notes, TODOs, placeholders ([…], TBD, N/A, "unknown", "bulunamadı"), meta comments, or explanations about missing info. SUBJECT+BODY must be paste-ready for Gmail draft — no agent chatter inside the mail fields. Missing facts must be omitted, never annotated.
+- writer HARD FAIL (score writer ≤ 35 and rewindTo=writer) if the mail applies for / names a specific open vacancy that is NOT in JobFit's matched jobs list, OR applies for a role clearly outside the CV's job family (e.g. sales/HR/auditor/stage tech when CV is software engineering). Cold mails must target the CV field, not an unmatched posting.
+- jobfit HARD FAIL (score jobfit ≤ 40 and rewindTo=jobfit) if jobs[] includes roles that are clearly not CV matches (wrong family, missing required certs/stack, junior-only for senior CV, etc.).
 
 If overall < ${THRESHOLD} OR writer < ${THRESHOLD}, set rewindTo to the WEAKEST specialist that would most improve the package (usually writer, sometimes research/contact/jobfit/scout).
 If all good, rewindTo = null and passed = true.

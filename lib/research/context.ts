@@ -8,9 +8,18 @@ export type UserProfile = {
   preferredLang: string;
 };
 
+export type JobFitJob = {
+  title: string;
+  url: string;
+  whyFit: string;
+  priority: number;
+  /** 0–100; only ≥70 should be treated as a real match. */
+  fitScore?: number;
+};
+
 export type JobFitResult = {
   hasMatchingJob: boolean;
-  jobs: { title: string; url: string; whyFit: string; priority: number }[];
+  jobs: JobFitJob[];
   siteLanguage: string;
   notes: string;
 };
