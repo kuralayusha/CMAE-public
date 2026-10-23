@@ -321,11 +321,17 @@ export function applySentDraftEvents(
 ): EventTimelineEntry[] {
   if (!byMailId.size) return timeline;
   let changed = false;
-  const next = timeline.map((entry) => {
+  const next: EventTimelineEntry[] = timeline.map((entry) => {
     const forced = byMailId.get(entry.mailId);
     if (!forced || entry.dir !== "out" || entry.event === forced) return entry;
     changed = true;
-    return { ...entry, event: forced, origin: "stored", source: "rule" };
+    const updated: EventTimelineEntry = {
+      ...entry,
+      event: forced,
+      origin: "stored",
+      source: "rule",
+    };
+    return updated;
   });
   return changed ? next : timeline;
 }
