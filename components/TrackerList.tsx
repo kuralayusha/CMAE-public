@@ -1372,10 +1372,34 @@ export function TrackerList() {
     });
   }
 
-  function renderPrimaryMenuItem(item: TrackerItem) {
-    if (item.status === "inactive") return null;
+  function renderPrepareMenuItem(
+    item: TrackerItem,
+    kind: DraftPrepareKind,
+    spinning: boolean,
+  ) {
+    const labelKey =
+      kind === "follow_up"
+        ? "tracker.action.prepareFollowUp"
+        : kind === "thanks"
+          ? "tracker.action.prepareThanks"
+          : "tracker.action.prepareReply";
+    return renderMenuItem({
+      label: t(labelKey),
+      icon: isBusyKey(`${item.id}:prep:${kind}`) ? (
+        <IconSpinner />
+      ) : (
+        <IconPrepare />
+      ),
+      disabled: spinning,
+      onClick: () => openPrepareModal(item, kind),
+    });
+  }
+
+  function renderPrimaryMenuItems(item: TrackerItem): ReactNode[] {
+    if (item.status === "inactive") return [];
 
     const spinning = isBusyItem(item.id);
+    const items: ReactNode[] = [];
 
     if (item.pendingGmailDraft) {
       const st = item.pendingGmailDraft.state || "present";
@@ -1389,55 +1413,64 @@ export function TrackerList() {
         spinning ||
         isServerDrafting(item.id) ||
         st === "creating";
-      return renderMenuItem({
-        label: t(labelKey),
-        icon: draftBusy ? <IconSpinner /> : <IconWait />,
-        disabled: draftBusy,
-        onClick: () => void openPendingDraft(item),
-      });
+      items.push(
+        renderMenuItem({
+          label: t(labelKey),
+          icon: draftBusy ? <IconSpinner /> : <IconWait />,
+          disabled: draftBusy,
+          onClick: () => void openPendingDraft(item),
+        }),
+      );
+      // Keep prepare available so an unsent Gmail draft can be regenerated.
+      const pendingKind = item.pendingGmailDraft.kind;
+      if (
+        pendingKind === "reply" ||
+        pendingKind === "follow_up" ||
+        pendingKind === "thanks"
+      ) {
+        items.push(renderPrepareMenuItem(item, pendingKind, spinning));
+      }
+      return items;
     }
 
     if (item.status === "ready_to_send") {
       const draftBusy =
         isBusyKey(`${item.id}:draft:application`) ||
         isServerDrafting(item.id);
-      return renderMenuItem({
-        label: draftBusy
-          ? t("tracker.action.draftCreating")
-          : t("tracker.action.createDraft"),
-        icon: draftBusy ? <IconSpinner /> : <IconDraft />,
-        disabled: spinning || draftBusy,
-        onClick: () => void draft(item, "application"),
-      });
+      items.push(
+        renderMenuItem({
+          label: draftBusy
+            ? t("tracker.action.draftCreating")
+            : t("tracker.action.createDraft"),
+          icon: draftBusy ? <IconSpinner /> : <IconDraft />,
+          disabled: spinning || draftBusy,
+          onClick: () => void draft(item, "application"),
+        }),
+      );
+      return items;
     }
 
     if (item.status === "follow_up_due") {
-      if (!item.hasFollowUpDraft) {
-        return renderMenuItem({
-          label: t("tracker.action.prepareFollowUp"),
-          icon: isBusyKey(`${item.id}:prep:follow_up`) ? (
-            <IconSpinner />
-          ) : (
-            <IconPrepare />
-          ),
-          disabled: spinning,
-          onClick: () => openPrepareModal(item, "follow_up"),
-        });
+      items.push(renderPrepareMenuItem(item, "follow_up", spinning));
+      if (item.hasFollowUpDraft) {
+        items.push(
+          renderMenuItem({
+            label: t("tracker.action.draftFollowUp"),
+            icon: isBusyKey(`${item.id}:draft:follow_up`) ? (
+              <IconSpinner />
+            ) : (
+              <IconDraft />
+            ),
+            disabled: spinning,
+            onClick: () => void draft(item, "follow_up"),
+          }),
+        );
       }
-      return renderMenuItem({
-        label: t("tracker.action.draftFollowUp"),
-        icon: isBusyKey(`${item.id}:draft:follow_up`) ? (
-          <IconSpinner />
-        ) : (
-          <IconDraft />
-        ),
-        disabled: spinning,
-        onClick: () => void draft(item, "follow_up"),
-      });
+      return items;
     }
 
     if (item.status === "needs_action") {
-      return null;
+      return [];
     }
 
     if (
@@ -1446,58 +1479,46 @@ export function TrackerList() {
       item.status === "waiting"
     ) {
       if (item.status === "waiting") {
-        return null;
+        return [];
       }
-      if (!item.hasReplyDraft) {
-        return renderMenuItem({
-          label: t("tracker.action.prepareReply"),
-          icon: isBusyKey(`${item.id}:prep:reply`) ? (
-            <IconSpinner />
-          ) : (
-            <IconPrepare />
-          ),
-          disabled: spinning,
-          onClick: () => openPrepareModal(item, "reply"),
-        });
+      items.push(renderPrepareMenuItem(item, "reply", spinning));
+      if (item.hasReplyDraft) {
+        items.push(
+          renderMenuItem({
+            label: t("tracker.action.draftReply"),
+            icon: isBusyKey(`${item.id}:draft:reply`) ? (
+              <IconSpinner />
+            ) : (
+              <IconDraft />
+            ),
+            disabled: spinning,
+            onClick: () => void draft(item, "reply"),
+          }),
+        );
       }
-      return renderMenuItem({
-        label: t("tracker.action.draftReply"),
-        icon: isBusyKey(`${item.id}:draft:reply`) ? (
-          <IconSpinner />
-        ) : (
-          <IconDraft />
-        ),
-        disabled: spinning,
-        onClick: () => void draft(item, "reply"),
-      });
+      return items;
     }
 
     if (item.status === "rejected") {
-      if (!item.hasThanksDraft) {
-        return renderMenuItem({
-          label: t("tracker.action.prepareThanks"),
-          icon: isBusyKey(`${item.id}:prep:thanks`) ? (
-            <IconSpinner />
-          ) : (
-            <IconPrepare />
-          ),
-          disabled: spinning,
-          onClick: () => openPrepareModal(item, "thanks"),
-        });
+      items.push(renderPrepareMenuItem(item, "thanks", spinning));
+      if (item.hasThanksDraft) {
+        items.push(
+          renderMenuItem({
+            label: t("tracker.action.draftThanks"),
+            icon: isBusyKey(`${item.id}:draft:thanks`) ? (
+              <IconSpinner />
+            ) : (
+              <IconDraft />
+            ),
+            disabled: spinning,
+            onClick: () => void draft(item, "thanks"),
+          }),
+        );
       }
-      return renderMenuItem({
-        label: t("tracker.action.draftThanks"),
-        icon: isBusyKey(`${item.id}:draft:thanks`) ? (
-          <IconSpinner />
-        ) : (
-          <IconDraft />
-        ),
-        disabled: spinning,
-        onClick: () => void draft(item, "thanks"),
-      });
+      return items;
     }
 
-    return null;
+    return [];
   }
 
   function renderHistoryAction(item: TrackerItem) {
@@ -1552,9 +1573,9 @@ export function TrackerList() {
 
   function renderActionsMenu(item: TrackerItem) {
     const gmailItem = renderGmailMenuItem(item);
-    const primaryItem = renderPrimaryMenuItem(item);
+    const primaryItems = renderPrimaryMenuItems(item);
     const activeToggle = renderActiveToggleMenuItem(item);
-    const hasPrimaryActions = Boolean(gmailItem || primaryItem);
+    const hasPrimaryActions = Boolean(gmailItem || primaryItems.length);
 
     const open = actionsMenuId === item.id;
     const moreLabel = t("tracker.action.more");
@@ -1577,7 +1598,7 @@ export function TrackerList() {
               aria-label={moreLabel}
             >
               {gmailItem}
-              {primaryItem}
+              {primaryItems}
               {hasPrimaryActions ? (
                 <div
                   className="cmae-tracker-actions-menu-sep"

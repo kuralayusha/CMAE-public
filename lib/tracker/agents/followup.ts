@@ -23,6 +23,7 @@ import {
   getWorkspaceRoot,
   writeFile,
 } from "@/lib/research/workspace";
+import { markLiveDraftSuperseded } from "../gmail-drafts-store";
 import { assertItemActiveForDrafts } from "../inactive";
 import { askTrackerLlm } from "../llm";
 import {
@@ -30,6 +31,10 @@ import {
   formatSubjectBody,
   parseSubjectBody,
 } from "../parse-mail-md";
+import {
+  parsePendingGmailDraft,
+  withoutPendingGmailDraft,
+} from "../pending-draft";
 import { replySubject, resolveThreadReplyTarget } from "../reply-thread";
 import {
   formatUserNotesBlock,
@@ -348,6 +353,17 @@ ${toWrite}
     } catch {
       /* translated copy is best-effort */
     }
+  }
+
+  // Re-prepare replaces the local template — retire any unsent live Gmail draft
+  // for this kind so the next APPEND uses the new content.
+  markLiveDraftSuperseded(itemId, kind);
+  const pending = parsePendingGmailDraft(item.notesJson);
+  if (pending?.kind === kind) {
+    db.update(trackerItems)
+      .set({ notesJson: withoutPendingGmailDraft(item.notesJson) })
+      .where(eq(trackerItems.id, itemId))
+      .run();
   }
 
   // Flags derived from workspace_files on read (Faz 8). Bump revision for clients.

@@ -255,6 +255,28 @@ export function markDraftDeletedByUser(id: string): void {
   if (row) bumpTrackerRevision("drafts", "upsert", [row.itemId]);
 }
 
+/**
+ * Local template was re-prepared — drop the live Gmail draft row so the next
+ * "create Gmail draft" APPEND uses the new content (unique live index frees up).
+ */
+export function markLiveDraftSuperseded(
+  itemId: number,
+  kind: DraftKind,
+): boolean {
+  const live = getLiveDraftForItem(itemId, kind);
+  if (!live) return false;
+  const sqlite = getSqlite();
+  sqlite
+    .prepare(
+      `UPDATE gmail_drafts SET
+         state = 'superseded', last_checked_at = ?, error = NULL
+       WHERE id = ? AND state IN ('creating', 'present', 'unknown')`,
+    )
+    .run(new Date().toISOString(), live.id);
+  bumpTrackerRevision("drafts", "upsert", [itemId]);
+  return true;
+}
+
 /** @deprecated No-op since Faz 8 (flags from workspace index + gmail_drafts). */
 export function clearHasDraftFlagsForKind(
   _itemId: number,
