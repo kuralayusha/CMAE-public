@@ -25,20 +25,24 @@ import {
 } from "@/lib/research/workspace";
 import { markLiveDraftSuperseded } from "../gmail-drafts-store";
 import { assertItemActiveForDrafts } from "../inactive";
+import { currentUsageRunId, withUsageRunAsync } from "@/lib/ai-usage";
 import { askTrackerLlm } from "../llm";
 import {
   findEmailDraftInFolder,
   formatSubjectBody,
   parseSubjectBody,
 } from "../parse-mail-md";
+import { threadKeyOf } from "../gmail-links";
 import {
   parsePendingGmailDraft,
   withoutPendingGmailDraft,
 } from "../pending-draft";
 import { replySubject, resolveThreadReplyTarget } from "../reply-thread";
+import { withReplyThreadKey } from "../reply-thread-key";
 import {
   formatUserNotesBlock,
   getVariantDef,
+  MAIL_VOICE_RULES,
   resolveVariant,
   type DraftPrepareKind,
   type DraftVariantId,
@@ -46,7 +50,7 @@ import {
 import type { DraftKind } from "../types";
 
 const MAIL_FIELD_RULES = `
-CRITICAL — SUBJECT and BODY are final mail fields.
+CRITICAL. SUBJECT and BODY are final mail fields.
 
 ABSOLUTE RULES:
 - NEVER put notes, comments, TODOs, or meta text inside SUBJECT or BODY.
@@ -55,7 +59,7 @@ ABSOLUTE RULES:
 - If a detail is missing: OMIT it. Do not invent. Do not annotate the gap.
 - Do NOT wrap labels in markdown (**SUBJECT:** is forbidden). Plain "SUBJECT:" / "BODY:" only.
 - NEVER put SUBJECT and BODY on the same line. Never write "SUBJECT: … BODY: …".
-- Output format EXACTLY (newlines matter — copy this shape):
+- Output format EXACTLY (newlines matter, copy this shape):
 
 SUBJECT: <one line>
 BODY:
@@ -73,6 +77,8 @@ export type PrepareDraftOptions = {
   userNote?: string | null;
   /** Optional timeline kinds for default variant when none provided. */
   eventKinds?: string[];
+  /** `t:` / `m:` thread to reply inside. Omit to use the latest mail. */
+  threadKey?: string | null;
 };
 
 function readOptional(folder: string, name: string): string {
@@ -138,7 +144,7 @@ async function ensureWorkspaceFolder(item: {
   return created.folderPath;
 }
 
-async function recentMailsForItem(itemId: number) {
+async function recentMailsForItem(itemId: number, threadKey?: string | null) {
   const db = getDb();
   const links = db
     .select()
@@ -154,20 +160,49 @@ async function recentMailsForItem(itemId: number) {
       .get();
     if (m) mails.push(m);
   }
-  return mails
-    .sort((a, b) => a.dateIso.localeCompare(b.dateIso))
-    .slice(-6)
-    .map((m) => ({
-      folder: m.folder,
-      from: m.fromAddr,
-      to: m.toAddr,
-      subject: m.subject,
-      date: m.dateIso,
-      snippet: m.snippet || m.bodyText.slice(0, 300),
-    }));
+  const sorted = mails.sort((a, b) => a.dateIso.localeCompare(b.dateIso));
+  const mapMail = (m: (typeof sorted)[number]) => ({
+    threadKey: threadKeyOf(m),
+    folder: m.folder,
+    from: m.fromAddr,
+    to: m.toAddr,
+    subject: m.subject,
+    date: m.dateIso,
+    snippet: (m.snippet || m.bodyText).slice(0, 300),
+  });
+  return {
+    inThread: sorted
+      .filter((m) => !threadKey || threadKeyOf(m) === threadKey)
+      .slice(-6)
+      .map(mapMail),
+    other: threadKey
+      ? sorted
+          .filter((m) => threadKeyOf(m) !== threadKey)
+          .slice(-4)
+          .map(mapMail)
+      : [],
+  };
 }
 
 export async function prepareDraftForItem(
+  itemId: number,
+  kind: Exclude<DraftKind, "application">,
+  options: PrepareDraftOptions = {},
+): Promise<{
+  fileName: string;
+  subject: string;
+  workspaceFolder: string;
+  variant: DraftVariantId;
+}> {
+  if (currentUsageRunId()) {
+    return prepareDraftForItemBody(itemId, kind, options);
+  }
+  return withUsageRunAsync(globalThis.crypto.randomUUID(), () =>
+    prepareDraftForItemBody(itemId, kind, options),
+  );
+}
+
+async function prepareDraftForItemBody(
   itemId: number,
   kind: Exclude<DraftKind, "application">,
   options: PrepareDraftOptions = {},
@@ -208,8 +243,8 @@ export async function prepareDraftForItem(
   const originalApp = findEmailDraftInFolder(folder, userLang, {
     preferSiteLanguage: true,
   });
-  const recent = await recentMailsForItem(itemId);
-  const thread = resolveThreadReplyTarget(itemId);
+  const thread = resolveThreadReplyTarget(itemId, options.threadKey);
+  const recent = await recentMailsForItem(itemId, thread?.key);
   const replyTo =
     thread?.to || item.primaryTo || "unknown";
   const contactNotes =
@@ -246,9 +281,12 @@ export async function prepareDraftForItem(
       : formatPreferencesForApplication(prefs, "en");
 
   const prompt = `${MAIL_FIELD_RULES}
+
+${MAIL_VOICE_RULES}
 ${craftExtra}
 Write the email in the thread language when clear; otherwise use language code "${userLang}".
-This draft is the ORIGINAL that will be sent — match the recipient's language.
+This draft is the original that will be sent. Match the recipient's language.
+Write the way a colleague would: short, clear, correct. Do not stretch it.
 Candidate name: ${userName || "(from CV/signature if known)"}
 Company: ${item.company}
 Position: ${item.position || "unknown"}
@@ -261,9 +299,9 @@ Candidate preferences:
 ${prefsBlock}
 ${userNotesBlock}
 Task: ${intent}
-SUBJECT must continue the thread (Re: …) using the anchor subject when possible — never start a new cold thread.
+If a user note is present, that note decides tone, content, and format. The task above only sets the purpose.
 
-Original application draft (if any) — use only as context; do NOT copy it for a follow-up:
+Original application draft (if any). Use only as context. Do not copy it into a follow-up:
 ${originalApp ? `SUBJECT: ${originalApp.subject}\nBODY:\n${originalApp.body}` : "(none)"}
 
 Contact notes:
@@ -272,8 +310,13 @@ ${contactNotes || "(none)"}
 Summary:
 ${summaryNotes || "(none)"}
 
-Recent related emails (JSON):
-${JSON.stringify(recent, null, 2)}
+Mails in the thread you must reply to (JSON):
+${JSON.stringify(recent.inThread, null, 2)}
+${
+  recent.other.length
+    ? `\nOther conversations on this application. Context only, do not answer them:\n${JSON.stringify(recent.other, null, 2)}`
+    : ""
+}
 
 After SUBJECT/BODY, add exactly one extra line (not inside BODY):
 SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, tr, de>
@@ -321,8 +364,10 @@ SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, t
     try {
       const translatePrompt = `${MAIL_FIELD_RULES}
 
-Rewrite the following email into language code "${userLang}" (natural tone for that language).
-Keep the same facts, structure, threading subject (Re:), and length discipline.
+Rewrite the following email into language code "${userLang}".
+Keep the same facts, the same short length, and the same plain voice.
+Do not make it more formal, longer, or more polished.
+Keep punctuation to period, comma, and question mark.
 Do not invent claims. Output SUBJECT:/BODY: only.
 
 Source:
@@ -355,19 +400,31 @@ ${toWrite}
     }
   }
 
-  // Re-prepare replaces the local template — retire any unsent live Gmail draft
-  // for this kind so the next APPEND uses the new content.
-  markLiveDraftSuperseded(itemId, kind);
-  const pending = parsePendingGmailDraft(item.notesJson);
-  if (pending?.kind === kind) {
-    db.update(trackerItems)
-      .set({ notesJson: withoutPendingGmailDraft(item.notesJson) })
-      .where(eq(trackerItems.id, itemId))
-      .run();
-  }
+  // Bookkeeping must not fail the request: the mail file is already on disk.
+  // A throw here used to return 500 before Gmail Drafts was saved, leaving
+  // only the orange ring.
+  try {
+    markLiveDraftSuperseded(itemId, kind);
+    const pending = parsePendingGmailDraft(item.notesJson);
+    let notesJson = item.notesJson;
+    if (pending?.kind === kind) {
+      notesJson = withoutPendingGmailDraft(notesJson);
+    }
+    if (thread?.key) {
+      notesJson = withReplyThreadKey(notesJson, kind, thread.key);
+    }
+    if (notesJson !== item.notesJson) {
+      db.update(trackerItems)
+        .set({ notesJson })
+        .where(eq(trackerItems.id, itemId))
+        .run();
+    }
 
-  // Flags derived from workspace_files on read (Faz 8). Bump revision for clients.
-  bumpTrackerRevision("mutation", "upsert", [itemId]);
+    // Flags derived from workspace_files on read (Faz 8). Bump revision for clients.
+    bumpTrackerRevision("mutation", "upsert", [itemId]);
+  } catch (err) {
+    console.error("[prepare] post-write bookkeeping failed", err);
+  }
 
   const workspaceFolder =
     db
@@ -382,4 +439,190 @@ ${toWrite}
     workspaceFolder,
     variant: variantDef.id,
   };
+}
+
+/**
+ * Re-write the research application email from folder notes (after clear-prepared).
+ * Uses company_info / summary / contact — not a full research re-run.
+ */
+export async function prepareApplicationDraftForItem(itemId: number): Promise<{
+  fileName: string;
+  subject: string;
+  workspaceFolder: string;
+}> {
+  if (currentUsageRunId()) {
+    return prepareApplicationDraftForItemBody(itemId);
+  }
+  return withUsageRunAsync(globalThis.crypto.randomUUID(), () =>
+    prepareApplicationDraftForItemBody(itemId),
+  );
+}
+
+async function prepareApplicationDraftForItemBody(itemId: number): Promise<{
+  fileName: string;
+  subject: string;
+  workspaceFolder: string;
+}> {
+  const db = getDb();
+  const item = db
+    .select()
+    .from(trackerItems)
+    .where(eq(trackerItems.id, itemId))
+    .get();
+  if (!item) throw new Error(t("tracker.error.notFound"));
+  assertItemActiveForDrafts(itemId);
+  if (item.status !== "ready_to_send") {
+    throw new Error(t("tracker.error.applicationPrepareLocked"));
+  }
+
+  const folder = await ensureWorkspaceFolder(item);
+  const settings = getSettingsRow();
+  const userLang = settings?.preferredLanguage || "en";
+  const userName = settings?.fullName || "";
+  const contactNotes =
+    readOptional(folder, "contact.md") ||
+    readOptional(folder, "iletisim.md");
+  const summaryNotes =
+    readOptional(folder, "summary.md") || readOptional(folder, "ozet.md");
+  const companyNotes =
+    readOptional(folder, "company_info.md") ||
+    readOptional(folder, "sirket_bilgileri.md") ||
+    summaryNotes;
+  if (!companyNotes.trim() && !contactNotes.trim() && !summaryNotes.trim()) {
+    throw new Error(t("tracker.error.applicationPrepareNoResearch"));
+  }
+
+  const prefsBlock = formatPreferencesForApplication(
+    getJobPreferences(),
+    userLang,
+  );
+  const replyTo = item.primaryTo || item.selectedRecipient || "unknown";
+
+  const prompt = `${MAIL_FIELD_RULES}
+
+${MAIL_VOICE_RULES}
+
+Write a spontaneous / targeted application email.
+Write in the company's language when clear from the notes; otherwise use language code "${userLang}".
+This draft is the original that will be sent.
+Candidate name: ${userName || "(from CV/signature if known)"}
+Company: ${item.company}
+Position / field: ${item.position || "infer from CV / notes"}
+Recipient hint: ${replyTo}
+
+Candidate preferences:
+${prefsBlock}
+
+Company research / notes:
+${companyNotes || "(none)"}
+
+Contact notes:
+${contactNotes || "(none)"}
+
+Summary:
+${summaryNotes || "(none)"}
+
+After SUBJECT/BODY, add exactly one extra line (not inside BODY):
+SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, tr, de>
+`;
+
+  const rawText = await askTrackerLlm(prompt, {
+    feature: "tracker.followup",
+  });
+  const { text, language: sendLanguage } = extractSendLanguage(rawText);
+  const parsed = parseSubjectBody(text);
+  if (!parsed) {
+    throw new Error(t("tracker.error.agentSubjectBody"));
+  }
+
+  const withSig = applySignatureToMailDraft(
+    formatSubjectBody(parsed.subject, parsed.body),
+    settings?.emailSignature,
+  );
+  const signed = parseSubjectBody(withSig);
+  const subjectOut = signed?.subject || parsed.subject;
+  const toWrite = signed
+    ? formatSubjectBody(signed.subject, signed.body)
+    : withSig;
+  const fileName = "email_original.md";
+  const header = `# Application mail — original / site language\n\n`;
+  fs.writeFileSync(
+    path.join(/*turbopackIgnore: true*/ folder, fileName),
+    `${header}${toWrite}\n`,
+    "utf8",
+  );
+  try {
+    const { noteWorkspaceFileWrite } = await import(
+      "@/lib/tracker/workspace-index"
+    );
+    noteWorkspaceFileWrite(folder, fileName, `${header}${toWrite}\n`);
+  } catch (err) {
+    console.error("[prepare-application] workspace index write failed", err);
+  }
+
+  const skipTranslate =
+    Boolean(sendLanguage) && sameLanguage(sendLanguage, userLang);
+  if (!skipTranslate) {
+    try {
+      const translatePrompt = `${MAIL_FIELD_RULES}
+
+Rewrite the following email into language code "${userLang}".
+Keep the same facts, the same short length, and the same plain voice.
+Do not invent claims. Output SUBJECT:/BODY: only.
+
+Source:
+${toWrite}
+`;
+      const translatedRaw = await askTrackerLlm(translatePrompt, {
+        feature: "tracker.followup",
+      });
+      const translatedParsed = parseSubjectBody(translatedRaw);
+      if (translatedParsed) {
+        const translatedSigned = applySignatureToMailDraft(
+          formatSubjectBody(translatedParsed.subject, translatedParsed.body),
+          settings?.emailSignature,
+        );
+        const translatedFileName = "email_translated.md";
+        const translatedBody = `# Application mail — translated for user (${userLang})\n\n${translatedSigned}\n`;
+        fs.writeFileSync(
+          path.join(/*turbopackIgnore: true*/ folder, translatedFileName),
+          translatedBody,
+          "utf8",
+        );
+        try {
+          const { noteWorkspaceFileWrite } = await import(
+            "@/lib/tracker/workspace-index"
+          );
+          noteWorkspaceFileWrite(folder, translatedFileName, translatedBody);
+        } catch {
+          /* index best-effort */
+        }
+      }
+    } catch {
+      /* translated copy is best-effort */
+    }
+  }
+
+  try {
+    markLiveDraftSuperseded(itemId, "application");
+    const pending = parsePendingGmailDraft(item.notesJson);
+    if (pending?.kind === "application") {
+      db.update(trackerItems)
+        .set({ notesJson: withoutPendingGmailDraft(item.notesJson) })
+        .where(eq(trackerItems.id, itemId))
+        .run();
+    }
+    bumpTrackerRevision("mutation", "upsert", [itemId]);
+  } catch (err) {
+    console.error("[prepare-application] post-write bookkeeping failed", err);
+  }
+
+  const workspaceFolder =
+    db
+      .select()
+      .from(trackerItems)
+      .where(eq(trackerItems.id, itemId))
+      .get()?.workspaceFolder || path.basename(folder);
+
+  return { fileName, subject: subjectOut, workspaceFolder };
 }

@@ -1,4 +1,4 @@
-import { promptWithUsage } from "@/lib/ai-usage";
+import { currentUsageRunId, promptWithUsage, withUsageRunAsync } from "@/lib/ai-usage";
 import { ImapFlow } from "imapflow";
 import { eq } from "drizzle-orm";
 import { decryptOptional } from "@/lib/crypto/encryption";
@@ -100,15 +100,18 @@ export async function verifyCursorApiKey(): Promise<VerifyCheck> {
 
   try {
     // Live check: never cached (feature policy), but its tokens are metered.
-    await promptWithUsage({
-      feature: "onboarding.verify",
-      prompt: "Reply with exactly one word: pong. No other text.",
-      apiKey,
-      cwd: getAgentCwd(),
-      model: "composer-2.5",
-      emptyError: (status) =>
-        new NoResponseError(t("onboarding.verify.cursorNoResponse", { status })),
-    });
+    const verify = () =>
+      promptWithUsage({
+        feature: "onboarding.verify",
+        prompt: "Reply with exactly one word: pong. No other text.",
+        apiKey,
+        cwd: getAgentCwd(),
+        model: "composer-2.5",
+        emptyError: (status) =>
+          new NoResponseError(t("onboarding.verify.cursorNoResponse", { status })),
+      });
+    if (currentUsageRunId()) await verify();
+    else await withUsageRunAsync(globalThis.crypto.randomUUID(), verify);
     persistEnvCursorKeyIfNeeded();
     return { ok: true };
   } catch (err) {

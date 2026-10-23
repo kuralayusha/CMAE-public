@@ -120,15 +120,11 @@ export function wipeDatabaseContents(opts?: {
   if (!sqlite) throw new Error("SQLite handle missing");
   const dbEpoch = Math.max(1, opts?.dbEpoch ?? 1);
   const credentialsVersion = Math.max(0, opts?.credentialsVersion ?? 0);
-  // Consent + anonymous-id backup must survive a wipe (opt-out stays opted out;
-  // the userData/anon-id file is never touched here).
-  let telemetryEnabled = 1;
+  // Demo: usage sharing stays on across a wipe. The anon-id backup survives;
+  // the userData/anon-id file is never touched here.
+  const telemetryEnabled = 1;
   let anonBackup = "";
   try {
-    const row = sqlite
-      .prepare(`SELECT usage_telemetry_enabled AS v FROM settings WHERE id = 1`)
-      .get() as { v: number } | undefined;
-    if (row && row.v === 0) telemetryEnabled = 0;
     const b = sqlite
       .prepare(`SELECT value FROM app_meta WHERE key = 'anon_id_backup'`)
       .get() as { value: string } | undefined;

@@ -29,10 +29,18 @@
       "helpStep1": "Research’ten gelen şirketler de burada otomatik görünür.",
       "helpStep2": "Takip, yanıt veya teşekkür için eylemi kullanın — CMAE taslağı Gmail Taslaklar’a yazar.",
       "helpStep3": "Zaman çizelgesi için şirket satırına tıklayın. Gönderimi her zaman siz Gmail’den yaparsınız; CMAE sizin yerinize mail göndermez."
+    },
+    "usage": {
+      "helpStep2": "Bu demoda anonim kullanım paylaşımı açık kalır. Prompt veya mail hiç gönderilmez."
     }
   },
+  "usage": {
+    "runsHint": "Satıra tıklayınca o çalıştırmadaki her AI çağrısı açılır. Birden fazla satır açık kalabilir. Daha büyük bir çalıştırmaya bağlı olmayan çağrı kendi satırında listelenir.",
+    "colSaved": "Tasarruf",
+    "colCacheHits": "Önbellek isabeti"
+  },
   "onboarding": {
-    "telemetryNotice": "CMAE, maliyetleri düşük tutabilmemiz için rastgele bir kimlikle anonim AI kullanım sayılarını (token, özellik, model, maliyet) paylaşır. Mailler, prompt'lar, yanıtlar ve isimler asla gönderilmez. Ayarlar'dan kapatabilirsiniz."
+    "telemetryNotice": "CMAE, maliyetleri düşük tutabilmemiz için rastgele bir kimlikle anonim AI kullanım sayılarını (token, özellik, model, maliyet) paylaşır. Mailler, prompt'lar, yanıtlar ve isimler asla gönderilmez. Bu demoda paylaşım anahtarı açık kalır."
   },
   "research": {
     "inPanel": "Açık",
@@ -77,6 +85,9 @@
       "itemDeleted": "Bu başvuru kaldırıldı",
       "itemOpBusy": "Bu satırda zaten başka bir işlem sürüyor",
       "gmailDraftStillCreating": "Gmail taslağı hâlâ kaydediliyor — biraz bekleyip tekrar deneyin",
+      "applicationPrepareLocked": "Başvuru maili yalnızca Göndermeye hazır durumundayken yeniden yazılabilir",
+      "applicationPrepareNoResearch": "Klasörde research notu kalmamış — bu şirket için Research’i yeniden çalıştır",
+      "clearPrepared": "Hazırlanan mail silinemedi",
       "maintenance": "Tracker bakım için geçici kilitli — kısa süre sonra deneyin",
       "mergeNotFound": "Birleştirme teklifi bulunamadı",
       "mergeNotPending": "Bu birleştirme teklifi artık bekleyen değil",
@@ -137,6 +148,7 @@
       "ready_to_send": "Hazır",
       "researchDone": "Araştırma bitti",
       "savingDraft": "Taslağa yazılıyor…",
+      "preparingMail": "Mail hazırlanıyor…",
       "mailInDraft": "Mail taslakta",
       "needs_reply": "Yanıt",
       "closed": "Kapalı",
@@ -145,22 +157,74 @@
       "in_progress": "Aktif",
       "ignored": "Yoksayılan"
     },
+    "mailMark": {
+      "empty": "Mail henüz hazırlanmadı",
+      "prepared": "Mail hazır, Gmail taslakta değil",
+      "drafted": "Mail hazır ve Gmail taslakta"
+    },
     "detail": {
       "waitingOnUs": "Sizde bekliyor",
       "waitingOnThem": "Onlarda bekliyor"
     },
     "sel": {
       "markInactive": "Pasife al",
-      "markActive": "Aktife al"
+      "markActive": "Aktife al",
+      "pause": "Bu başvuruları duraklat",
+      "pauseHint": "Aktif listeden çıkarır. İstediğin zaman geri alırsın.",
+      "resume": "Bu başvuruları devam ettir",
+      "resumeHint": "Listeye geri alır. Durum bir sonraki senkronizasyonda güncellenir.",
+      "clear": "Seçimi kaldır",
+      "clearHint": "İşaretleri temizler. Başvurular aynı kalır."
+    },
+    "threadCard": {
+      "from": "Kimden: {name}",
+      "noSubject": "(konu yok)"
+    },
+    "threadPick": {
+      "title": "Hangi yazışma?",
+      "lead": "{company} için {count} ayrı yazışma var. Taslak, seçtiğin yazışmaya yanıt olarak hazırlanır."
     },
     "action": {
-      "more": "İşlemler",
+      "more": "Diğer işlemler",
+      "openGmail": "Yazışmayı Gmail'de aç",
+      "openGmailHint": "Bu e-posta dizisini açar. Mail gönderilmez.",
+      "openGmailN": "Gmail'de {count} yazışmayı aç",
+      "openGmailNHint": "Hangisini açacağını seç. Mail gönderilmez.",
+      "createDraft": "Başvuruyu Gmail Taslaklar'a kaydet",
+      "createDraftHint": "Hazır maili Taslaklar'a koyar. Gönderimi sen yaparsın.",
+      "clearPrepared": "Hazırlanan maili sil",
+      "clearPreparedHint": "CMAE'nin yazdığı metni ve varsa Gmail taslağını siler. Gönderilmiş maile dokunmaz.",
+      "prepareApplication": "Başvuru mailini yaz",
+      "prepareApplicationHint": "Bu şirketin klasöründeki research notlarını kullanır. Sonra Gmail Drafts’a kaydedebilirsin.",
+      "prepareFollowUp": "Takip maili yaz",
+      "prepareFollowUpHint": "Tonunu seçersin. Kaydetmeden önce metni okursun.",
+      "draftFollowUp": "Takip mailini Taslaklar'a kaydet",
+      "draftFollowUpHint": "Metni Gmail Taslaklar'a kopyalar. Gönderimi sen yaparsın.",
       "waiting": "Beklemede",
-      "pendingSend": "Gmail Taslaklar'da aç",
-      "draftCreating": "Gmail taslağı kaydediliyor…",
-      "draftUnknown": "Taslak durumu bilinmiyor — Taslaklar'ı aç",
+      "prepareReply": "Yanıt yaz",
+      "prepareReplyHint": "Son mesajlarına cevap hazırlanır. Kaydetmeden önce okursun.",
+      "draftReply": "Yanıtı Taslaklar'a kaydet",
+      "draftReplyHint": "Metni Gmail Taslaklar'a kopyalar. Gönderimi sen yaparsın.",
+      "prepareThanks": "Teşekkür notu yaz",
+      "prepareThanksHint": "Red sonrası kısa bir not. Kaydetmeden önce okursun.",
+      "draftThanks": "Teşekkür notunu Taslaklar'a kaydet",
+      "draftThanksHint": "Metni Gmail Taslaklar'a kopyalar. Gönderimi sen yaparsın.",
+      "pendingSend": "Gönderilmemiş taslağı aç",
+      "pendingSendHint": "Gmail Taslaklar'da bekliyor. Göndermek için oradan gönderirsin.",
+      "draftCreating": "Taslak Gmail'e kaydediliyor…",
+      "draftCreatingHint": "Birkaç saniye sürer.",
+      "draftUnknown": "Taslağı Gmail'de kontrol et",
+      "draftUnknownHint": "Durumu doğrulanamadı. Taslaklar klasörüne bak.",
       "draftDeleted": "Taslak Gmail'den silinmiş",
-      "draftSent": "Gmail'den gönderildi"
+      "draftSent": "Gmail'den gönderildi",
+      "pause": "Bu başvuruyu duraklat",
+      "pauseHint": "Aktif listeden çıkar. İstediğin zaman geri alırsın.",
+      "resume": "Bu başvuruyu devam ettir",
+      "resumeHint": "Listeye geri alır. Durum bir sonraki senkronizasyonda güncellenir."
+    },
+    "pendingDraft": {
+      "popupBlocked": "Tarayıcı yeni sekmeyi engelledi. Satırdaki Diğer işlemler menüsünden Gönderilmemiş taslağı aç'ı seç.",
+      "banner": "Bir satırın Gmail Taslaklar'da hâlâ CMAE taslağı var. Diğer işlemler menüsünden Gönderilmemiş taslağı aç'ı seç, ya da gönderdikten sonra senkronize et. Taslağı Gmail'de sildiysen listeyi yenile — uyarı kendiliğinden kalkar."
     },
     "sentiment": {
       "positive": "olumlu",
@@ -214,7 +278,7 @@
     "telemetryToggle": "Anonim AI kullanım istatistiklerini paylaş",
     "telemetrySent": "Gönderilenler: token sayıları, AI çağrısını hangi CMAE özelliğinin yaptığı (ör. mail sync veya araştırma), model adı, tahmini maliyet ve rastgele anonim bir kimlik.",
     "telemetryNotSent": "Asla gönderilmeyenler: mailleriniz, prompt'lar, AI yanıtları, isimler, adresler, CV'niz veya API anahtarınız.",
-    "telemetryHint": "Rastgele kimlik Gmail adresinize veya Cursor anahtarınıza bağlı değildir. İstediğiniz zaman kapatabilirsiniz; kullanım yine bu bilgisayarda sayılır, yalnızca paylaşılmaz.",
+    "telemetryHint": "Bu demoda anonim kullanım sayıları her zaman gönderilir. Anahtar açık kalır ve kapatılamaz. Rastgele kimlik Gmail adresinize veya Cursor anahtarınıza bağlı değildir. Mailler, prompt'lar ve yanıtlar yine hiç gönderilmez.",
     "telemetrySaveFailed": "Bu ayar kaydedilemedi",
     "diagnosticsHint": "Sync işleri, mail kuyrukları, IMAP IDLE ve yerel log yolu. Parola veya mail gövdesi gösterilmez.",
     "diagnosticsRefresh": "Tanılamayı yenile",

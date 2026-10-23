@@ -34,6 +34,7 @@ export type LocalCallRow = {
   cache_write_tokens: number;
   reasoning_tokens: number;
   cost_usd: number;
+  saved_usd: number;
   duration_ms: number;
   status: string;
   cache_hit: boolean;
@@ -140,14 +141,17 @@ function microToUsd(micro: number): number {
 
 export function buildLocalUsageReport(
   db: Database.Database = getSqlite(),
-  opts?: { adminAvailable?: boolean },
+  opts?: { adminAvailable?: boolean; anonRoot?: string },
 ): LocalUsageReport {
-  const anon = getAnonId({ db });
+  const anon = getAnonId({ db, root: opts?.anonRoot });
   const totalsRow = db
     .prepare(
       `SELECT
          COUNT(*) AS calls,
-         COUNT(DISTINCT CASE WHEN run_id IS NOT NULL AND run_id != '' THEN run_id END) AS runs,
+         (
+           COUNT(DISTINCT CASE WHEN run_id IS NOT NULL AND run_id != '' THEN run_id END)
+           + COALESCE(SUM(CASE WHEN run_id IS NULL OR run_id = '' THEN 1 ELSE 0 END), 0)
+         ) AS runs,
          COALESCE(SUM(input_tokens), 0) AS input_tokens,
          COALESCE(SUM(output_tokens), 0) AS output_tokens,
          COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
@@ -178,7 +182,10 @@ export function buildLocalUsageReport(
       `SELECT
          feature,
          COUNT(*) AS calls,
-         COUNT(DISTINCT CASE WHEN run_id IS NOT NULL AND run_id != '' THEN run_id END) AS runs,
+         (
+           COUNT(DISTINCT CASE WHEN run_id IS NOT NULL AND run_id != '' THEN run_id END)
+           + COALESCE(SUM(CASE WHEN run_id IS NULL OR run_id = '' THEN 1 ELSE 0 END), 0)
+         ) AS runs,
          COALESCE(SUM(input_tokens), 0) AS input_tokens,
          COALESCE(SUM(output_tokens), 0) AS output_tokens,
          COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
@@ -223,8 +230,7 @@ export function buildLocalUsageReport(
        FROM ai_usage_events
        WHERE run_id IS NOT NULL AND run_id != ''
        GROUP BY run_id
-       ORDER BY last_ts DESC
-       LIMIT 80`,
+       ORDER BY last_ts DESC`,
     )
     .all() as Array<{
     run_id: string;
@@ -241,60 +247,87 @@ export function buildLocalUsageReport(
     last_ts: string | null;
   }>;
 
-  const runIds = runAgg.map((r) => r.run_id);
+  type RawCall = {
+    event_id: string;
+    ts: string;
+    feature: string;
+    sync_mode: string | null;
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cache_write_tokens: number;
+    reasoning_tokens: number;
+    cost_micro_usd: number;
+    saved_cost_micro_usd: number;
+    duration_ms: number;
+    status: string;
+    cache_hit: number;
+    usage_missing: number;
+    run_id: string | null;
+  };
+
+  const toCall = (c: RawCall): LocalCallRow => ({
+    event_id: c.event_id,
+    ts: c.ts,
+    feature: c.feature,
+    sync_mode: c.sync_mode,
+    model: c.model,
+    input_tokens: c.input_tokens,
+    output_tokens: c.output_tokens,
+    cache_read_tokens: c.cache_read_tokens,
+    cache_write_tokens: c.cache_write_tokens,
+    reasoning_tokens: c.reasoning_tokens,
+    cost_usd: microToUsd(c.cost_micro_usd),
+    saved_usd: microToUsd(c.saved_cost_micro_usd),
+    duration_ms: c.duration_ms,
+    status: c.status,
+    cache_hit: c.cache_hit === 1,
+    usage_missing: c.usage_missing === 1,
+  });
+
+  const callRows = db
+    .prepare(
+      `SELECT
+         event_id, ts, feature, sync_mode, model,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         reasoning_tokens, cost_micro_usd, saved_cost_micro_usd, duration_ms, status,
+         cache_hit, usage_missing, run_id
+       FROM ai_usage_events
+       ORDER BY ts ASC`,
+    )
+    .all() as RawCall[];
+
   const eventsByRun = new Map<string, LocalCallRow[]>();
-  if (runIds.length > 0) {
-    const placeholders = runIds.map(() => "?").join(",");
-    const callRows = db
-      .prepare(
-        `SELECT
-           event_id, ts, feature, sync_mode, model,
-           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-           reasoning_tokens, cost_micro_usd, duration_ms, status,
-           cache_hit, usage_missing, run_id
-         FROM ai_usage_events
-         WHERE run_id IN (${placeholders})
-         ORDER BY ts ASC`,
-      )
-      .all(...runIds) as Array<{
-      event_id: string;
-      ts: string;
-      feature: string;
-      sync_mode: string | null;
-      model: string;
-      input_tokens: number;
-      output_tokens: number;
-      cache_read_tokens: number;
-      cache_write_tokens: number;
-      reasoning_tokens: number;
-      cost_micro_usd: number;
-      duration_ms: number;
-      status: string;
-      cache_hit: number;
-      usage_missing: number;
-      run_id: string;
-    }>;
-    for (const c of callRows) {
-      const list = eventsByRun.get(c.run_id) ?? [];
-      list.push({
-        event_id: c.event_id,
-        ts: c.ts,
-        feature: c.feature,
-        sync_mode: c.sync_mode,
-        model: c.model,
+  const soloRuns: LocalRunRow[] = [];
+  for (const c of callRows) {
+    const call = toCall(c);
+    const rid = (c.run_id || "").trim();
+    if (!rid) {
+      const features = [c.feature];
+      const labeled = runKindLabel([c.sync_mode], features);
+      soloRuns.push({
+        run_id: `solo:${c.event_id}`,
+        kind: labeled.kind,
+        kind_detail: labeled.kind_detail,
+        sync_mode: labeled.sync_mode,
+        calls: 1,
+        features,
         input_tokens: c.input_tokens,
         output_tokens: c.output_tokens,
         cache_read_tokens: c.cache_read_tokens,
         cache_write_tokens: c.cache_write_tokens,
         reasoning_tokens: c.reasoning_tokens,
         cost_usd: microToUsd(c.cost_micro_usd),
-        duration_ms: c.duration_ms,
-        status: c.status,
-        cache_hit: c.cache_hit === 1,
-        usage_missing: c.usage_missing === 1,
+        first_ts: c.ts,
+        last_ts: c.ts,
+        events: [call],
       });
-      eventsByRun.set(c.run_id, list);
+      continue;
     }
+    const list = eventsByRun.get(rid) ?? [];
+    list.push(call);
+    eventsByRun.set(rid, list);
   }
 
   return {
@@ -334,33 +367,36 @@ export function buildLocalUsageReport(
       saved_usd: microToUsd(f.saved_micro),
       cache_hits: f.cache_hits,
     })),
-    runs: runAgg.map((r) => {
-      const features = (r.features || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const syncModes = (r.sync_modes || "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const { kind, kind_detail, sync_mode } = runKindLabel(syncModes, features);
-      return {
-        run_id: r.run_id,
-        kind,
-        kind_detail,
-        sync_mode,
-        calls: r.calls,
-        features,
-        input_tokens: r.input_tokens,
-        output_tokens: r.output_tokens,
-        cache_read_tokens: r.cache_read_tokens,
-        cache_write_tokens: r.cache_write_tokens,
-        reasoning_tokens: r.reasoning_tokens,
-        cost_usd: microToUsd(r.cost_micro),
-        first_ts: r.first_ts,
-        last_ts: r.last_ts,
-        events: eventsByRun.get(r.run_id) ?? [],
-      };
-    }),
+    runs: [
+      ...runAgg.map((r) => {
+        const features = (r.features || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const syncModes = (r.sync_modes || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const { kind, kind_detail, sync_mode } = runKindLabel(syncModes, features);
+        return {
+          run_id: r.run_id,
+          kind,
+          kind_detail,
+          sync_mode,
+          calls: r.calls,
+          features,
+          input_tokens: r.input_tokens,
+          output_tokens: r.output_tokens,
+          cache_read_tokens: r.cache_read_tokens,
+          cache_write_tokens: r.cache_write_tokens,
+          reasoning_tokens: r.reasoning_tokens,
+          cost_usd: microToUsd(r.cost_micro),
+          first_ts: r.first_ts,
+          last_ts: r.last_ts,
+          events: eventsByRun.get(r.run_id) ?? [],
+        };
+      }),
+      ...soloRuns,
+    ].sort((a, b) => (b.last_ts || "").localeCompare(a.last_ts || "")),
   };
 }

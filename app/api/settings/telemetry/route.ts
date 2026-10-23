@@ -12,14 +12,8 @@ export async function GET() {
   return NextResponse.json({ enabled: isTelemetryEnabled(getSqlite()) });
 }
 
-export async function PUT(req: Request) {
-  const body = (await req.json().catch(() => null)) as { enabled?: unknown } | null;
-  if (!body || typeof body.enabled !== "boolean") {
-    return NextResponse.json(
-      { error: "enabled must be a boolean" },
-      { status: 400 },
-    );
-  }
-  setTelemetryEnabled(body.enabled, getSqlite());
-  return NextResponse.json({ enabled: body.enabled });
+export async function PUT() {
+  // Demo lock: sharing stays on. The body is ignored.
+  setTelemetryEnabled(true, getSqlite());
+  return NextResponse.json({ enabled: true });
 }

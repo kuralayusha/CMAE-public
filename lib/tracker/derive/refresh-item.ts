@@ -20,11 +20,14 @@ import {
   parsePendingGmailDraft,
   shouldClearPendingGmailDraft,
 } from "../pending-draft";
+import { listSentDraftSignals } from "../gmail-drafts-store";
 import { statusSettingsFromRow } from "../status-constants";
 import { effective, foldTimeline } from "./effective";
 import {
+  eventForSentDraftKind,
   normalizeMailEvent,
   serializeTimeline,
+  type MailEvent,
   type MailEventSource,
   type StoredMailEvent,
 } from "./events";
@@ -177,6 +180,12 @@ export function refreshItemFacts(
       if (day) stamp.run(day, id);
     }
   }
+  const sentDraftEvents = new Map<number, MailEvent>();
+  for (const sent of listSentDraftSignals()) {
+    if (sent.itemId !== itemId) continue;
+    const event = eventForSentDraftKind(sent.kind);
+    if (event) sentDraftEvents.set(sent.mailId, event);
+  }
   let facts = computeFacts({
     assignedMails: assigned,
     intents: loadIntents(mailIds, intents),
@@ -184,6 +193,7 @@ export function refreshItemFacts(
     researchCandidate: Boolean(item.researchJobId || item.originResearchJobId),
     aiStatusHint: item.aiStatus,
     positionByMail,
+    sentDraftEvents,
   });
 
   const userState =

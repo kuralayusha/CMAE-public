@@ -7,6 +7,7 @@ import {
   trackerItems,
   trackerTimelines,
 } from "@/lib/db/schema";
+import { currentUsageRunId, withUsageRunAsync } from "@/lib/ai-usage";
 import { t } from "@/lib/i18n/t";
 import { getSettingsRow, getStatusSettings } from "@/lib/settings/service";
 import { effective, factsFromItemRow } from "./derive/effective";
@@ -274,13 +275,17 @@ export async function getOrCreateTimeline(
   }
 
   const hasAppOrigin = Boolean(item.researchJobId || item.workspaceFolder);
-  const generated = await generateTimelineSummary({
-    company: item.company,
-    position: item.position,
-    locale,
-    hasAppOrigin,
-    mails: toBriefs(mails),
-  });
+  const summarize = () =>
+    generateTimelineSummary({
+      company: item.company,
+      position: item.position,
+      locale,
+      hasAppOrigin,
+      mails: toBriefs(mails),
+    });
+  const generated = currentUsageRunId()
+    ? await summarize()
+    : await withUsageRunAsync(globalThis.crypto.randomUUID(), summarize);
 
   const now = new Date().toISOString();
   const existing = db

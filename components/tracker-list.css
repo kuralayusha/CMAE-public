@@ -1,3 +1,17 @@
+/* RECENT must not draw a second bottom edge under the last row. */
+.cmae-tracker-section-recent {
+  border-bottom: none;
+}
+
+/* Selection bar sits on the viewport bottom while rows stay selectable. */
+.cmae-tracker-selbar {
+  top: auto;
+  bottom: 0;
+  border-bottom: 0;
+  border-top: 1px solid var(--line-strong);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 @keyframes cmae-tracker-spin {
   to {
     transform: rotate(360deg);
@@ -25,7 +39,97 @@
 /* Prepare-draft variant modal (reuses gmail modal shell) */
 
 .cmae-prepare-modal {
-  width: min(440px, 100%);
+  width: min(520px, 100%);
+}
+
+.cmae-status-pair {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Chip may shrink; the ring keeps a fixed slot so a long date cannot cover it. */
+.cmae-status-pair > .cmae-hover-tip-wrap:not(.cmae-mail-mark-hit) {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.cmae-mail-mark-hit {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 4px 2px;
+  margin: -4px 0;
+}
+
+.cmae-mail-mark {
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  background: transparent;
+}
+
+.cmae-mail-mark.is-prepared {
+  border-color: #e0922a;
+  background: #e0922a;
+}
+
+.cmae-mail-mark.is-drafted {
+  border-color: #1f8a4d;
+  background: #1f8a4d;
+}
+
+.cmae-thread-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.cmae-thread-card:hover {
+  border-color: var(--ink-muted);
+}
+
+.cmae-thread-card-subject {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.cmae-thread-card-from {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ink-muted);
+}
+
+.cmae-thread-card-preview {
+  display: block;
+  font-size: 13px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+  max-height: 4.4em;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .cmae-prepare-variant-list {

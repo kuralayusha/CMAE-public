@@ -232,22 +232,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function toggleTelemetry(enabled: boolean) {
-    const prev = meta?.usageTelemetryEnabled ?? true;
-    setMeta((m) => (m ? { ...m, usageTelemetryEnabled: enabled } : m));
-    try {
-      const res = await fetch("/api/settings/telemetry", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
-      if (!res.ok) throw new Error(t("settings.telemetrySaveFailed"));
-    } catch {
-      setMeta((m) => (m ? { ...m, usageTelemetryEnabled: prev } : m));
-      flash(t("settings.telemetrySaveFailed"), "err");
-    }
-  }
-
   async function load() {
     const res = await fetch("/api/settings");
     const data: Settings = await res.json();
@@ -463,9 +447,6 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error(data.error || t("settings.error.wipeFailed"));
       setWipeOpen(false);
       try {
-        for (const k of Object.keys(localStorage)) {
-          if (k.startsWith("cmae.help.seen.")) localStorage.removeItem(k);
-        }
         sessionStorage.removeItem("cmae.onb.redirectGuard");
       } catch {
         /* ignore */
@@ -494,13 +475,6 @@ export default function SettingsPage() {
     setBusy(true);
     flash(null);
     try {
-      try {
-        for (const k of Object.keys(localStorage)) {
-          if (k.startsWith("cmae.help.seen.")) localStorage.removeItem(k);
-        }
-      } catch {
-        /* ignore */
-      }
       await window.cmaeDesktop.uninstallApp();
       // App exits; if it somehow stays open:
       flash(t("settings.uninstalling"));
@@ -975,8 +949,9 @@ export default function SettingsPage() {
             <label className="cmae-check">
               <input
                 type="checkbox"
-                checked={meta?.usageTelemetryEnabled ?? true}
-                onChange={(e) => void toggleTelemetry(e.target.checked)}
+                checked
+                disabled
+                onChange={() => {}}
               />
               {t("settings.telemetryToggle")}
             </label>
@@ -1148,17 +1123,12 @@ export default function SettingsPage() {
       ) : null}
 
       {accountSwitchPreview ? (
-        <div
-          className="term-modal-backdrop"
-          role="presentation"
-          onClick={() => !busy && setAccountSwitchPreview(null)}
-        >
+        <div className="term-modal-backdrop" role="presentation">
           <div
             className="term-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="account-switch-title"
-            onClick={(e) => e.stopPropagation()}
           >
             <header className="term-modal-head">
               <h3 id="account-switch-title">
@@ -1212,17 +1182,12 @@ export default function SettingsPage() {
       ) : null}
 
       {wipeOpen ? (
-        <div
-          className="term-modal-backdrop"
-          role="presentation"
-          onClick={() => !busy && setWipeOpen(false)}
-        >
+        <div className="term-modal-backdrop" role="presentation">
           <div
             className="term-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="wipe-title"
-            onClick={(e) => e.stopPropagation()}
           >
             <header className="term-modal-head">
               <h3 id="wipe-title">{t("settings.wipeTitle")}</h3>
@@ -1262,17 +1227,12 @@ export default function SettingsPage() {
       ) : null}
 
       {uninstallOpen ? (
-        <div
-          className="term-modal-backdrop"
-          role="presentation"
-          onClick={() => !busy && setUninstallOpen(false)}
-        >
+        <div className="term-modal-backdrop" role="presentation">
           <div
             className="term-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="uninstall-title"
-            onClick={(e) => e.stopPropagation()}
           >
             <header className="term-modal-head">
               <h3 id="uninstall-title">{t("settings.uninstallTitle")}</h3>

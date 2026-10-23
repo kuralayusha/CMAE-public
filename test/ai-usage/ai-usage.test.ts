@@ -28,7 +28,8 @@ import {
   parsePriceTable,
   selectPrice,
 } from "../../lib/ai-usage/pricing";
-import { createDbBackend } from "../../lib/ai-usage/store";
+import { buildLocalUsageReport } from "../../lib/ai-usage/local-report";
+import { createDbBackend, recordImportedTranslateUsage, setTelemetryEnabled } from "../../lib/ai-usage/store";
 import {
   resetUploaderState,
   uploadPending,
@@ -463,16 +464,107 @@ describe("uploader", () => {
     assert.equal(pending(), 1);
   });
 
-  it("skipped when telemetry is disabled or no endpoint is configured", async () => {
+  it("uploads even when the telemetry flag row is off, and skips only when unconfigured", async () => {
     seed(1);
     let called = 0;
     const fetchImpl = (async () => { called += 1; return json(200); }) as unknown as typeof fetch;
     assert.equal((await uploadPending({ db, fetchImpl, config: { ingestUrl: "", anonKey: "" }, root: dir })).status, "unconfigured");
+    assert.equal(called, 0);
     db.prepare(`INSERT INTO settings (id, usage_telemetry_enabled) VALUES (1, 0)
                 ON CONFLICT(id) DO UPDATE SET usage_telemetry_enabled = 0`).run();
-    assert.equal((await uploadPending({ db, fetchImpl, config: cfg, root: dir })).status, "disabled");
-    assert.equal(called, 0);
-    assert.equal(pending(), 1);
+    setTelemetryEnabled(false, db);
+    const flag = db.prepare(`SELECT usage_telemetry_enabled AS v FROM settings WHERE id = 1`).get() as { v: number };
+    assert.equal(flag.v, 1);
+    db.prepare(`UPDATE settings SET usage_telemetry_enabled = 0 WHERE id = 1`).run();
+    const r = await uploadPending({ db, fetchImpl, config: cfg, root: dir });
+    assert.equal(r.status, "ok");
+    assert.equal(called, 1);
+    assert.equal(pending(), 0);
+    assert.equal(
+      (db.prepare(`SELECT usage_telemetry_enabled AS v FROM settings WHERE id = 1`).get() as { v: number }).v,
+      1,
+    );
+  });
+});
+
+describe("local usage report", () => {
+  function insertCall(row: {
+    eventId: string;
+    feature: string;
+    runId: string | null;
+    ts: string;
+    cacheWrite?: number;
+    costMicro?: number;
+  }) {
+    db.prepare(
+      `INSERT INTO ai_usage_events (
+         event_id, ts, feature, sync_mode, run_id, model, price_version,
+         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+         reasoning_tokens, cost_micro_usd, duration_ms, status, usage_missing,
+         cache_hit, saved_input_tokens, saved_cost_micro_usd
+       ) VALUES (?, ?, ?, NULL, ?, 'composer-2.5', 'embedded', 10, 4, 0, ?, 1, ?, 20, 'ok', 0, 0, 0, 0)`,
+    ).run(row.eventId, row.ts, row.feature, row.runId, row.cacheWrite ?? 0, row.costMicro ?? 1000);
+  }
+
+  it("lists grouped runs and calls that have no run id, with every token bucket", () => {
+    insertCall({
+      eventId: "grouped-1",
+      feature: "tracker.sync.triage",
+      runId: "sync-run",
+      ts: "2026-10-01T10:00:00.000Z",
+    });
+    insertCall({
+      eventId: "solo-1",
+      feature: "onboarding.verify",
+      runId: null,
+      ts: "2026-10-02T10:00:00.000Z",
+      cacheWrite: 7,
+      costMicro: 2500,
+    });
+    const report = buildLocalUsageReport(db, { anonRoot: dir });
+    assert.equal(report.totals.calls, 2);
+    assert.equal(report.totals.runs, 2);
+    assert.equal(report.by_feature.length, 2);
+    const verify = report.by_feature.find((f) => f.feature === "onboarding.verify");
+    assert.ok(verify);
+    assert.equal(verify.runs, 1);
+    assert.equal(verify.cache_write_tokens, 7);
+    assert.equal(report.runs.length, 2);
+    assert.equal(report.runs[0]?.features[0], "onboarding.verify");
+    assert.equal(report.runs[0]?.kind, "onboarding");
+    assert.equal(report.runs[0]?.events.length, 1);
+    assert.equal(report.runs[0]?.events[0]?.cache_write_tokens, 7);
+    assert.equal(report.runs[0]?.events[0]?.saved_usd, 0);
+    assert.equal(report.runs[1]?.run_id, "sync-run");
+    assert.equal(report.runs[1]?.events.length, 1);
+  });
+
+  it("records imported translation usage under one run", () => {
+    const n = recordImportedTranslateUsage("translate-run", [
+      {
+        feature: "i18n.translate",
+        model: "composer-2.5",
+        inputTokens: 100,
+        outputTokens: 40,
+        cacheReadTokens: 5,
+        cacheWriteTokens: 2,
+        reasoningTokens: 3,
+        costMicroUsd: 900,
+        durationMs: 1200,
+        cached: false,
+        usageMissing: false,
+      },
+      { feature: "tracker.followup", inputTokens: 999 },
+    ], db);
+    assert.equal(n, 1);
+    const report = buildLocalUsageReport(db, { anonRoot: dir });
+    assert.equal(report.totals.calls, 1);
+    assert.equal(report.runs.length, 1);
+    assert.equal(report.runs[0]?.run_id, "translate-run");
+    assert.equal(report.runs[0]?.kind, "translate");
+    assert.equal(report.runs[0]?.events[0]?.input_tokens, 100);
+    assert.equal(report.runs[0]?.events[0]?.cache_write_tokens, 2);
+    assert.equal(report.runs[0]?.events[0]?.reasoning_tokens, 3);
   });
 });
 

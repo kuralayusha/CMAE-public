@@ -1888,38 +1888,74 @@ body:has(.term-live-page) {
 
 .cmae-tracker-selbar {
   position: fixed;
-  top: 0;
+  bottom: 0;
   left: 0;
   right: 0;
   z-index: 51;
-  border-bottom: 1px solid var(--line-strong);
+  border-top: 1px solid var(--line-strong);
   background: var(--bg);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .cmae-tracker-selbar-inner {
   width: 100%;
   max-width: var(--page-max);
   margin: 0 auto;
-  padding: 0 var(--space-page-x);
+  padding: 8px var(--space-page-x);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: var(--nav-h);
+  min-height: var(--nav-h);
 }
 
 .cmae-tracker-selbar-count {
   font-size: 13px;
   font-weight: 550;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .cmae-tracker-selbar-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 6px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.cmae-tracker-selbar-btn {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(280px, 100%);
+  margin: 0;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cmae-tracker-selbar-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.cmae-tracker-selbar-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cmae-tracker-selbar-btn .cmae-tracker-actions-menu-label,
+.cmae-tracker-selbar-btn .cmae-tracker-actions-menu-hint {
+  white-space: normal;
+  overflow-wrap: break-word;
 }
 
 .cmae-sr-only {
@@ -2111,8 +2147,8 @@ a.cmae-btn {
 }
 
 .cmae-gmail-modal {
-  width: min(420px, 100%);
-  max-height: min(80vh, 560px);
+  width: min(520px, 100%);
+  max-height: min(80vh, 640px);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -2244,9 +2280,10 @@ a.cmae-btn {
   gap: 8px;
 }
 
+/* No section border — last row already draws the bottom edge (same as other lists). */
 .cmae-tracker-section-recent {
+  border-bottom: none;
   padding-bottom: 4px;
-  border-bottom: 1px solid var(--line);
   margin-bottom: 4px;
 }
 
@@ -2539,6 +2576,10 @@ a.cmae-btn {
   white-space: nowrap;
 }
 
+.cmae-tracker-row > .cmae-tracker-status-cell {
+  overflow: visible;
+}
+
 .cmae-tracker-status-cell .cmae-hover-tip-wrap.is-fill {
   justify-content: center;
 }
@@ -2548,6 +2589,7 @@ a.cmae-btn {
   align-items: center;
   gap: 6px;
   flex: 0 1 auto;
+  min-width: 0;
   max-width: 100%;
   height: 22px;
   padding: 0 8px;
@@ -2581,18 +2623,6 @@ a.cmae-btn {
   text-overflow: ellipsis;
 }
 
-.cmae-status-chip[data-phase="draft"] {
-  background: #e6f6ee;
-  color: #1f6b45;
-  border-color: #b9e0cc;
-}
-
-.cmae-status-chip[data-phase="saving"] {
-  background: #eef2f7;
-  color: #3d4f66;
-  border-color: #cfd8e6;
-}
-
 .cmae-status-chip-sep {
   flex: 0 0 auto;
   width: 1px;
@@ -2602,7 +2632,10 @@ a.cmae-btn {
 }
 
 .cmae-status-chip-meta {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 550;
   font-variant-numeric: tabular-nums;
   opacity: 0.72;
@@ -2669,6 +2702,19 @@ a.cmae-btn {
   border-color: #2a2a2a;
 }
 
+.cmae-status-chip[data-phase="draft"] {
+  background: #e6f6ee;
+  color: #1f6b45;
+  border-color: #b9e0cc;
+}
+
+.cmae-status-chip[data-phase="saving"],
+.cmae-status-chip[data-phase="preparing"] {
+  background: #eef2f7;
+  color: #3d4f66;
+  border-color: #cfd8e6;
+}
+
 .cmae-tracker-actions {
   display: flex;
   justify-content: center;
@@ -2694,19 +2740,12 @@ a.cmae-btn {
   flex: 0 0 auto;
 }
 
-.cmae-tracker-icon-btn.is-static {
-  color: var(--ink-faint);
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-}
-
 /*
  * Action / row controls keep a stable face while the row hover tint
  * changes underneath (transparent controls would pick up the tint).
  */
 .cmae-tracker-actions .cmae-btn,
-.cmae-tracker-actions .cmae-tracker-icon-btn,
-.cmae-tracker-actions .cmae-tracker-icon-btn.is-static {
+.cmae-tracker-actions .cmae-tracker-icon-btn {
   background-color: var(--bg);
 }
 
@@ -2740,13 +2779,18 @@ a.cmae-btn {
   z-index: 71;
   display: flex;
   flex-direction: column;
-  min-width: 200px;
-  max-width: min(280px, calc(100vw - 24px));
-  padding: 4px 0;
+  width: min(320px, calc(100vw - 24px));
+  padding: 6px 0;
   border: 1px solid var(--line-strong);
   border-radius: 0;
   background: var(--bg-elevated);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  white-space: normal;
+}
+
+.cmae-tracker-actions-menu.is-up {
+  top: auto;
+  bottom: 0;
 }
 
 .cmae-tracker-actions-menu-item {
@@ -2761,13 +2805,15 @@ a.cmae-btn {
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.35;
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.3;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
   box-sizing: border-box;
+  white-space: normal;
+  min-width: 0;
 }
 
 .cmae-tracker-actions-menu-item:hover:not(:disabled) {
@@ -2791,34 +2837,36 @@ a.cmae-btn {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  margin-top: 1px;
-  color: inherit;
+  width: 18px;
+  height: 18px;
+  margin-top: 0;
+  color: var(--ink);
 }
 
-.cmae-tracker-ico-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.cmae-tracker-actions-menu-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.cmae-tracker-ico-badge {
-  position: absolute;
-  top: -7px;
-  right: -8px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--bg);
-  font-size: 9px;
-  font-weight: 650;
-  line-height: 14px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+.cmae-tracker-actions-menu-label,
+.cmae-tracker-actions-menu-hint {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.cmae-tracker-actions-menu-label {
+  font-weight: 560;
+  letter-spacing: -0.011em;
+}
+
+.cmae-tracker-actions-menu-hint {
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--ink-muted);
 }
 
 .cmae-tracker-action-empty {

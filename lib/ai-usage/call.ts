@@ -126,6 +126,41 @@ function safe(fn: () => void): void {
   }
 }
 
+const AI_USAGE_STAMP = "aiUsage";
+
+/** Usage carried on a thrown LLM error so callers can still meter a failed call. */
+export type StampedUsage = {
+  usage: TokenCounts | null;
+  cached: boolean;
+  costMicroUsd: number;
+  durationMs: number;
+};
+
+export function readStampedUsage(err: unknown): StampedUsage | null {
+  if (!err || typeof err !== "object" || !(AI_USAGE_STAMP in err)) return null;
+  const v = (err as Record<string, unknown>)[AI_USAGE_STAMP];
+  if (!v || typeof v !== "object") return null;
+  const o = v as Partial<StampedUsage>;
+  if (typeof o.costMicroUsd !== "number" || typeof o.durationMs !== "number") {
+    return null;
+  }
+  return {
+    usage: o.usage ?? null,
+    cached: Boolean(o.cached),
+    costMicroUsd: o.costMicroUsd,
+    durationMs: o.durationMs,
+  };
+}
+
+function stampUsage(err: unknown, usage: StampedUsage): void {
+  if (!err || typeof err !== "object") return;
+  try {
+    Object.defineProperty(err, AI_USAGE_STAMP, { value: usage });
+  } catch {
+    /* frozen error */
+  }
+}
+
 export async function promptWithUsage(
   input: PromptWithUsageInput,
 ): Promise<PromptWithUsageResult> {
@@ -293,13 +328,31 @@ export async function promptWithUsage(
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
-  if (!settled.ok) throw settled.err;
+  if (!settled.ok) {
+    stampUsage(settled.err, {
+      usage: null,
+      cached: false,
+      costMicroUsd: 0,
+      durationMs: Date.now() - started,
+    });
+    throw settled.err;
+  }
   const result = settled.result;
+  const counts = toCounts(result.usage);
   if (result.status === "error" || !result.result) {
     const status = String(result.status ?? "unknown");
-    throw input.emptyError?.(status) ?? new Error(`LLM returned no result (${status})`);
+    const err =
+      input.emptyError?.(status) ?? new Error(`LLM returned no result (${status})`);
+    stampUsage(err, {
+      usage: counts,
+      cached: false,
+      costMicroUsd: counts
+        ? computeCostMicroUsd(counts, priceAt(new Date().toISOString()))
+        : 0,
+      durationMs: Date.now() - started,
+    });
+    throw err;
   }
-  const counts = toCounts(result.usage);
   return {
     text: String(result.result).trim(),
     usage: counts,

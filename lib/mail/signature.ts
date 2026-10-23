@@ -11,7 +11,7 @@ const CLOSING_LINE =
 
 export const EMAIL_SIGNATURE_PROMPT_RULES = `
 SIGNATURE RULES (mandatory):
-- End BODY with exactly one short closing line only (e.g. "Viele Grüße", "Best regards", "Saygılarımla") — nothing after that line.
+- End BODY with exactly one short closing line only (e.g. "Viele Grüße", "Best regards", "Saygılarımla"). Nothing after that line.
 - Do NOT write any signature block: no name, title, phone, LinkedIn, address, or "sent from".
 - Do NOT invent or alter a signature. A fixed signature is appended unchanged by the system after your closing line.
 `.trim();

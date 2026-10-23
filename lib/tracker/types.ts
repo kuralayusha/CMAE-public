@@ -66,6 +66,7 @@ export type TrackerItemRow = {
   researchJobId: string | null;
   primaryTo: string | null;
   notesJson: string | null;
+  hasApplicationDraft: boolean;
   hasFollowUpDraft: boolean;
   hasThanksDraft: boolean;
   hasReplyDraft: boolean;
@@ -91,11 +92,28 @@ export type RecipientCandidateInfo = {
   recommended: boolean;
 };
 
+/** One Gmail conversation on a tracker row — enough to pick it in a modal. */
+export type GmailThreadPreview = {
+  /** `t:` + Gmail thread id, or `m:` + Message-ID when there is no thread id. */
+  key: string;
+  url: string;
+  /** Subject with Re:/Fwd: stripped. Empty when the thread has none. */
+  subject: string;
+  /** Other party: name, otherwise email. */
+  from: string;
+  /** First sentences of the latest message in the thread. */
+  preview: string;
+  /** Latest message time in the thread. */
+  dateIso: string;
+};
+
 export type TrackerListItem = TrackerItemRow & {
   lastActivityAt: string | null;
   statusLabel: string;
   /** Unique Gmail thread URLs for linked mails (open each in its own tab) */
   gmailUrls: string[];
+  /** Same threads as gmailUrls, with subject, sender, and a short preview. */
+  gmailThreads: GmailThreadPreview[];
   /** OOO / dated wait — when they said they'd be back (YYYY-MM-DD) */
   waitingUntil: string | null;
   /**

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { t } from "@/lib/i18n/t";
 import { requireOnboardedResponse } from "@/lib/onboarding/http";
-import { prepareDraftForItem } from "@/lib/tracker/agents/followup";
+import {
+  prepareApplicationDraftForItem,
+  prepareDraftForItem,
+} from "@/lib/tracker/agents/followup";
+import { createGmailDraftForItem } from "@/lib/tracker/drafts";
 import {
   beginDraftOperation,
   endDraftOperation,
@@ -43,7 +47,28 @@ export async function POST(
       variant?: string;
       userNote?: string;
       eventKinds?: string[];
+      threadKey?: string;
     };
+
+    if (body.kind === "application") {
+      beginDraftOperation();
+      try {
+        const result = await withItemOp(id, prepareOpKey("application"), () =>
+          prepareApplicationDraftForItem(id),
+        );
+        let draftError: string | undefined;
+        try {
+          await createGmailDraftForItem(id, "application");
+        } catch (err) {
+          console.error("[prepare] gmail draft failed", err);
+          draftError = err instanceof Error ? err.message : String(err);
+        }
+        return NextResponse.json({ ...result, draftError });
+      } finally {
+        endDraftOperation();
+      }
+    }
+
     const kind = (body.kind || "follow_up") as Exclude<DraftKind, "application">;
     if (!KINDS.includes(kind as (typeof KINDS)[number])) {
       return NextResponse.json(
@@ -58,6 +83,10 @@ export async function POST(
         { status: 400 },
       );
     }
+    const threadKeyRaw = body.threadKey?.trim() || "";
+    const threadKey = /^(t|m):.{1,400}$/.test(threadKeyRaw)
+      ? threadKeyRaw
+      : undefined;
     const userNote = normalizeUserNote(body.userNote);
     const eventKinds = Array.isArray(body.eventKinds)
       ? body.eventKinds.filter((k): k is string => typeof k === "string")
@@ -69,9 +98,19 @@ export async function POST(
           variant: body.variant,
           userNote,
           eventKinds,
+          threadKey,
         }),
       );
-      return NextResponse.json(result);
+      // Save to Gmail Drafts in this request. A second client call was easy
+      // to miss, which left only the local file and an orange ring.
+      let draftError: string | undefined;
+      try {
+        await createGmailDraftForItem(id, kind);
+      } catch (err) {
+        console.error("[prepare] gmail draft failed", err);
+        draftError = err instanceof Error ? err.message : String(err);
+      }
+      return NextResponse.json({ ...result, draftError });
     } finally {
       endDraftOperation();
     }
@@ -88,6 +127,7 @@ export async function POST(
         { status: 409 },
       );
     }
+    console.error("[prepare] failed", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : String(err) },
       { status: 500 },

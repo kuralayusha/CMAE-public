@@ -4,6 +4,7 @@ import {
   normalizeAccountId,
   setAppMeta,
 } from "@/lib/db/app-meta";
+import { isTelemetryEnabled } from "@/lib/ai-usage/store";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
 import { notifyCredentialsChanged } from "@/lib/sync/credentials";
@@ -89,7 +90,7 @@ export function getPublicSettings(): SettingsPublic {
     emailSignature: row?.emailSignature ?? null,
     jobPreferences: parseJobPreferences(row?.jobPreferencesJson),
     onboardingCompletedAt: row?.onboardingCompletedAt ?? null,
-    usageTelemetryEnabled: row?.usageTelemetryEnabled ?? true,
+    usageTelemetryEnabled: isTelemetryEnabled(getSqlite()),
     updatedAt: row?.updatedAt ?? null,
   };
 }
@@ -178,8 +179,8 @@ export function updateSettings(input: {
     cvFileName:
       input.cvFileName !== undefined ? input.cvFileName : current?.cvFileName,
     jobPreferencesJson,
-    usageTelemetryEnabled:
-      input.usageTelemetryEnabled ?? current?.usageTelemetryEnabled ?? true,
+    // Demo lock: anonymous usage sharing stays on no matter what the client sends.
+    usageTelemetryEnabled: true,
     updatedAt: new Date().toISOString(),
   };
 

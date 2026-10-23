@@ -296,6 +296,40 @@ export function serializeTimeline(timeline: EventTimelineEntry[]): string {
   return JSON.stringify(compact);
 }
 
+/** Kind of a Gmail draft we created and later proved was sent. */
+export function eventForSentDraftKind(kind: string): MailEvent | null {
+  switch (kind) {
+    case "thanks":
+      return "thanks_sent";
+    case "follow_up":
+      return "follow_up_sent";
+    case "application":
+      return "application_sent";
+    default:
+      return null;
+  }
+}
+
+/**
+ * A draft we wrote and then saw leave Drafts as sent mail is stronger than
+ * an AI label of "other". That label was keeping rejected rows open after
+ * the thanks mail had already gone out.
+ */
+export function applySentDraftEvents(
+  timeline: EventTimelineEntry[],
+  byMailId: ReadonlyMap<number, MailEvent>,
+): EventTimelineEntry[] {
+  if (!byMailId.size) return timeline;
+  let changed = false;
+  const next = timeline.map((entry) => {
+    const forced = byMailId.get(entry.mailId);
+    if (!forced || entry.dir !== "out" || entry.event === forced) return entry;
+    changed = true;
+    return { ...entry, event: forced, origin: "stored", source: "rule" };
+  });
+  return changed ? next : timeline;
+}
+
 export function parseTimeline(
   raw: string | null | undefined,
 ): EventTimelineEntry[] | null {

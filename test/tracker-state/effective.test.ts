@@ -12,6 +12,7 @@ import {
   type EffectiveResult,
 } from "../../lib/tracker/derive/effective";
 import {
+  applySentDraftEvents,
   compareTimelineEntries,
   LOW_CONFIDENCE,
   timelineUnverified,
@@ -108,6 +109,18 @@ const ITEM8: EventTimelineEntry[] = [
 ];
 
 describe("rejection latch", () => {
+  it("a sent thanks draft closes a rejection the classifier called other", () => {
+    const timeline = applySentDraftEvents(
+      [
+        e(1, "2026-10-23T08:10:16.000Z", "in", "rejection"),
+        e(2, "2026-10-23T09:13:33.000Z", "out", "other"),
+      ],
+      new Map([[2, "thanks_sent"]]),
+    );
+    assert.equal(timeline[1]?.event, "thanks_sent");
+    assert.equal(status(timeline).status, "closed");
+  });
+
   it("closes #8 after thanks_sent (feedback chase must not reopen)", () => {
     assert.equal(status(ITEM8).status, "closed");
     assert.equal(status(ITEM8).sentiment, "negative");

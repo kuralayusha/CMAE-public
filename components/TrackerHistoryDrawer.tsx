@@ -266,7 +266,6 @@ export const TrackerHistoryDrawer = forwardRef<TrackerHistoryDrawerHandle>(
         <div
           ref={backdropRef}
           className="cmae-td-drawer-backdrop"
-          onClick={close}
           aria-hidden
         />
         <aside

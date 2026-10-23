@@ -1453,5 +1453,33 @@ export async function searchDraftByMessageId(
   });
 }
 
+/** Remove a CMAE draft from Gmail Drafts. False when it is already gone. */
+export async function deleteDraftByMessageId(
+  address: string,
+  appPassword: string,
+  messageIdHdr: string,
+): Promise<boolean> {
+  const needle = messageIdHdr.trim();
+  if (!needle || needle.startsWith("legacy:")) return false;
+  return withClient(address, appPassword, async (client) => {
+    const draftsPath = await findSpecialMailbox(client, "\\Drafts");
+    if (!draftsPath) {
+      throw new Error(t("tracker.error.gmailDraftsFolder"));
+    }
+    const lock = await client.getMailboxLock(draftsPath);
+    try {
+      const uids = await client.search(
+        { header: { "Message-ID": needle } },
+        { uid: true },
+      );
+      if (!uids || !Array.isArray(uids) || !uids.length) return false;
+      await client.messageDelete(uids, { uid: true });
+      return true;
+    } finally {
+      lock.release();
+    }
+  });
+}
+
 export type ImapSyncMode = "incremental" | "hard";
 export type { MailSourceCursor };

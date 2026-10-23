@@ -1,11 +1,16 @@
 import { createHash } from "crypto";
-import { decodeMimeBody, repairUtf8Mojibake } from "@/lib/tracker/mail-text";
+import {
+  decodeLooseQuotedPrintable,
+  decodeMimeBody,
+  repairUtf8Mojibake,
+} from "@/lib/tracker/mail-text";
 
 export function stripHtml(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<[^>]+>/g, " ")
+    .replace(/<[a-zA-Z!][^>\n]{0,160}$/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -49,7 +54,7 @@ export function textFromBodyPart(
   kind: "plain" | "html",
 ): string {
   if (!buf?.length) return "";
-  const raw = buf.toString("utf8");
+  const raw = decodeLooseQuotedPrintable(buf.toString("utf8"));
   const decoded = repairUtf8Mojibake(raw);
   const text =
     kind === "html" ? stripHtml(decoded) : decoded.replace(/\s+/g, " ");

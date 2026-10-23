@@ -9,11 +9,19 @@ import { t } from "@/lib/i18n/t";
 import { getSettingsRow } from "@/lib/settings/service";
 import { statusSettingsFromRow, type StatusSettings } from "./status-constants";
 import { effective, factsFromItemRow } from "./derive/effective";
+import {
+  applySentDraftEvents,
+  eventForSentDraftKind,
+  type MailEvent,
+} from "./derive/events";
 import { parseFlagsJson } from "./derive/flags";
-import { buildGmailThreadUrls } from "./gmail-links";
+import { buildGmailThreadPreviews } from "./gmail-links";
+import { dropPreparedFilesForSentDraft } from "./clear-prepared";
 import {
   getLiveDraftAnyKind,
+  listSentDraftSignals,
   toPendingInfo,
+  type SentDraftSignal,
 } from "./gmail-drafts-store";
 import { reconcileDraftFlagsForRow } from "./pending-draft";
 import { loadRecipientsForItem } from "./recipients";
@@ -33,6 +41,7 @@ import {
   type TrackerSentiment,
   type TrackerStatus,
   type WaitingOn,
+  type GmailThreadPreview,
 } from "./types";
 
 function rowWarnings(
@@ -86,18 +95,24 @@ function parseWaitingUntil(
 
 function mapRow(
   row: typeof trackerItems.$inferSelect,
-  gmailUrls: string[],
+  gmailThreads: GmailThreadPreview[],
   flags: {
+    hasApplicationDraft: boolean;
     hasFollowUpDraft: boolean;
     hasThanksDraft: boolean;
     hasReplyDraft: boolean;
   },
   statusSettings: StatusSettings,
+  sentByMail: ReadonlyMap<number, MailEvent>,
   nowMs?: number,
   gmailAddress?: string | null,
 ): TrackerListItem & { nextTransitionAt: string | null } {
   // Computed-on-read: follow-up / OOO transitions without waiting for sync.
-  const facts = factsFromItemRow(row);
+  const baseFacts = factsFromItemRow(row);
+  const facts = {
+    ...baseFacts,
+    timeline: applySentDraftEvents(baseFacts.timeline, sentByMail),
+  };
   const userState =
     row.userState || (row.status === "inactive" ? "inactive" : "active");
   const resolved = effective({
@@ -145,6 +160,7 @@ function mapRow(
     researchJobId: row.researchJobId,
     primaryTo: row.selectedRecipient || row.primaryTo,
     notesJson: row.notesJson,
+    hasApplicationDraft: flags.hasApplicationDraft,
     hasFollowUpDraft: flags.hasFollowUpDraft,
     hasThanksDraft: flags.hasThanksDraft,
     hasReplyDraft: flags.hasReplyDraft,
@@ -155,7 +171,8 @@ function mapRow(
       status === "waiting" && resolved.waitingReason === "interview"
         ? t("tracker.chip.interview")
         : statusTitle(status),
-    gmailUrls,
+    gmailUrls: gmailThreads.map((thread) => thread.url),
+    gmailThreads,
     waitingUntil:
       resolved.waitingUntil ||
       parseWaitingUntil(row.notesJson, row.waitingUntil),
@@ -177,7 +194,7 @@ function mapRow(
   };
 }
 
-function gmailUrlsByItemId(): Map<number, string[]> {
+function gmailThreadsByItemId(): Map<number, GmailThreadPreview[]> {
   const db = getDb();
   const links = db
     .select()
@@ -193,35 +210,35 @@ function gmailUrlsByItemId(): Map<number, string[]> {
       threadId: mailMessages.threadId,
       messageId: mailMessages.messageId,
       dateIso: mailMessages.dateIso,
+      subject: mailMessages.subject,
+      fromAddr: mailMessages.fromAddr,
+      toAddr: mailMessages.toAddr,
+      folder: mailMessages.folder,
+      snippet: mailMessages.snippet,
     })
     .from(mailMessages)
     .where(inArray(mailMessages.id, mailIds))
     .all();
   const mailById = new Map(mails.map((m) => [m.id, m]));
 
-  const mailsByItem = new Map<
-    number,
-    { threadId: string | null; messageId: string; dateIso: string }[]
-  >();
+  const mailsByItem = new Map<number, (typeof mails)[number][]>();
   for (const link of links) {
     const mail = mailById.get(link.mailId);
     if (!mail) continue;
     const list = mailsByItem.get(link.itemId) || [];
-    list.push({
-      threadId: mail.threadId,
-      messageId: mail.messageId,
-      dateIso: mail.dateIso,
-    });
+    list.push(mail);
     mailsByItem.set(link.itemId, list);
   }
 
   const settings = getSettingsRow();
-  const authEmail =
-    settings?.gmailAddress?.trim() || null;
+  const authEmail = settings?.gmailAddress?.trim() || null;
 
-  const out = new Map<number, string[]>();
+  const out = new Map<number, GmailThreadPreview[]>();
   for (const [itemId, itemMails] of mailsByItem) {
-    out.set(itemId, buildGmailThreadUrls(itemMails, authEmail));
+    out.set(
+      itemId,
+      buildGmailThreadPreviews(itemMails, authEmail, authEmail),
+    );
   }
   return out;
 }
@@ -247,10 +264,20 @@ export function listTrackerSections(opts?: { now?: number }): {
   nextTransitionAt: string | null;
 } {
   const db = getDb();
-  const urlsMap = gmailUrlsByItemId();
+  const threadsMap = gmailThreadsByItemId();
   const settings = getSettingsRow();
   const statusSettings = statusSettingsFromRow(settings);
   const gmailAddress = settings?.gmailAddress?.trim() || null;
+  const sentDrafts = listSentDraftSignals();
+  const sentByItem = new Map<number, SentDraftSignal[]>();
+  const sentByMail = new Map<number, MailEvent>();
+  for (const sent of sentDrafts) {
+    const list = sentByItem.get(sent.itemId) || [];
+    list.push(sent);
+    sentByItem.set(sent.itemId, list);
+    const event = eventForSentDraftKind(sent.kind);
+    if (event) sentByMail.set(sent.mailId, event);
+  }
   let nextTransitionAt: string | null = null;
   const rows = db
     .select()
@@ -258,13 +285,21 @@ export function listTrackerSections(opts?: { now?: number }): {
     .all()
     .filter((row) => !row.deletedAt)
     .map((row) => {
-      // Index-derived flags only — no fs, never persist on GET.
+      for (const sent of sentByItem.get(row.id) || []) {
+        dropPreparedFilesForSentDraft({
+          workspaceFolder: row.workspaceFolder,
+          kind: sent.kind,
+          contentHash: sent.contentHash,
+        });
+      }
+      // Flags come from the workspace index. Sent drafts may unlink the matching template first.
       const flags = reconcileDraftFlagsForRow(row, { persist: false });
       const { nextTransitionAt: rowNext, ...item } = mapRow(
         row,
-        urlsMap.get(row.id) || [],
+        threadsMap.get(row.id) || [],
         flags,
         statusSettings,
+        sentByMail,
         opts?.now,
         gmailAddress,
       );

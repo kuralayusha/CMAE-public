@@ -14,7 +14,10 @@ import { SyncCanceledError } from "@/lib/tracker/cancel";
 import { listTrackerSections } from "@/lib/tracker/list";
 import { runClassifyRetry } from "@/lib/tracker/derive/classify-retry";
 import { runDraftsReconcile } from "@/lib/tracker/drafts-reconcile";
-import { countLiveDrafts } from "@/lib/tracker/gmail-drafts-store";
+import {
+  countLiveDrafts,
+  countRecoverableDrafts,
+} from "@/lib/tracker/gmail-drafts-store";
 import { runTrackerSync } from "@/lib/tracker/run";
 import { getGmailCredentials } from "@/lib/settings/service";
 import type { SyncMode } from "@/lib/tracker/sync";
@@ -1088,8 +1091,13 @@ async function runClaimedJobBody(job: JobRow): Promise<void> {
     maybeEnqueueClassifyRetry("post_mutation");
 
     // Drafts reconcile after every successful mail sync (separate job).
+    // Also run when only "deleted" drafts remain — SENT may have landed in DB.
     try {
-      if (countLiveDrafts(currentAccountId() || undefined) > 0) {
+      const accountId = currentAccountId() || undefined;
+      if (
+        countLiveDrafts(accountId) > 0 ||
+        countRecoverableDrafts(accountId) > 0
+      ) {
         enqueueDraftsReconcile("post_mutation");
       }
     } catch {

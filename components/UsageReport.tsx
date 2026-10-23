@@ -67,6 +67,7 @@ type CallRow = {
   cache_write_tokens: number;
   reasoning_tokens: number;
   cost_usd: number;
+  saved_usd?: number;
   duration_ms: number;
   status: string;
   cache_hit: boolean;
@@ -365,8 +366,11 @@ function RunsAccordionTable({ runs }: { runs: RunRow[] }) {
                             <th>{t("usage.colModel")}</th>
                             <th>{t("usage.colIn")}</th>
                             <th>{t("usage.colOut")}</th>
-                            <th>{t("usage.colCache")}</th>
+                            <th>{t("usage.colCacheRead")}</th>
+                            <th>{t("usage.colCacheWrite")}</th>
+                            <th>{t("usage.colReasoning")}</th>
                             <th>{t("usage.colCost")}</th>
+                            <th>{t("usage.colSaved")}</th>
                             <th>{t("usage.colDuration")}</th>
                             <th>{t("usage.colWhen")}</th>
                           </tr>
@@ -403,7 +407,18 @@ function RunsAccordionTable({ runs }: { runs: RunRow[] }) {
                                     ? fmtTokens(c.cache_read_tokens, t)
                                     : dash(t)}
                                 </td>
+                                <td>
+                                  {c.cache_write_tokens > 0
+                                    ? fmtTokens(c.cache_write_tokens, t)
+                                    : dash(t)}
+                                </td>
+                                <td>
+                                  {c.reasoning_tokens > 0
+                                    ? fmtTokens(c.reasoning_tokens, t)
+                                    : dash(t)}
+                                </td>
                                 <td>{fmtUsd(c.cost_usd, t)}</td>
+                                <td>{fmtUsd(c.saved_usd ?? 0, t)}</td>
                                 <td>{fmtDuration(c.duration_ms, t)}</td>
                                 <td>{fmtWhen(c.ts, t)}</td>
                               </tr>
@@ -513,7 +528,11 @@ function DetailBody({ detail }: { detail: UserDetail }) {
                     <th>{t("usage.colCalls")}</th>
                     <th>{t("usage.colInput")}</th>
                     <th>{t("usage.colOutput")}</th>
-                    <th>{t("usage.colCache")}</th>
+                    <th>{t("usage.colCacheRead")}</th>
+                    <th>{t("usage.colCacheWrite")}</th>
+                    <th>{t("usage.colReasoning")}</th>
+                    <th>{t("usage.colSaved")}</th>
+                    <th>{t("usage.colCacheHits")}</th>
                     <th>{t("usage.colCost")}</th>
                   </tr>
                 </thead>
@@ -528,6 +547,10 @@ function DetailBody({ detail }: { detail: UserDetail }) {
                       <td>{fmtTokens(f.input_tokens, t)}</td>
                       <td>{fmtTokens(f.output_tokens, t)}</td>
                       <td>{fmtTokens(f.cache_read_tokens, t)}</td>
+                      <td>{fmtTokens(f.cache_write_tokens, t)}</td>
+                      <td>{fmtTokens(f.reasoning_tokens, t)}</td>
+                      <td>{fmtUsd(f.saved_usd, t)}</td>
+                      <td>{f.cache_hits}</td>
                       <td>{fmtUsd(f.cost_usd, t)}</td>
                     </tr>
                   ))}

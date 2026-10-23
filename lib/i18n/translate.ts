@@ -1,6 +1,11 @@
 import "server-only";
 
-import { promptWithUsage, withUsageRunAsync } from "@/lib/ai-usage";
+import {
+  promptWithUsage,
+  readStampedUsage,
+  withUsageRunAsync,
+  type PromptWithUsageResult,
+} from "@/lib/ai-usage";
 import { eq } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
@@ -82,18 +87,64 @@ function ensureWritableCursorHome(): string {
   return cwd;
 }
 
-async function askTranslateLlm(prompt: string): Promise<string> {
+export type TranslateUsageCall = {
+  feature: "i18n.translate";
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  reasoningTokens: number;
+  costMicroUsd: number;
+  durationMs: number;
+  cached: boolean;
+  usageMissing: boolean;
+};
+
+function usageCallFrom(
+  result: Pick<
+    PromptWithUsageResult,
+    "usage" | "cached" | "costMicroUsd" | "durationMs"
+  >,
+): TranslateUsageCall {
+  const u = result.usage;
+  return {
+    feature: "i18n.translate",
+    model: "composer-2.5",
+    inputTokens: u?.inputTokens ?? 0,
+    outputTokens: u?.outputTokens ?? 0,
+    cacheReadTokens: u?.cacheReadTokens ?? 0,
+    cacheWriteTokens: u?.cacheWriteTokens ?? 0,
+    reasoningTokens: u?.reasoningTokens ?? 0,
+    costMicroUsd: result.costMicroUsd,
+    durationMs: result.durationMs,
+    cached: result.cached,
+    usageMissing: !result.cached && u === null,
+  };
+}
+
+async function askTranslateLlm(
+  prompt: string,
+  sink: TranslateUsageCall[],
+): Promise<string> {
   const cwd = ensureWritableCursorHome();
   const apiKey = await resolveApiKey();
-  const result = await promptWithUsage({
-    feature: "i18n.translate",
-    prompt,
-    apiKey,
-    cwd,
-    model: "composer-2.5",
-    emptyError: (status) => new Error(t("errors.llmNoResponse", { status })),
-  });
-  return result.text;
+  try {
+    const result = await promptWithUsage({
+      feature: "i18n.translate",
+      prompt,
+      apiKey,
+      cwd,
+      model: "composer-2.5",
+      emptyError: (status) => new Error(t("errors.llmNoResponse", { status })),
+    });
+    sink.push(usageCallFrom(result));
+    return result.text;
+  } catch (err) {
+    const stamped = readStampedUsage(err);
+    if (stamped) sink.push(usageCallFrom(stamped));
+    throw err;
+  }
 }
 
 function extractJsonObject(text: string): LocalePack | null {
@@ -114,6 +165,7 @@ async function translateSection(
   sectionKey: string,
   section: LocalePack,
   targetLanguage: string,
+  sink: TranslateUsageCall[],
 ): Promise<LocalePack> {
   const keyContext = formatHintsForSection(sectionKey, section);
   const prompt = `You are a professional UI localization engine.
@@ -141,7 +193,7 @@ Section key: ${sectionKey}
 JSON:
 ${JSON.stringify(section, null, 2)}`;
 
-  const raw = await askTranslateLlm(prompt);
+  const raw = await askTranslateLlm(prompt, sink);
   const parsed = extractJsonObject(raw);
   if (!parsed) {
     throw new Error(`Failed to parse translation for section "${sectionKey}"`);
@@ -154,6 +206,10 @@ export type TranslateResult = {
   pack: LocalePack;
   meta: LocaleMeta;
   skippedLlm: boolean;
+  /** Set when this pass called the model. Null when nothing was translated. */
+  usageRunId: string | null;
+  /** One entry per model call, including a failed call that threw afterwards. */
+  usageCalls: TranslateUsageCall[];
 };
 
 export type TranslateOptions = {
@@ -179,6 +235,8 @@ export async function translateLocalePack(
 
   let pack: LocalePack;
   let skippedLlm = false;
+  let usageRunId: string | null = null;
+  const usageCalls: TranslateUsageCall[] = [];
 
   if (code === APP_LANGUAGE || code.startsWith("en")) {
     pack = en;
@@ -205,25 +263,35 @@ export async function translateLocalePack(
       await resolveApiKey();
       const out: LocalePack = {};
       const translateRunId = globalThis.crypto.randomUUID();
-      await withUsageRunAsync(translateRunId, async () => {
-        for (const [sectionKey, sectionVal] of Object.entries(missing)) {
-          if (typeof sectionVal === "string") {
-            const tiny = await translateSection(
-              sectionKey,
-              { value: sectionVal },
-              code,
-            );
-            out[sectionKey] =
-              typeof tiny.value === "string" ? tiny.value : sectionVal;
-          } else {
-            out[sectionKey] = await translateSection(
-              sectionKey,
-              sectionVal,
-              code,
-            );
+      usageRunId = translateRunId;
+      try {
+        await withUsageRunAsync(translateRunId, async () => {
+          for (const [sectionKey, sectionVal] of Object.entries(missing)) {
+            if (typeof sectionVal === "string") {
+              const tiny = await translateSection(
+                sectionKey,
+                { value: sectionVal },
+                code,
+                usageCalls,
+              );
+              out[sectionKey] =
+                typeof tiny.value === "string" ? tiny.value : sectionVal;
+            } else {
+              out[sectionKey] = await translateSection(
+                sectionKey,
+                sectionVal,
+                code,
+                usageCalls,
+              );
+            }
           }
+        });
+      } catch (err) {
+        if (err && typeof err === "object") {
+          Object.assign(err, { usageRunId, usageCalls });
         }
-      });
+        throw err;
+      }
       // Assign outside the ALS callback so TS sees definite assignment.
       pack = mergeShape(en, deepMergePack(prior, out));
     }
@@ -240,7 +308,7 @@ export async function translateLocalePack(
     meta = saveUserPack(code, pack);
     updateSettings({ preferredLanguage: code });
   }
-  return { code, pack, meta, skippedLlm };
+  return { code, pack, meta, skippedLlm, usageRunId, usageCalls };
 }
 
 /**

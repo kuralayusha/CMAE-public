@@ -88,7 +88,3 @@ export const PAGE_HELP: Record<AppPageId, PageHelp> = {
     ],
   },
 };
-
-export function helpSeenKey(pageId: AppPageId): string {
-  return `cmae.help.seen.${pageId}`;
-}

@@ -34,6 +34,7 @@ export type WorkspaceFileKind =
   | "other";
 
 export type DraftFlagsFromIndex = {
+  hasApplicationDraft: boolean;
   hasFollowUpDraft: boolean;
   hasThanksDraft: boolean;
   hasReplyDraft: boolean;
@@ -452,6 +453,7 @@ export function draftFlagsFromIndex(
 ): DraftFlagsFromIndex {
   if (!workspaceFolder) {
     return {
+      hasApplicationDraft: false,
       hasFollowUpDraft: false,
       hasThanksDraft: false,
       hasReplyDraft: false,
@@ -464,6 +466,7 @@ export function draftFlagsFromIndex(
     .get();
   if (present && !present.present) {
     return {
+      hasApplicationDraft: false,
       hasFollowUpDraft: false,
       hasThanksDraft: false,
       hasReplyDraft: false,
@@ -477,6 +480,12 @@ export function draftFlagsFromIndex(
     .all();
   const names = rows.map((r) => r.name);
   const n = Math.max(1, (followUpCount || 0) + 1);
+  const hasApplicationDraft = names.some(
+    (f) =>
+      /^email_original\.md$/i.test(f) ||
+      /^email_site_language\.md$/i.test(f) ||
+      (/^email_.*\.md$/i.test(f) && !/translated/i.test(f)),
+  );
   const hasFollowUpDraft = names.some(
     (f) =>
       new RegExp(`^follow_up_${n}\\.md$`, "i").test(f) ||
@@ -488,7 +497,12 @@ export function draftFlagsFromIndex(
   const hasReplyDraft = names.some(
     (f) => /^reply\.md$/i.test(f) || /^yanit.*\.md$/i.test(f),
   );
-  return { hasFollowUpDraft, hasThanksDraft, hasReplyDraft };
+  return {
+    hasApplicationDraft,
+    hasFollowUpDraft,
+    hasThanksDraft,
+    hasReplyDraft,
+  };
 }
 
 export { loadRecipientsFromIndex } from "./recipients-from-index";

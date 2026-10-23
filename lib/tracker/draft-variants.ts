@@ -48,59 +48,55 @@ export type DraftVariantDef = {
   craftGuide: string;
 };
 
+/**
+ * Shared voice for reply, follow-up, and thank-you drafts.
+ * User note outranks variant structure when they conflict.
+ */
+export const MAIL_VOICE_RULES = `
+HOW THE MAIL SHOULD SOUND:
+
+Write like a person at work. Plain, short, professional. Not a polished assistant.
+
+- Everyday words. No literary or very formal language.
+- Do not open with filler ("I hope this email finds you well", "I wanted to reach out", "I am writing to inform you", "as per our conversation", "circling back", "touching base", "please do not hesitate", "I would be delighted", "kindly").
+- Do not recap their mail. They already know what they wrote. Name the topic in a few words only when the reply would be unclear without it ("Thursday at 14:00 works for me").
+- Say each point once. Do not rephrase it in the next sentence.
+- Most replies are 2 to 4 sentences. Follow-ups and thank-yous are 2 to 3. Stop when the point is done.
+- One greeting, then the point, then one closing line. Nothing else.
+- Spelling and grammar stay correct. No typos, no slang, no emoji.
+- Punctuation: period, comma, and question mark. No em dash, en dash, semicolon, or ellipsis. Do not stack marks. A colon, or a single exclamation, only when that sentence really needs it.
+- Plain text. No markdown or bullet lists unless the user note asks for a list.
+- Greeting uses their real name when known. Never invent a name.
+- SUBJECT continues the thread with Re: and the anchor subject. Do not start a new subject.
+- Never invent facts, numbers, dates, or reasons. If you do not have it, leave it out.
+
+USER NOTE (only when one is present):
+- It is the brief for this email, not a chatbot request and not text to paste in.
+- Do what it asks: tone, what to say, what to skip, length, and format.
+- It outranks the variant structure below when they disagree.
+- Still only write the email. Do not add a recap or extra topics they did not ask for.
+`.trim();
+
 const FOLLOW_UP_BASE = `
-FOLLOW-UP CRAFT (follow closely — even shorter than the first application mail):
-
-LENGTH & STRUCTURE
-- Ideal: 50–80 words. Hard cap ~100. Must feel shorter than the original application.
-- 2–3 short sentences; a single short paragraph is fine.
-- Easy to answer in seconds — no long explanations.
-
-THREADING (subject)
-- This is an in-thread REPLY. SUBJECT must continue the prior thread with Re: …
-- Prefer the thread anchor subject. Do not invent a new subject that breaks context.
-
-BODY STRUCTURE (in this order)
-1) Greeting: Use the real name if known. Otherwise a natural generic greeting. Never invent a name.
-2) Soft reminder (1 sentence): Briefly mention the earlier application — no accusation.
-3) Empathy / tone: Acknowledge they may be busy. Never "you didn't reply" / "still waiting".
-4) Optional new value (1 sentence, only if grounded in User notes / CV / research): otherwise SKIP.
-5) Low-pressure ask (1 sentence).
-6) Mention CV is attached again.
-7) Thank them and close warmly, then exactly one closing line per SIGNATURE RULES.
-
-TONE
-- Kind, light, professional — not stiff, not pleading, not passive-aggressive.
-- Do NOT copy-paste the first mail. Do NOT restate the whole CV.
-
-LANGUAGE
-- Match the thread language when clear; otherwise preferred language.
+FOLLOW-UP (in-thread, no reply yet):
+- Shorter than the first application. Two or three sentences.
+- One soft line that you applied earlier. Never "you didn't reply" or "still waiting".
+- One easy question, or a short note that you are still interested.
+- A new point only if the user note or the context has a real one. Otherwise skip it.
+- One short line that the CV is attached again.
+- Do not paste the first mail or walk through the CV.
 `.trim();
 
 const THANKS_BASE = `
-THANKS CRAFT (after rejection — in-thread reply):
-
-LENGTH
-- Ideal: 40–70 words. Hard cap ~90.
-
-STRUCTURE
-1) Greeting (real name if known; never invent).
-2) Brief thanks for their time / consideration.
-3) Variant-specific beat (see TASK / VARIANT RULES).
-4) Leave the door open warmly — no bitterness, no guilt.
-5) Close per SIGNATURE RULES.
-
-TONE
-- Gracious, short, professional. Never argue the rejection.
+THANK-YOU (in-thread, after a rejection):
+- Two or three sentences. Thanks for their time, then the variant beat in one sentence.
+- No argument, no bitterness, no guilt.
 `.trim();
 
 const REPLY_BASE = `
-REPLY CRAFT (in-thread reply to their latest inbound):
-
-- Be professional and specific to their ask and the chosen variant.
-- If they ask about salary, notice, start date, or employment type, answer from Candidate preferences — never invent figures.
-- Prefer short paragraphs; easy to answer.
-- SUBJECT must continue the thread with Re: …
+REPLY (in-thread, to their latest mail):
+- Do the variant task. Do not walk through their email point by point unless they asked several concrete questions.
+- Salary, notice period, start date, and work type come only from Candidate preferences. Never invent figures.
 `.trim();
 
 const THANKS_VARIANTS: DraftVariantDef[] = [
@@ -117,7 +113,7 @@ const THANKS_VARIANTS: DraftVariantDef[] = [
 
 VARIANT RULES (thanks_simple)
 - Do NOT ask for feedback.
-- Do NOT pitch future roles aggressively — a single soft door-open is enough.
+- Do not pitch future roles. One soft line that the door stays open is enough.
 `,
   },
   {
@@ -133,8 +129,8 @@ VARIANT RULES (thanks_simple)
 
 VARIANT RULES (thanks_feedback)
 - After thanks, add ONE gentle sentence asking for any brief feedback that might help next time.
-- Make it easy to decline — no obligation implied.
-- If User notes name a focus area, prefer that; otherwise keep the ask generic.
+- Make it easy to decline. No obligation.
+- If the user note names a focus area, prefer that. Otherwise keep the ask generic.
 `,
   },
   {
@@ -150,7 +146,7 @@ VARIANT RULES (thanks_feedback)
 
 VARIANT RULES (thanks_future)
 - Do NOT ask for feedback.
-- Explicitly welcome hearing about future roles that fit (use User notes for area/role if provided).
+- Explicitly welcome hearing about future roles that fit (use the user note for area/role if provided).
 `,
   },
 ];
@@ -164,7 +160,7 @@ const FOLLOW_UP_VARIANTS: DraftVariantDef[] = [
     placeholderKey: "tracker.variant.followup_soft.placeholder",
     noteRecommended: false,
     intent:
-      "Write a soft follow-up after no reply. Follow FOLLOW-UP CRAFT. Polite, low-pressure, easy to answer.",
+      "Write a soft follow-up after no reply. Short, polite, easy to answer.",
     craftGuide: FOLLOW_UP_BASE,
   },
   {
@@ -175,11 +171,11 @@ const FOLLOW_UP_VARIANTS: DraftVariantDef[] = [
     placeholderKey: "tracker.variant.followup_value.placeholder",
     noteRecommended: true,
     intent:
-      "Write a soft follow-up that includes one new grounded value point from User notes / context. Never invent wins.",
+      "Write a soft follow-up that includes one new grounded value point from the user note / context. Never invent wins.",
     craftGuide: `${FOLLOW_UP_BASE}
 
 VARIANT RULES (followup_value)
-- Step 4 (new value) is required IF User notes or context provide a real win/news item; otherwise skip and stay soft.
+- Add one real update only if the user note or the context has one. Otherwise stay with the soft check-in.
 - Never invent certificates, projects, or company news.
 `,
   },
@@ -195,9 +191,9 @@ VARIANT RULES (followup_value)
     craftGuide: `${FOLLOW_UP_BASE}
 
 VARIANT RULES (followup_closing)
-- Tone: final, gracious check-in — not guilt.
+- Tone: a last, gracious check-in. No guilt.
 - Imply you will assume timing is not right if silent; still welcome a reply later.
-- Keep shorter; skip heavy new-value pitches unless User notes provide one.
+- Keep it to two sentences unless the user note asks for more. Skip extra updates unless the note has one.
 `,
   },
 ];
@@ -211,11 +207,12 @@ const REPLY_VARIANTS: DraftVariantDef[] = [
     placeholderKey: "tracker.variant.reply_answer.placeholder",
     noteRecommended: false,
     intent:
-      "Reply answering their latest questions/asks. Use Candidate preferences and User notes; never invent figures.",
+      "Reply answering their latest questions/asks. Use Candidate preferences and the user note; never invent figures.",
     craftGuide: `${REPLY_BASE}
 
 VARIANT RULES (reply_answer)
-- Address their points directly. Use User notes as grounding for answers you would otherwise lack.
+- Answer what they asked. One sentence per question is enough.
+- Use the user note for anything the thread does not already answer.
 `,
   },
   {
@@ -226,12 +223,12 @@ VARIANT RULES (reply_answer)
     placeholderKey: "tracker.variant.reply_confirm_interview.placeholder",
     noteRecommended: true,
     intent:
-      "Confirm an interview invitation. Thank them and confirm the slot from User notes when provided.",
+      "Confirm an interview invitation. Thank them and confirm the slot from the user note when provided.",
     craftGuide: `${REPLY_BASE}
 
 VARIANT RULES (reply_confirm_interview)
 - Thank them; confirm attendance.
-- If User notes give a preferred time/slot, confirm that. If none, confirm the slot they offered when clear; otherwise ask briefly which offered slot works.
+- If the user note gives a preferred time, confirm that. If not, confirm the slot they offered when it is clear. Otherwise ask which offered slot works.
 `,
   },
   {
@@ -242,12 +239,12 @@ VARIANT RULES (reply_confirm_interview)
     placeholderKey: "tracker.variant.reply_reschedule.placeholder",
     noteRecommended: true,
     intent:
-      "Politely request a reschedule / new slot. Use availability from User notes when provided.",
+      "Politely request a reschedule / new slot. Use availability from the user note when provided.",
     craftGuide: `${REPLY_BASE}
 
 VARIANT RULES (reply_reschedule)
 - Apologize briefly for the conflict; stay warm.
-- Propose alternatives only from User notes. If none, ask for other times without inventing availability.
+- Propose alternatives only from the user note. If none, ask for other times without inventing availability.
 `,
   },
   {
@@ -258,12 +255,12 @@ VARIANT RULES (reply_reschedule)
     placeholderKey: "tracker.variant.reply_accept_offer.placeholder",
     noteRecommended: false,
     intent:
-      "Accept the offer gratefully. Mention next-step details only from preferences / User notes.",
+      "Accept the offer gratefully. Mention next-step details only from preferences / the user note.",
     craftGuide: `${REPLY_BASE}
 
 VARIANT RULES (reply_accept_offer)
 - Clear acceptance + thanks.
-- Start date / logistics only if known from prefs or User notes — never invent.
+- Start date and logistics only if prefs or the user note already have them. Never invent them.
 `,
   },
   {
@@ -274,12 +271,12 @@ VARIANT RULES (reply_accept_offer)
     placeholderKey: "tracker.variant.reply_decline_offer.placeholder",
     noteRecommended: false,
     intent:
-      "Politely decline the offer. Short, professional; leave door open. Do not invent reasons beyond User notes.",
+      "Politely decline the offer. Short, professional; leave door open. Do not invent reasons beyond the user note.",
     craftGuide: `${REPLY_BASE}
 
 VARIANT RULES (reply_decline_offer)
 - Clear but kind decline.
-- Reason only if User notes provide one; otherwise omit (no fake excuses).
+- Give a reason only if the user note provides one. Otherwise leave it out.
 `,
   },
   {
@@ -290,11 +287,11 @@ VARIANT RULES (reply_decline_offer)
     placeholderKey: "tracker.variant.reply_negotiate.placeholder",
     noteRecommended: true,
     intent:
-      "Negotiate terms using only Candidate preferences and User notes. Collaborative, not aggressive.",
+      "Negotiate terms using only Candidate preferences and the user note. Collaborative, not aggressive.",
     craftGuide: `${REPLY_BASE}
 
 VARIANT RULES (reply_negotiate)
-- Discuss only numbers/terms present in prefs or User notes. Never invent targets.
+- Discuss only numbers/terms present in prefs or the user note. Never invent targets.
 - Collaborative tone; invite discussion.
 `,
   },
@@ -306,12 +303,12 @@ VARIANT RULES (reply_negotiate)
     placeholderKey: "tracker.variant.reply_ask_clarify.placeholder",
     noteRecommended: true,
     intent:
-      "Ask 1–3 clarifying questions. Prefer turning User notes into clear questions.",
+      "Ask 1 to 3 clarifying questions. Prefer turning the user note into clear questions.",
     craftGuide: `${REPLY_BASE}
 
 VARIANT RULES (reply_ask_clarify)
-- 1–3 short questions that unblock the process.
-- If User notes contain the question(s), phrase them professionally; do not invent extra topics.
+- 1 to 3 short questions that unblock the process.
+- If the user note contains the question, phrase it clearly. Do not invent extra topics.
 `,
   },
   {
@@ -322,13 +319,13 @@ VARIANT RULES (reply_ask_clarify)
     placeholderKey: "tracker.variant.reply_decline_process.placeholder",
     noteRecommended: false,
     intent:
-      "Withdraw from the hiring process politely. Short and gracious; reason only from User notes.",
+      "Withdraw from the hiring process politely. Short and gracious; reason only from the user note.",
     craftGuide: `${REPLY_BASE}
 
 VARIANT RULES (reply_decline_process)
 - Clear withdrawal / stepping back.
 - Thank them; leave door open if natural.
-- Reason only if User notes provide one.
+- Give a reason only if the user note provides one.
 `,
   },
 ];
@@ -433,9 +430,13 @@ export function formatUserNotesBlock(userNote: string): string {
   const note = normalizeUserNote(userNote);
   if (!note) return "";
   return `
-User notes (plain text from candidate — use as grounding facts; do not invent beyond this):
+USER NOTE (this is the brief for the email. Follow it.):
 """
 ${note}
 """
+Turn this into the mail itself: the tone they asked for, the points they want mentioned, the things they want left out, and the format they described.
+If it conflicts with the variant structure, follow this note.
+Do not answer the note as a chat. Do not paste it. Do not add a recap or extra topics.
+Facts written here are true. Do not invent beyond this note, the preferences, and the thread.
 `;
 }

@@ -2,8 +2,9 @@
  * Background uploader for ai_usage_events. Sends ONLY counters and labels
  * ({user_id, secret, app_version, platform, events[]}); event_id (client UUID)
  * makes re-sends idempotent on the server. Never throws into sync/research,
- * never blocks them; offline → exponential backoff; skipped when telemetry is
- * disabled or no endpoint is configured.
+ * never blocks them; offline → exponential backoff; skipped when no endpoint
+ * is configured. Demo builds always upload (the settings switch cannot turn
+ * sharing off).
  */
 
 import type Database from "better-sqlite3";

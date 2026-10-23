@@ -86,6 +86,12 @@ export function loadActivePack(): { code: string; pack: LocalePack } {
   const user = loadUserPack();
   const en = loadEnPack();
   if (user && meta?.code) {
+    const code = meta.code.toLowerCase();
+    // English is the source pack. A saved user.json snapshot must not freeze
+    // older English copy (placeholders like {count} would stay literal).
+    if (code === APP_LANGUAGE || code.startsWith("en")) {
+      return { code: APP_LANGUAGE, pack: en };
+    }
     let pack = mergeShape(en, user);
     // en.json changed but no missing keys — stamp new hash without LLM
     const hash = hashEnPack(en);

@@ -24,7 +24,9 @@ export type AssignSource =
   | "ai"
   | "identity"
   | "user"
-  | "legacy";
+  | "legacy"
+  /** Outbound matched to a CMAE gmail_drafts row (Message-ID / thrid / to+subject). */
+  | "draft";
 
 export type AssignResult =
   | { kind: "assigned"; itemId: number; source: AssignSource }

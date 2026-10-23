@@ -29,6 +29,7 @@ import {
   findNamedDraft,
   type ParsedMailDraft,
 } from "./parse-mail-md";
+import { parseReplyThreadKey } from "./reply-thread-key";
 import { replySubject, resolveThreadReplyTarget } from "./reply-thread";
 import type { DraftKind } from "./types";
 
@@ -93,6 +94,7 @@ export function resolveDraftContent(
     primaryTo: string | null;
     company: string;
     followUpCount: number;
+    notesJson?: string | null;
   },
   kind: DraftKind,
   preferredLang?: string,
@@ -133,7 +135,10 @@ export function resolveDraftContent(
   }
 
   if (kind !== "application") {
-    const thread = resolveThreadReplyTarget(item.id);
+    const thread = resolveThreadReplyTarget(
+      item.id,
+      parseReplyThreadKey(item.notesJson, kind),
+    );
     if (thread) {
       return {
         ...draft,
@@ -256,6 +261,7 @@ export async function createGmailDraftForItem(
         primaryTo: item.selectedRecipient || item.primaryTo,
         company: item.company,
         followUpCount: item.followUpCount,
+        notesJson: item.notesJson,
       },
       kind,
       settings?.preferredLanguage || "en",

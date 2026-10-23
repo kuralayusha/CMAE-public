@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { HoverTip } from "@/components/HoverTip";
 import { useT } from "@/components/I18nProvider";
-import { type AppPageId, helpSeenKey } from "@/lib/help/pages";
+import { type AppPageId } from "@/lib/help/pages";
 
 /** Help control on the page title row — uses shared button styles so layout can’t collapse. */
 export function PageHelpButton({ onClick }: { onClick: () => void }) {
@@ -30,24 +30,9 @@ export function PageHelpButton({ onClick }: { onClick: () => void }) {
 export function PageHelp({ pageId }: { pageId: AppPageId }) {
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem(helpSeenKey(pageId))) {
-        setOpen(true);
-      }
-    } catch {
-      /* private mode */
-    }
-  }, [pageId]);
-
   const close = useCallback(() => {
-    try {
-      localStorage.setItem(helpSeenKey(pageId), "1");
-    } catch {
-      /* ignore */
-    }
     setOpen(false);
-  }, [pageId]);
+  }, []);
 
   const reopen = useCallback(() => {
     setOpen(true);
@@ -62,27 +47,12 @@ export function PageHelp({ pageId }: { pageId: AppPageId }) {
 }
 
 /** @deprecated Prefer <PageHelp pageId=… /> so open-state stays local. */
-export function usePageHelp(pageId: AppPageId) {
+export function usePageHelp(_pageId: AppPageId) {
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem(helpSeenKey(pageId))) {
-        setOpen(true);
-      }
-    } catch {
-      /* private mode */
-    }
-  }, [pageId]);
-
   const close = useCallback(() => {
-    try {
-      localStorage.setItem(helpSeenKey(pageId), "1");
-    } catch {
-      /* ignore */
-    }
     setOpen(false);
-  }, [pageId]);
+  }, []);
 
   const reopen = useCallback(() => {
     setOpen(true);
@@ -144,17 +114,12 @@ export function PageHelpModal({
       : [];
 
   return createPortal(
-    <div
-      className="cmae-help-backdrop"
-      role="presentation"
-      onClick={onClose}
-    >
+    <div className="cmae-help-backdrop" role="presentation">
       <div
         className={`cmae-help-modal${statuses.length ? " is-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`cmae-help-title-${pageId}`}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className="cmae-help-head">
           <h2 id={`cmae-help-title-${pageId}`}>

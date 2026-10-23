@@ -94,6 +94,30 @@ export function getLiveDraftAnyKind(itemId: number): GmailDraftRow | null {
   return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
 }
 
+/** Drafts marked deleted/failed that may still map to a SENT mail after sync. */
+export function countRecoverableDrafts(accountId?: string): number {
+  const sqlite = getSqlite();
+  if (accountId) {
+    const row = sqlite
+      .prepare(
+        `SELECT COUNT(*) AS n FROM gmail_drafts
+         WHERE account_id = ?
+           AND state IN ('deleted_by_user', 'failed')
+           AND sent_mail_id IS NULL`,
+      )
+      .get(accountId) as { n: number };
+    return row?.n || 0;
+  }
+  const row = sqlite
+    .prepare(
+      `SELECT COUNT(*) AS n FROM gmail_drafts
+       WHERE state IN ('deleted_by_user', 'failed')
+         AND sent_mail_id IS NULL`,
+    )
+    .get() as { n: number };
+  return row?.n || 0;
+}
+
 export function listLiveDrafts(accountId?: string): GmailDraftRow[] {
   const db = getDb();
   const rows = db
@@ -283,6 +307,24 @@ export function clearHasDraftFlagsForKind(
   _kind: DraftKind,
 ): void {
   /* intentionally empty */
+}
+
+export type SentDraftSignal = {
+  itemId: number;
+  mailId: number;
+  kind: DraftKind;
+  contentHash: string;
+};
+
+/** Drafts we created that Gmail has since sent. */
+export function listSentDraftSignals(): SentDraftSignal[] {
+  return getSqlite()
+    .prepare(
+      `SELECT item_id AS itemId, sent_mail_id AS mailId, kind, content_hash AS contentHash
+       FROM gmail_drafts
+       WHERE state = 'sent' AND sent_mail_id IS NOT NULL`,
+    )
+    .all() as SentDraftSignal[];
 }
 
 export function toPendingInfo(

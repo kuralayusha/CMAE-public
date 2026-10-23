@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { recordImportedTranslateUsage } from "@/lib/ai-usage/store";
 import { loadEnPack, saveUserPack } from "@/lib/i18n/pack";
 import { getRemoteTranslateUrl, isVercelRuntime } from "@/lib/i18n/remote";
 import { countMissingLeaves, mergeShape } from "@/lib/i18n/shape";
@@ -6,6 +7,18 @@ import { t } from "@/lib/i18n/t";
 import { translateLocalePack } from "@/lib/i18n/translate";
 import type { LocalePack } from "@/lib/i18n/types";
 import { updateSettings } from "@/lib/settings/service";
+
+function persistRemoteUsage(data: {
+  usageRunId?: unknown;
+  usageCalls?: unknown;
+}): void {
+  if (!Array.isArray(data.usageCalls) || data.usageCalls.length === 0) return;
+  const runId =
+    typeof data.usageRunId === "string" && data.usageRunId.trim()
+      ? data.usageRunId.trim()
+      : globalThis.crypto.randomUUID();
+  recordImportedTranslateUsage(runId, data.usageCalls);
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -36,6 +49,8 @@ export async function POST(req: Request) {
         en: loadEnPack(),
         meta: result.meta,
         skippedLlm: result.skippedLlm,
+        usageRunId: result.usageRunId,
+        usageCalls: result.usageCalls,
         host: "vercel",
       });
     }
@@ -54,7 +69,10 @@ export async function POST(req: Request) {
         pack?: LocalePack;
         en?: LocalePack;
         skippedLlm?: boolean;
+        usageRunId?: string;
+        usageCalls?: unknown;
       };
+      persistRemoteUsage(remoteData);
       if (!remoteRes.ok) {
         return NextResponse.json(
           {
@@ -123,9 +141,16 @@ export async function POST(req: Request) {
       host: "local",
     });
   } catch (err) {
+    const extra =
+      err && typeof err === "object"
+        ? (err as { usageRunId?: unknown; usageCalls?: unknown })
+        : {};
     return NextResponse.json(
       {
         error: err instanceof Error ? err.message : String(err),
+        usageRunId:
+          typeof extra.usageRunId === "string" ? extra.usageRunId : undefined,
+        usageCalls: Array.isArray(extra.usageCalls) ? extra.usageCalls : undefined,
       },
       { status: 500 },
     );

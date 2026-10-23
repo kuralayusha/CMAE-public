@@ -44,6 +44,7 @@ const PENDING_KINDS: DraftKind[] = [
 ];
 
 export type DraftFlagsOnDisk = {
+  hasApplicationDraft: boolean;
   hasFollowUpDraft: boolean;
   hasThanksDraft: boolean;
   hasReplyDraft: boolean;
@@ -100,6 +101,8 @@ export function withoutPendingGmailDraft(
   return JSON.stringify(notes);
 }
 
+export { parseReplyThreadKey, withReplyThreadKey } from "./reply-thread-key";
+
 /** Clear pending once a SENT mail newer than the draft timestamp is known. */
 export function shouldClearPendingGmailDraft(
   pending: PendingGmailDraft | null,
@@ -137,6 +140,7 @@ export function reconcileDraftFlagsForRow(
   },
   _opts?: { persist?: boolean },
 ): {
+  hasApplicationDraft: boolean;
   hasFollowUpDraft: boolean;
   hasThanksDraft: boolean;
   hasReplyDraft: boolean;
@@ -147,16 +151,23 @@ export function reconcileDraftFlagsForRow(
     : parsePendingGmailDraft(row.notesJson);
   const indexed = draftFlagsFromIndex(row.workspaceFolder, row.followUpCount);
 
+  let hasApplicationDraft = indexed.hasApplicationDraft;
   let hasFollowUpDraft = indexed.hasFollowUpDraft;
   let hasThanksDraft = indexed.hasThanksDraft;
   let hasReplyDraft = indexed.hasReplyDraft;
 
   // Live Gmail draft for that kind → not "pending local draft"
+  if (pending?.kind === "application") hasApplicationDraft = false;
   if (pending?.kind === "follow_up") hasFollowUpDraft = false;
   if (pending?.kind === "thanks") hasThanksDraft = false;
   if (pending?.kind === "reply") hasReplyDraft = false;
 
-  return { hasFollowUpDraft, hasThanksDraft, hasReplyDraft };
+  return {
+    hasApplicationDraft,
+    hasFollowUpDraft,
+    hasThanksDraft,
+    hasReplyDraft,
+  };
 }
 
 /** Merge helper for sync notes objects. */

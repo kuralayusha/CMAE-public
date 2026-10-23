@@ -36,23 +36,33 @@ import {
   subscribeTrackerClientEvents,
   useTrackerListSync,
 } from "@/lib/tracker/client-store";
-import type { SyncLogLine } from "@/lib/tracker/types";
+import type { GmailThreadPreview, SyncLogLine } from "@/lib/tracker/types";
 import type { TVars } from "@/lib/i18n/lookup";
 import "./tracker-list.css";
 
-function IconGmail({ count }: { count?: number }) {
+const menuStroke = {
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.7,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+function MenuSvg({ children }: { children: ReactNode }) {
   return (
-    <span className="cmae-tracker-ico-wrap">
-      <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
-        <path
-          fill="currentColor"
-          d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2Zm0 4-8 5L4 8V6l8 5 8-5v2Z"
-        />
-      </svg>
-      {count && count > 1 ? (
-        <span className="cmae-tracker-ico-badge">{count}</span>
-      ) : null}
-    </span>
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
+      {children}
+    </svg>
+  );
+}
+
+/** Envelope — open the existing thread. */
+function IconThread() {
+  return (
+    <MenuSvg>
+      <path d="M3.5 7.2h17v10.2h-17z" {...menuStroke} />
+      <path d="M3.7 8 12 13.4 20.3 8" {...menuStroke} />
+    </MenuSvg>
   );
 }
 
@@ -67,36 +77,45 @@ function IconSync() {
   );
 }
 
-function IconPrepare() {
+/** Pencil — write a mail in CMAE before it is saved. */
+function IconWrite() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="currentColor"
-        d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25ZM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83Z"
-      />
-    </svg>
+    <MenuSvg>
+      <path d="M13.6 5.1 18.9 10.4 8.1 21.2H2.8v-5.3z" {...menuStroke} />
+      <path d="M11.4 7.3 16.7 12.6" {...menuStroke} />
+    </MenuSvg>
   );
 }
 
-function IconDraft() {
+/** Page with a folded corner — open a draft that already exists. */
+function IconOpenDraft() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="currentColor"
-        d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"
-      />
-    </svg>
+    <MenuSvg>
+      <path d="M6.5 3.4h7.1L18.6 8.4v12.2H6.5z" {...menuStroke} />
+      <path d="M13.4 3.6v5h5" {...menuStroke} />
+      <path d="M9.2 12.4h6.2M9.2 15.6h4" {...menuStroke} />
+    </MenuSvg>
   );
 }
 
-function IconWait() {
+/** Arrow into a tray — save into Gmail Drafts. Not a send icon. */
+function IconSaveDraft() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="currentColor"
-        d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2ZM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8Zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7Z"
-      />
-    </svg>
+    <MenuSvg>
+      <path d="M12 3.2v8.2" {...menuStroke} />
+      <path d="M8.4 8.1 12 11.7 15.6 8.1" {...menuStroke} />
+      <path d="M4.2 14.4h4.3l1.5 2.3h4l1.5-2.3h4.3V20.4H4.2z" {...menuStroke} />
+    </MenuSvg>
+  );
+}
+
+function IconClearMail() {
+  return (
+    <MenuSvg>
+      <path d="M4.8 7.4h14.4" {...menuStroke} />
+      <path d="M9.2 7.4V4.8h5.6v2.6" {...menuStroke} />
+      <path d="M7.1 7.4 8 19.6h8l.9-12.2" {...menuStroke} />
+    </MenuSvg>
   );
 }
 
@@ -121,25 +140,28 @@ function IconMore() {
   );
 }
 
-function IconArchive() {
+function IconPause() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="currentColor"
-        d="M20.54 5.23 19.15 3.55A1.5 1.5 0 0 0 17.96 3H6.04c-.47 0-.92.22-1.19.55L3.46 5.23A1.5 1.5 0 0 0 3 6.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.5c0-.47-.18-.92-.46-1.27ZM6.24 5h11.52l.81.97H5.43l.81-.97ZM12 17.5 8 13.5h2.5V10h3v3.5H16L12 17.5Z"
-      />
-    </svg>
+    <MenuSvg>
+      <rect x="6.6" y="4.6" width="3.4" height="14.8" rx="0.7" fill="currentColor" />
+      <rect x="14" y="4.6" width="3.4" height="14.8" rx="0.7" fill="currentColor" />
+    </MenuSvg>
   );
 }
 
-function IconUnarchive() {
+function IconResume() {
   return (
-    <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden>
-      <path
-        fill="currentColor"
-        d="M20.54 5.23 19.15 3.55A1.5 1.5 0 0 0 17.96 3H6.04c-.47 0-.92.22-1.19.55L3.46 5.23A1.5 1.5 0 0 0 3 6.5V19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.5c0-.47-.18-.92-.46-1.27ZM6.24 5h11.52l.81.97H5.43l.81-.97ZM12 10l4 4h-2.5V17.5h-3V14H8l4-4Z"
-      />
-    </svg>
+    <MenuSvg>
+      <path d="M8 4.8v14.4l11.2-7.2z" fill="currentColor" />
+    </MenuSvg>
+  );
+}
+
+function IconClearSelection() {
+  return (
+    <MenuSvg>
+      <path d="M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5" {...menuStroke} />
+    </MenuSvg>
   );
 }
 
@@ -191,12 +213,14 @@ type TrackerItem = {
   ignored: boolean;
   workspaceFolder: string | null;
   primaryTo: string | null;
+  hasApplicationDraft: boolean;
   hasFollowUpDraft: boolean;
   hasThanksDraft: boolean;
   hasReplyDraft: boolean;
   lastActivityAt: string | null;
   statusLabel: string;
   gmailUrls?: string[];
+  gmailThreads?: GmailThreadPreview[];
   waitingUntil?: string | null;
   pendingGmailDraft?: {
     kind: "application" | "follow_up" | "thanks" | "reply";
@@ -262,19 +286,34 @@ async function navigateOpenedTab(
 
 type GmailModalState = {
   company: string;
-  urls: string[];
+  threads: GmailThreadPreview[];
 };
 
 type PrepareModalState = {
   item: TrackerItem;
   kind: DraftPrepareKind;
-  step: "pick" | "note";
+  step: "thread" | "pick" | "note";
+  threads: GmailThreadPreview[];
+  threadKey: string | null;
   variants: DraftVariantMeta[];
   selected: DraftVariantId;
   suggested: DraftVariantId;
   userNote: string;
   eventKinds: string[];
 };
+
+function threadsForItem(item: TrackerItem): GmailThreadPreview[] {
+  if (item.gmailThreads?.length) return item.gmailThreads;
+  const urls = [...new Set((item.gmailUrls || []).filter(Boolean))];
+  return urls.map((url) => ({
+    key: url,
+    url,
+    subject: "",
+    from: "",
+    preview: "",
+    dateIso: "",
+  }));
+}
 
 type Section = {
   status: string;
@@ -405,6 +444,55 @@ function readyToSendChip(
   };
 }
 
+type MailMark = "empty" | "prepared" | "drafted";
+
+/** Statuses that can send a mail, and which draft that mail is. */
+function outgoingMailKind(
+  status: string,
+): "application" | "follow_up" | "thanks" | "reply" | null {
+  switch (status) {
+    case "ready_to_send":
+      return "application";
+    case "follow_up_due":
+      return "follow_up";
+    case "needs_reply":
+    case "in_progress":
+      return "reply";
+    case "rejected":
+      return "thanks";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Empty ring: nothing prepared. Orange: local mail, not in Gmail Drafts.
+ * Green: that mail is in Gmail Drafts (or being saved there now).
+ */
+function mailMark(
+  item: TrackerItem,
+  activity: "preparing" | "saving" | null,
+): MailMark | null {
+  const kind = outgoingMailKind(item.status);
+  if (!kind) return null;
+  const pending = item.pendingGmailDraft;
+  const inGmail =
+    pending?.kind === kind &&
+    pending.state !== "creating" &&
+    pending.state !== "failed" &&
+    pending.state !== "deleted_by_user";
+  if (inGmail || activity === "saving") return "drafted";
+  const local =
+    kind === "application"
+      ? item.hasApplicationDraft
+      : kind === "follow_up"
+        ? item.hasFollowUpDraft
+        : kind === "thanks"
+          ? item.hasThanksDraft
+          : item.hasReplyDraft;
+  return local ? "prepared" : "empty";
+}
+
 function statusDetail(
   item: TrackerItem,
   t: (key: string, vars?: TVars) => string,
@@ -451,6 +539,73 @@ function statusDetail(
     return `${item.followUpCount}/2`;
   }
   return "";
+}
+
+function ThreadCards({
+  threads,
+  locale,
+  noSubject,
+  bareLabel,
+  fromLabel,
+  onPick,
+}: {
+  threads: GmailThreadPreview[];
+  locale: string;
+  noSubject: string;
+  /** Used only when a thread has no subject, sender, or preview. */
+  bareLabel: (index: number) => string;
+  fromLabel: (name: string) => string;
+  onPick?: (thread: GmailThreadPreview) => void;
+}) {
+  return (
+    <div className="cmae-gmail-modal-list">
+      {threads.map((thread, index) => {
+        const bare = !thread.subject && !thread.from && !thread.preview;
+        const subject = bare ? bareLabel(index) : thread.subject || noSubject;
+        const when =
+          thread.dateIso && formatWhen(thread.dateIso, locale) !== "—"
+            ? formatWhen(thread.dateIso, locale)
+            : "";
+        const fromLine = [thread.from ? fromLabel(thread.from) : "", when]
+          .filter(Boolean)
+          .join(" · ");
+        const body = (
+          <>
+            <span className="cmae-thread-card-subject">{subject}</span>
+            {fromLine ? (
+              <span className="cmae-thread-card-from">{fromLine}</span>
+            ) : null}
+            {thread.preview ? (
+              <span className="cmae-thread-card-preview">{thread.preview}</span>
+            ) : null}
+          </>
+        );
+        if (onPick) {
+          return (
+            <button
+              key={thread.key}
+              type="button"
+              className="cmae-thread-card"
+              onClick={() => onPick(thread)}
+            >
+              {body}
+            </button>
+          );
+        }
+        return (
+          <a
+            key={thread.key}
+            className="cmae-thread-card"
+            href={thread.url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {body}
+          </a>
+        );
+      })}
+    </div>
+  );
 }
 
 export function TrackerList() {
@@ -513,11 +668,33 @@ export function TrackerList() {
     return false;
   }
 
+  /** Server-side prepare lock (survives refresh / other windows). */
+  function isServerPreparing(itemId: number): boolean {
+    return serverItemOps.some(
+      (o) => o.itemId === itemId && o.op.startsWith("prepare:"),
+    );
+  }
+
   /** Server-side draft lock (survives refresh / other windows). */
   function isServerDrafting(itemId: number): boolean {
     return serverItemOps.some(
       (o) => o.itemId === itemId && o.op.startsWith("draft:"),
     );
+  }
+
+  /** Mail prepare or Gmail-draft save in flight — any row status. */
+  function mailActivity(
+    item: TrackerItem,
+  ): "preparing" | "saving" | null {
+    const drafting =
+      isBusyItemPrefix(item.id, "draft:") ||
+      isServerDrafting(item.id) ||
+      item.pendingGmailDraft?.state === "creating";
+    if (drafting) return "saving";
+    const preparing =
+      isBusyItemPrefix(item.id, "prep:") || isServerPreparing(item.id);
+    if (preparing) return "preparing";
+    return null;
   }
   const [gmailModal, setGmailModal] = useState<GmailModalState | null>(null);
   const [prepareModal, setPrepareModal] = useState<PrepareModalState | null>(
@@ -528,6 +705,7 @@ export function TrackerList() {
   const [syncSessionId, setSyncSessionId] = useState<string | null>(null);
   const [hardSync, setHardSync] = useState(false);
   const [actionsMenuId, setActionsMenuId] = useState<number | null>(null);
+  const [actionsMenuUp, setActionsMenuUp] = useState(false);
   const [mergeCount, setMergeCount] = useState(0);
   const syncEsRef = useRef<EventSource | null>(null);
   const syncAttachedJobRef = useRef<string | null>(null);
@@ -749,6 +927,11 @@ export function TrackerList() {
       if (prepareModal) {
         if (prepareModal.step === "note") {
           setPrepareModal({ ...prepareModal, step: "pick", userNote: "" });
+        } else if (
+          prepareModal.step === "pick" &&
+          prepareModal.threads.length > 1
+        ) {
+          setPrepareModal({ ...prepareModal, step: "thread" });
         } else {
           setPrepareModal(null);
         }
@@ -1055,10 +1238,13 @@ export function TrackerList() {
     const suggested = pickDefaultVariantId(kind, {
       followUpCount: item.followUpCount,
     });
+    const threads = item.gmailThreads || [];
     setPrepareModal({
       item,
       kind,
-      step: "pick",
+      step: threads.length > 1 ? "thread" : "pick",
+      threads,
+      threadKey: threads.length === 1 ? threads[0]!.key : null,
       variants,
       selected: suggested,
       suggested,
@@ -1194,6 +1380,7 @@ export function TrackerList() {
     variant: DraftVariantId,
     userNote: string,
     eventKinds: string[],
+    threadKey: string | null,
   ) {
     const key = `${item.id}:prep:${kind}`;
     addBusyKey(key);
@@ -1208,11 +1395,45 @@ export function TrackerList() {
           variant,
           userNote: userNote.trim() || undefined,
           eventKinds: eventKinds.length ? eventKinds : undefined,
+          threadKey: threadKey || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t("tracker.error.prepare"));
-      await load();
+      removeBusyKey(key);
+      // The prepare request already saves the Gmail draft. Retry only when
+      // that save failed, so a blip still leaves the menu button a way back.
+      if (data.draftError) {
+        await draft(item, kind);
+      } else {
+        await load();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      removeBusyKey(key);
+    }
+  }
+
+  /** Re-write the application email after clear-prepared (no tone modal). */
+  async function prepareApplication(item: TrackerItem) {
+    const key = `${item.id}:prep:application`;
+    addBusyKey(key);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tracker/${item.id}/prepare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "application" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t("tracker.error.prepare"));
+      removeBusyKey(key);
+      if (data.draftError) {
+        await draft(item, "application");
+      } else {
+        await load();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1240,12 +1461,40 @@ export function TrackerList() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
+      try {
+        await load();
+      } catch {
+        /* list refresh is best-effort after a failed save */
+      }
     } finally {
       removeBusyKey(key);
     }
   }
 
-  /** Pending clock: open Gmail Drafts; recreate from .md if the draft was deleted. */
+  async function clearPrepared(
+    item: TrackerItem,
+    kind: "application" | "follow_up" | "thanks" | "reply",
+  ) {
+    const key = `${item.id}:clear:${kind}`;
+    addBusyKey(key);
+    setError(null);
+    try {
+      const res = await fetch(`/api/tracker/${item.id}/clear-prepared`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || t("tracker.error.clearPrepared"));
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      removeBusyKey(key);
+    }
+  }
+
+  /** Open the unsent Gmail draft; recreate from .md if it was deleted. */
   async function openPendingDraft(item: TrackerItem) {
     const pending = item.pendingGmailDraft;
     if (!pending) return;
@@ -1304,16 +1553,32 @@ export function TrackerList() {
   }
 
   function renderMenuItem(opts: {
+    menuKey: string;
     label: string;
+    hint?: string;
     icon: ReactNode;
     disabled?: boolean;
     href?: string;
     onClick?: () => void;
   }) {
     const className = "cmae-tracker-actions-menu-item";
+    const body = (
+      <>
+        <span className="cmae-tracker-actions-menu-ico" aria-hidden>
+          {opts.icon}
+        </span>
+        <span className="cmae-tracker-actions-menu-copy">
+          <span className="cmae-tracker-actions-menu-label">{opts.label}</span>
+          {opts.hint ? (
+            <span className="cmae-tracker-actions-menu-hint">{opts.hint}</span>
+          ) : null}
+        </span>
+      </>
+    );
     if (opts.href) {
       return (
         <a
+          key={opts.menuKey}
           role="menuitem"
           className={className}
           href={opts.href}
@@ -1324,15 +1589,13 @@ export function TrackerList() {
             closeActionsMenu();
           }}
         >
-          <span className="cmae-tracker-actions-menu-ico" aria-hidden>
-            {opts.icon}
-          </span>
-          <span>{opts.label}</span>
+          {body}
         </a>
       );
     }
     return (
       <button
+        key={opts.menuKey}
         type="button"
         role="menuitem"
         className={className}
@@ -1343,32 +1606,33 @@ export function TrackerList() {
           opts.onClick?.();
         }}
       >
-        <span className="cmae-tracker-actions-menu-ico" aria-hidden>
-          {opts.icon}
-        </span>
-        <span>{opts.label}</span>
+        {body}
       </button>
     );
   }
 
   function renderGmailMenuItem(item: TrackerItem) {
-    // Drafts already open via "Open in Gmail Drafts" — no need for a second Gmail link.
-    if (item.pendingGmailDraft) return null;
-    const urls = [...new Set((item.gmailUrls || []).filter(Boolean))];
-    if (!urls.length) return null;
+    // Keep the thread link even when a draft is waiting — they open different places.
+    const threads = threadsForItem(item);
+    if (!threads.length) return null;
 
-    if (urls.length === 1) {
+    if (threads.length === 1) {
       return renderMenuItem({
+        menuKey: `gmail-${item.id}`,
         label: t("tracker.action.openGmail"),
-        icon: <IconGmail />,
-        href: urls[0],
+        hint: t("tracker.action.openGmailHint"),
+        icon: <IconThread />,
+        href: threads[0]!.url,
       });
     }
 
+    const count = threads.length;
     return renderMenuItem({
-      label: t("tracker.action.openGmailN", { count: urls.length }),
-      icon: <IconGmail count={urls.length} />,
-      onClick: () => setGmailModal({ company: item.company, urls }),
+      menuKey: `gmail-n-${item.id}`,
+      label: t("tracker.action.openGmailN", { count }),
+      hint: t("tracker.action.openGmailNHint", { count }),
+      icon: <IconThread />,
+      onClick: () => setGmailModal({ company: item.company, threads }),
     });
   }
 
@@ -1384,14 +1648,32 @@ export function TrackerList() {
           ? "tracker.action.prepareThanks"
           : "tracker.action.prepareReply";
     return renderMenuItem({
+      menuKey: `prepare-${item.id}-${kind}`,
       label: t(labelKey),
+      hint: t(`${labelKey}Hint`),
       icon: isBusyKey(`${item.id}:prep:${kind}`) ? (
         <IconSpinner />
       ) : (
-        <IconPrepare />
+        <IconWrite />
       ),
       disabled: spinning,
       onClick: () => openPrepareModal(item, kind),
+    });
+  }
+
+  function renderClearPreparedMenuItem(item: TrackerItem, spinning: boolean) {
+    const mark = mailMark(item, mailActivity(item));
+    if (mark !== "prepared" && mark !== "drafted") return null;
+    const kind = outgoingMailKind(item.status);
+    if (!kind) return null;
+    const busy = isBusyKey(`${item.id}:clear:${kind}`);
+    return renderMenuItem({
+      menuKey: `clear-${item.id}-${kind}`,
+      label: t("tracker.action.clearPrepared"),
+      hint: t("tracker.action.clearPreparedHint"),
+      icon: busy ? <IconSpinner /> : <IconClearMail />,
+      disabled: spinning || busy,
+      onClick: () => void clearPrepared(item, kind),
     });
   }
 
@@ -1415,8 +1697,10 @@ export function TrackerList() {
         st === "creating";
       items.push(
         renderMenuItem({
+          menuKey: `pending-${item.id}`,
           label: t(labelKey),
-          icon: draftBusy ? <IconSpinner /> : <IconWait />,
+          hint: t(`${labelKey}Hint`),
+          icon: draftBusy ? <IconSpinner /> : <IconOpenDraft />,
           disabled: draftBusy,
           onClick: () => void openPendingDraft(item),
         }),
@@ -1434,15 +1718,33 @@ export function TrackerList() {
     }
 
     if (item.status === "ready_to_send") {
+      if (!item.hasApplicationDraft) {
+        const prepBusy = isBusyKey(`${item.id}:prep:application`);
+        items.push(
+          renderMenuItem({
+            menuKey: `prepare-app-${item.id}`,
+            label: t("tracker.action.prepareApplication"),
+            hint: t("tracker.action.prepareApplicationHint"),
+            icon: prepBusy ? <IconSpinner /> : <IconWrite />,
+            disabled: spinning || prepBusy,
+            onClick: () => void prepareApplication(item),
+          }),
+        );
+        return items;
+      }
       const draftBusy =
         isBusyKey(`${item.id}:draft:application`) ||
         isServerDrafting(item.id);
       items.push(
         renderMenuItem({
+          menuKey: `draft-app-${item.id}`,
           label: draftBusy
             ? t("tracker.action.draftCreating")
             : t("tracker.action.createDraft"),
-          icon: draftBusy ? <IconSpinner /> : <IconDraft />,
+          hint: draftBusy
+            ? t("tracker.action.draftCreatingHint")
+            : t("tracker.action.createDraftHint"),
+          icon: draftBusy ? <IconSpinner /> : <IconSaveDraft />,
           disabled: spinning || draftBusy,
           onClick: () => void draft(item, "application"),
         }),
@@ -1453,15 +1755,18 @@ export function TrackerList() {
     if (item.status === "follow_up_due") {
       items.push(renderPrepareMenuItem(item, "follow_up", spinning));
       if (item.hasFollowUpDraft) {
+        const followBusy = isBusyKey(`${item.id}:draft:follow_up`);
         items.push(
           renderMenuItem({
-            label: t("tracker.action.draftFollowUp"),
-            icon: isBusyKey(`${item.id}:draft:follow_up`) ? (
-              <IconSpinner />
-            ) : (
-              <IconDraft />
-            ),
-            disabled: spinning,
+            menuKey: `draft-follow-${item.id}`,
+            label: followBusy
+              ? t("tracker.action.draftCreating")
+              : t("tracker.action.draftFollowUp"),
+            hint: followBusy
+              ? t("tracker.action.draftCreatingHint")
+              : t("tracker.action.draftFollowUpHint"),
+            icon: followBusy ? <IconSpinner /> : <IconSaveDraft />,
+            disabled: spinning || followBusy,
             onClick: () => void draft(item, "follow_up"),
           }),
         );
@@ -1483,15 +1788,18 @@ export function TrackerList() {
       }
       items.push(renderPrepareMenuItem(item, "reply", spinning));
       if (item.hasReplyDraft) {
+        const replyBusy = isBusyKey(`${item.id}:draft:reply`);
         items.push(
           renderMenuItem({
-            label: t("tracker.action.draftReply"),
-            icon: isBusyKey(`${item.id}:draft:reply`) ? (
-              <IconSpinner />
-            ) : (
-              <IconDraft />
-            ),
-            disabled: spinning,
+            menuKey: `draft-reply-${item.id}`,
+            label: replyBusy
+              ? t("tracker.action.draftCreating")
+              : t("tracker.action.draftReply"),
+            hint: replyBusy
+              ? t("tracker.action.draftCreatingHint")
+              : t("tracker.action.draftReplyHint"),
+            icon: replyBusy ? <IconSpinner /> : <IconSaveDraft />,
+            disabled: spinning || replyBusy,
             onClick: () => void draft(item, "reply"),
           }),
         );
@@ -1502,15 +1810,18 @@ export function TrackerList() {
     if (item.status === "rejected") {
       items.push(renderPrepareMenuItem(item, "thanks", spinning));
       if (item.hasThanksDraft) {
+        const thanksBusy = isBusyKey(`${item.id}:draft:thanks`);
         items.push(
           renderMenuItem({
-            label: t("tracker.action.draftThanks"),
-            icon: isBusyKey(`${item.id}:draft:thanks`) ? (
-              <IconSpinner />
-            ) : (
-              <IconDraft />
-            ),
-            disabled: spinning,
+            menuKey: `draft-thanks-${item.id}`,
+            label: thanksBusy
+              ? t("tracker.action.draftCreating")
+              : t("tracker.action.draftThanks"),
+            hint: thanksBusy
+              ? t("tracker.action.draftCreatingHint")
+              : t("tracker.action.draftThanksHint"),
+            icon: thanksBusy ? <IconSpinner /> : <IconSaveDraft />,
+            disabled: spinning || thanksBusy,
             onClick: () => void draft(item, "thanks"),
           }),
         );
@@ -1543,29 +1854,18 @@ export function TrackerList() {
     );
   }
 
-  function renderWaitingIndicator(item: TrackerItem) {
-    if (item.status !== "waiting" || item.pendingGmailDraft) return null;
-    const label = t("tracker.action.waitingUntil");
-    return (
-      <HoverTip label={label}>
-        <span
-          className="cmae-tracker-icon-btn is-static"
-          aria-label={t("tracker.action.waiting")}
-        >
-          <IconWait />
-        </span>
-      </HoverTip>
-    );
-  }
-
   function renderActiveToggleMenuItem(item: TrackerItem) {
     const isInactive = item.status === "inactive";
     const action = isInactive ? "active" : "inactive";
     return renderMenuItem({
+      menuKey: `active-${item.id}-${action}`,
       label: isInactive
-        ? t("tracker.sel.markActive")
-        : t("tracker.sel.markInactive"),
-      icon: isInactive ? <IconUnarchive /> : <IconArchive />,
+        ? t("tracker.action.resume")
+        : t("tracker.action.pause"),
+      hint: isInactive
+        ? t("tracker.action.resumeHint")
+        : t("tracker.action.pauseHint"),
+      icon: isInactive ? <IconResume /> : <IconPause />,
       disabled: bulkBusy,
       onClick: () => void applyActiveAction([item.id], action),
     });
@@ -1574,8 +1874,10 @@ export function TrackerList() {
   function renderActionsMenu(item: TrackerItem) {
     const gmailItem = renderGmailMenuItem(item);
     const primaryItems = renderPrimaryMenuItems(item);
+    const clearItem = renderClearPreparedMenuItem(item, isBusyItem(item.id));
     const activeToggle = renderActiveToggleMenuItem(item);
-    const hasPrimaryActions = Boolean(gmailItem || primaryItems.length);
+    const hasAboveClear = Boolean(gmailItem || primaryItems.length);
+    const hasAbovePause = Boolean(hasAboveClear || clearItem);
 
     const open = actionsMenuId === item.id;
     const moreLabel = t("tracker.action.more");
@@ -1593,13 +1895,20 @@ export function TrackerList() {
               }}
             />
             <div
-              className="cmae-tracker-actions-menu"
+              className={`cmae-tracker-actions-menu${actionsMenuUp ? " is-up" : ""}`}
               role="menu"
               aria-label={moreLabel}
             >
               {gmailItem}
               {primaryItems}
-              {hasPrimaryActions ? (
+              {clearItem && hasAboveClear ? (
+                <div
+                  className="cmae-tracker-actions-menu-sep"
+                  role="separator"
+                />
+              ) : null}
+              {clearItem}
+              {hasAbovePause ? (
                 <div
                   className="cmae-tracker-actions-menu-sep"
                   role="separator"
@@ -1619,7 +1928,14 @@ export function TrackerList() {
             aria-expanded={open}
             onClick={(e) => {
               e.stopPropagation();
-              setActionsMenuId(open ? null : item.id);
+              if (open) {
+                closeActionsMenu();
+                return;
+              }
+              const rect = e.currentTarget.getBoundingClientRect();
+              const spaceBelow = window.innerHeight - rect.top;
+              setActionsMenuUp(spaceBelow < 360 && rect.top > 220);
+              setActionsMenuId(item.id);
             }}
           >
             <IconMore />
@@ -1631,45 +1947,45 @@ export function TrackerList() {
 
   function renderActions(item: TrackerItem) {
     const historyBtn = renderHistoryAction(item);
-    const waiting = renderWaitingIndicator(item);
     const menu = renderActionsMenu(item);
-    if (!historyBtn && !waiting && !menu) {
+    if (!historyBtn && !menu) {
       return <span className="cmae-tracker-action-empty">—</span>;
     }
     return (
       <>
         {historyBtn}
-        {waiting}
         {menu}
       </>
     );
   }
 
   function renderRow(item: TrackerItem) {
-    const drafting =
-      item.status === "ready_to_send" &&
-      (isBusyKey(`${item.id}:draft:application`) ||
-        isBusyItemPrefix(item.id, "draft:") ||
-        isServerDrafting(item.id));
+    const activity = mailActivity(item);
     const readyChip =
-      item.status === "ready_to_send"
-        ? readyToSendChip(item, t, drafting)
+      item.status === "ready_to_send" && !activity
+        ? readyToSendChip(item, t, false)
         : null;
     const chipKey = `tracker.chip.${item.status}`;
     const chip = t(chipKey);
-    const label = readyChip
-      ? readyChip.label
-      : chip === chipKey
-        ? item.status.replace(/_/g, " ")
-        : chip;
+    const statusLabel =
+      readyChip?.label ??
+      (chip === chipKey ? item.status.replace(/_/g, " ") : chip);
+    const label =
+      activity === "saving"
+        ? t("tracker.chip.savingDraft")
+        : activity === "preparing"
+          ? t("tracker.chip.preparingMail")
+          : statusLabel;
     const sectionKey = `tracker.section.${item.status}`;
     const sectionTitle = t(sectionKey);
     const statusTitle =
       sectionTitle === sectionKey
         ? item.statusLabel || label
         : sectionTitle;
-    const detail = statusDetail(item, t, locale);
+    const detail = activity ? "" : statusDetail(item, t, locale);
     const tip = [statusTitle, label, detail].filter(Boolean).join(" · ");
+    const mark = mailMark(item, activity);
+    const markLabel = mark ? t(`tracker.mailMark.${mark}`) : "";
     const checked = selectedIds.has(item.id);
     return (
       <div
@@ -1741,26 +2057,44 @@ export function TrackerList() {
           />
         </span>
         <span className="cmae-tracker-status-cell" role="cell">
-          <HoverTip label={tip} className="is-fill">
-            <span
-              className="cmae-status-chip"
-              data-status={item.status}
-              data-phase={readyChip?.phase || undefined}
-            >
-              {readyChip?.spinning ? (
-                <span className="cmae-status-chip-spin" aria-hidden>
-                  <IconSpinner />
-                </span>
-              ) : null}
-              <span className="cmae-status-chip-label">{label}</span>
-              {detail ? (
-                <>
-                  <span className="cmae-status-chip-sep" aria-hidden />
-                  <span className="cmae-status-chip-meta">{detail}</span>
-                </>
-              ) : null}
-            </span>
-          </HoverTip>
+          <span className="cmae-status-pair">
+            <HoverTip label={tip}>
+              <span
+                className="cmae-status-chip"
+                data-status={item.status}
+                data-phase={
+                  activity === "saving"
+                    ? "saving"
+                    : activity === "preparing"
+                      ? "preparing"
+                      : readyChip?.phase || undefined
+                }
+                aria-busy={activity ? true : undefined}
+              >
+                {activity ? (
+                  <span className="cmae-status-chip-spin" aria-hidden>
+                    <IconSpinner />
+                  </span>
+                ) : null}
+                <span className="cmae-status-chip-label">{label}</span>
+                {detail ? (
+                  <>
+                    <span className="cmae-status-chip-sep" aria-hidden />
+                    <span className="cmae-status-chip-meta">{detail}</span>
+                  </>
+                ) : null}
+              </span>
+            </HoverTip>
+            {mark ? (
+              <HoverTip label={markLabel} className="cmae-mail-mark-hit">
+                <span
+                  className={`cmae-mail-mark is-${mark}`}
+                  role="img"
+                  aria-label={markLabel}
+                />
+              </HoverTip>
+            ) : null}
+          </span>
         </span>
         <span className="cmae-tracker-muted" role="cell">
           <TruncateTip text={formatWhen(item.lastActivityAt, locale)} />
@@ -1810,32 +2144,63 @@ export function TrackerList() {
             </span>
             <div className="cmae-tracker-selbar-actions">
               {selectedHasActive ? (
-                <Button
+                <button
                   type="button"
-                  variant="ghost"
+                  className="cmae-tracker-selbar-btn"
                   disabled={bulkBusy}
                   onClick={() => void bulkSet("inactive")}
                 >
-                  {t("tracker.sel.markInactive")}
-                </Button>
+                  <span className="cmae-tracker-actions-menu-ico" aria-hidden>
+                    <IconPause />
+                  </span>
+                  <span className="cmae-tracker-actions-menu-copy">
+                    <span className="cmae-tracker-actions-menu-label">
+                      {t("tracker.sel.pause")}
+                    </span>
+                    <span className="cmae-tracker-actions-menu-hint">
+                      {t("tracker.sel.pauseHint")}
+                    </span>
+                  </span>
+                </button>
               ) : null}
               {selectedHasInactive ? (
-                <Button
+                <button
                   type="button"
+                  className="cmae-tracker-selbar-btn"
                   disabled={bulkBusy}
                   onClick={() => void bulkSet("active")}
                 >
-                  {t("tracker.sel.markActive")}
-                </Button>
+                  <span className="cmae-tracker-actions-menu-ico" aria-hidden>
+                    <IconResume />
+                  </span>
+                  <span className="cmae-tracker-actions-menu-copy">
+                    <span className="cmae-tracker-actions-menu-label">
+                      {t("tracker.sel.resume")}
+                    </span>
+                    <span className="cmae-tracker-actions-menu-hint">
+                      {t("tracker.sel.resumeHint")}
+                    </span>
+                  </span>
+                </button>
               ) : null}
-              <Button
+              <button
                 type="button"
-                variant="ghost"
+                className="cmae-tracker-selbar-btn"
                 disabled={bulkBusy}
                 onClick={() => setSelectedIds(new Set())}
               >
-                {t("tracker.sel.clear")}
-              </Button>
+                <span className="cmae-tracker-actions-menu-ico" aria-hidden>
+                  <IconClearSelection />
+                </span>
+                <span className="cmae-tracker-actions-menu-copy">
+                  <span className="cmae-tracker-actions-menu-label">
+                    {t("tracker.sel.clear")}
+                  </span>
+                  <span className="cmae-tracker-actions-menu-hint">
+                    {t("tracker.sel.clearHint")}
+                  </span>
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -1981,17 +2346,12 @@ export function TrackerList() {
       <TrackerHistoryDrawer ref={historyDrawerRef} />
 
       {gmailModal ? (
-        <div
-          className="cmae-gmail-modal-backdrop"
-          role="presentation"
-          onClick={() => setGmailModal(null)}
-        >
+        <div className="cmae-gmail-modal-backdrop" role="presentation">
           <div
             className="cmae-gmail-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="cmae-gmail-modal-title"
-            onClick={(e) => e.stopPropagation()}
           >
             <header className="cmae-gmail-modal-head">
               <div>
@@ -2003,7 +2363,7 @@ export function TrackerList() {
                     text={t("tracker.gmailModalLead")}
                     parts={{
                       company: gmailModal.company,
-                      count: String(gmailModal.urls.length),
+                      count: String(gmailModal.threads.length),
                       mod: (
                         <>
                           <kbd className="cmae-kbd">
@@ -2028,65 +2388,63 @@ export function TrackerList() {
                 ×
               </button>
             </header>
-            <div className="cmae-gmail-modal-list">
-              {gmailModal.urls.map((url, i) => (
-                <a
-                  key={url}
-                  className="cmae-btn cmae-btn-ghost cmae-gmail-modal-link"
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {t("tracker.gmailModal.threadLink", { n: i + 1 })}
-                </a>
-              ))}
-            </div>
+            <ThreadCards
+              threads={gmailModal.threads}
+              locale={locale}
+              noSubject={t("tracker.threadCard.noSubject")}
+              bareLabel={(index) =>
+                t("tracker.gmailModal.threadLink", { n: index + 1 })
+              }
+              fromLabel={(name) => t("tracker.threadCard.from", { name })}
+            />
           </div>
         </div>
       ) : null}
 
       {prepareModal ? (
-        <div
-          className="cmae-gmail-modal-backdrop"
-          role="presentation"
-          onClick={() => setPrepareModal(null)}
-        >
+        <div className="cmae-gmail-modal-backdrop" role="presentation">
           <div
             className="cmae-gmail-modal cmae-prepare-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="cmae-prepare-modal-title"
-            onClick={(e) => e.stopPropagation()}
           >
             <header className="cmae-gmail-modal-head">
               <div>
                 <h2 id="cmae-prepare-modal-title">
-                  {prepareModal.step === "pick"
-                    ? prepareModal.kind === "follow_up"
-                      ? t("tracker.variantModal.titleFollowUp")
-                      : prepareModal.kind === "thanks"
-                        ? t("tracker.variantModal.titleThanks")
-                        : t("tracker.variantModal.titleReply")
-                    : (() => {
-                        const meta = prepareModal.variants.find(
-                          (v) => v.id === prepareModal.selected,
-                        );
-                        return meta?.noteRecommended
-                          ? t("tracker.variantNote.titleRecommended")
-                          : t("tracker.variantNote.title");
-                      })()}
+                  {prepareModal.step === "thread"
+                    ? t("tracker.threadPick.title")
+                    : prepareModal.step === "pick"
+                      ? prepareModal.kind === "follow_up"
+                        ? t("tracker.variantModal.titleFollowUp")
+                        : prepareModal.kind === "thanks"
+                          ? t("tracker.variantModal.titleThanks")
+                          : t("tracker.variantModal.titleReply")
+                      : (() => {
+                          const meta = prepareModal.variants.find(
+                            (v) => v.id === prepareModal.selected,
+                          );
+                          return meta?.noteRecommended
+                            ? t("tracker.variantNote.titleRecommended")
+                            : t("tracker.variantNote.title");
+                        })()}
                 </h2>
                 <p>
-                  {prepareModal.step === "pick"
-                    ? t("tracker.variantModal.lead")
-                    : (() => {
-                        const meta = prepareModal.variants.find(
-                          (v) => v.id === prepareModal.selected,
-                        );
-                        return meta?.noteRecommended
-                          ? t("tracker.variantNote.recommended")
-                          : t(meta?.hintKey || "tracker.variantModal.lead");
-                      })()}
+                  {prepareModal.step === "thread"
+                    ? t("tracker.threadPick.lead", {
+                        company: prepareModal.item.company,
+                        count: prepareModal.threads.length,
+                      })
+                    : prepareModal.step === "pick"
+                      ? t("tracker.variantModal.lead")
+                      : (() => {
+                          const meta = prepareModal.variants.find(
+                            (v) => v.id === prepareModal.selected,
+                          );
+                          return meta?.noteRecommended
+                            ? t("tracker.variantNote.recommended")
+                            : t(meta?.hintKey || "tracker.variantModal.lead");
+                        })()}
                 </p>
               </div>
               <button
@@ -2099,7 +2457,25 @@ export function TrackerList() {
               </button>
             </header>
 
-            {prepareModal.step === "pick" ? (
+            {prepareModal.step === "thread" ? (
+              <ThreadCards
+                threads={prepareModal.threads}
+                locale={locale}
+                noSubject={t("tracker.threadCard.noSubject")}
+                bareLabel={(index) =>
+                  t("tracker.gmailModal.threadLink", { n: index + 1 })
+                }
+                fromLabel={(name) => t("tracker.threadCard.from", { name })}
+                onPick={(thread) =>
+                  setPrepareModal({
+                    ...prepareModal,
+                    threadKey: thread.key,
+                    step: "pick",
+                  })
+                }
+              />
+            ) : prepareModal.step === "pick" ? (
+              <>
               <div className="cmae-prepare-variant-list">
                 {prepareModal.variants.map((v) => {
                   const isSelected = prepareModal.selected === v.id;
@@ -2135,6 +2511,20 @@ export function TrackerList() {
                   );
                 })}
               </div>
+              {prepareModal.threads.length > 1 ? (
+                <div className="cmae-prepare-note-actions">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      setPrepareModal({ ...prepareModal, step: "thread" })
+                    }
+                  >
+                    {t("tracker.variantNote.back")}
+                  </Button>
+                </div>
+              ) : null}
+              </>
             ) : (
               <>
                 <div className="cmae-prepare-note">
@@ -2183,6 +2573,7 @@ export function TrackerList() {
                         prepareModal.selected,
                         prepareModal.userNote,
                         prepareModal.eventKinds,
+                        prepareModal.threadKey,
                       )
                     }
                   >

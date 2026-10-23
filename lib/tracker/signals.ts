@@ -6,6 +6,7 @@
 import {
   decodeBase64Body,
   decodeQuotedPrintable,
+  repairCollapsedQuotedPrintable,
   repairUtf8Mojibake,
 } from "./mail-text";
 
@@ -83,6 +84,7 @@ export function normalizeMailText(text: string): string {
     }
   }
   s = repairUtf8Mojibake(s);
+  s = repairCollapsedQuotedPrintable(s);
   return stripHtmlish(s);
 }
 

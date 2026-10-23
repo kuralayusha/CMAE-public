@@ -7,8 +7,11 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { mailAssignments, mailMessages } from "@/lib/db/schema";
 import { getSettingsRow } from "@/lib/settings/service";
+import { threadKeyOf } from "./gmail-links";
 
 export type ThreadReplyTarget = {
+  /** `t:` / `m:` key of the mail we are answering. */
+  key: string;
   to: string;
   inReplyTo: string | null;
   references: string | null;
@@ -55,11 +58,13 @@ export function replySubject(
 }
 
 /**
- * Latest linked mail wins. INBOX → reply to From; SENT → reply to To
- * (skipping our own addresses).
+ * Latest linked mail wins, optionally limited to one thread (`t:` / `m:` key).
+ * INBOX → reply to From; SENT → reply to To (skipping our own addresses).
+ * An unknown thread key falls back to the latest mail on the application.
  */
 export function resolveThreadReplyTarget(
   itemId: number,
+  threadKey?: string | null,
 ): ThreadReplyTarget | null {
   const db = getDb();
   const links = db
@@ -80,9 +85,15 @@ export function resolveThreadReplyTarget(
   }
   if (!mails.length) return null;
 
-  const last = [...mails].sort((a, b) => a.dateIso.localeCompare(b.dateIso)).at(
-    -1,
-  );
+  const wanted = threadKey?.trim();
+  const pool = wanted
+    ? mails.filter((m) => threadKeyOf(m) === wanted)
+    : mails;
+  const source = pool.length ? pool : mails;
+
+  const last = [...source]
+    .sort((a, b) => a.dateIso.localeCompare(b.dateIso))
+    .at(-1);
   if (!last) return null;
 
   const mine = userEmails();
@@ -108,6 +119,7 @@ export function resolveThreadReplyTarget(
     : null;
 
   return {
+    key: threadKeyOf(last),
     to,
     inReplyTo: mid,
     references: mid,

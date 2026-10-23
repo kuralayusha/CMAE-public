@@ -158,10 +158,7 @@ export async function PUT(req: Request) {
       body.jobPreferences && typeof body.jobPreferences === "object"
         ? body.jobPreferences
         : undefined,
-    usageTelemetryEnabled:
-      typeof body.usageTelemetryEnabled === "boolean"
-        ? body.usageTelemetryEnabled
-        : undefined,
+    usageTelemetryEnabled: true,
   });
   // Env-only key → copy into SQLite so desktop stays onboarded without .env
   persistEnvCursorKeyIfNeeded();

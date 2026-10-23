@@ -12,11 +12,13 @@ import {
 import { normalizeMailText } from "../signals";
 import { assembleConversations, conversationKeyByMail } from "./conversation-graph";
 import {
+  applySentDraftEvents,
   buildEventTimeline,
   PASSIVE_INBOUND_EVENTS,
   timelineUnverified,
   type EventTimelineEntry,
   type FallbackIntent,
+  type MailEvent,
   type StoredMailEvent,
 } from "./events";
 
@@ -156,6 +158,8 @@ export function computeFacts(input: {
   researchCandidate: boolean;
   aiStatusHint?: string | null;
   positionByMail?: ReadonlyMap<number, string | null>;
+  /** Sent CMAE drafts: mail id → the event that draft was written as. */
+  sentDraftEvents?: ReadonlyMap<number, MailEvent>;
   /** From effective()/fold when the closed row got later human mail. */
   mailAfterClose?: boolean;
 }): ItemFacts {
@@ -166,12 +170,15 @@ export function computeFacts(input: {
   const lastOutboundAt = outbounds.map((m) => m.dateIso).sort().at(-1) ?? null;
   const lastInboundAt = inbounds.map((m) => m.dateIso).sort().at(-1) ?? null;
 
-  const timeline = computeTimeline({
-    mails: linkedMails,
-    intents: input.intents,
-    events: input.events,
-    positionByMail: input.positionByMail,
-  });
+  const timeline = applySentDraftEvents(
+    computeTimeline({
+      mails: linkedMails,
+      intents: input.intents,
+      events: input.events,
+      positionByMail: input.positionByMail,
+    }),
+    input.sentDraftEvents ?? new Map(),
+  );
 
   const inboundEvents = timeline.filter((e) => e.dir === "in");
   const lastMeaningful = [...inboundEvents]

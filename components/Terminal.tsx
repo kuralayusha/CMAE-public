@@ -375,17 +375,12 @@ export function Terminal({
       </div>
 
       {confirmOpen ? (
-        <div
-          className="term-modal-backdrop"
-          role="presentation"
-          onClick={() => setConfirmOpen(false)}
-        >
+        <div className="term-modal-backdrop" role="presentation">
           <div
             className="term-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby={`cancel-title-${jobId}`}
-            onClick={(e) => e.stopPropagation()}
           >
             <header className="term-modal-head">
               <h3 id={`cancel-title-${jobId}`}>{t("terminal.cancelTitle")}</h3>

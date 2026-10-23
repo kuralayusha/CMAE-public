@@ -4,7 +4,7 @@
  */
 
 import { isDraftCopyLabels } from "@/lib/mail/draft-copy";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { bumpTrackerRevision } from "@/lib/db/revision";
 import { gmailDrafts, mailMessages, trackerItems } from "@/lib/db/schema";
@@ -15,7 +15,10 @@ import {
   type DraftMailboxMeta,
 } from "@/lib/mail/gmail-imap-source";
 import { t } from "@/lib/i18n/t";
-import { getGmailCredentials } from "@/lib/settings/service";
+import {
+  getGmailCredentials,
+  getSettingsRow,
+} from "@/lib/settings/service";
 import {
   LIVE_DRAFT_STATES,
   listLiveDrafts,
@@ -23,12 +26,21 @@ import {
   markDraftPresent,
   type GmailDraftRow,
 } from "./gmail-drafts-store";
+import { dropPreparedFilesForSentDraft } from "./clear-prepared";
+import { writeAssignment } from "./derive/assign";
+import { refreshItemFacts } from "./derive/refresh-item";
 import { reconcileDraftFlagsForRow } from "./pending-draft";
+import { statusSettingsFromRow } from "./status-constants";
 
 // Successful Drafts scan + not in mailbox + no sent proof → gone.
+// Grace matters: Gmail often removes the Draft before SENT is in mail_messages.
+// One check with no delay raced mail_sync and marked sent drafts deleted_by_user.
 // (Scan failures use markUnknown; they never call bumpMissing.)
-const MISSING_MIN_CHECKS = 1;
-const MISSING_MIN_MS = 0;
+/** Exported for regression tests — do not mark deleted on the first miss. */
+export const DRAFT_MISSING_MIN_CHECKS = 2;
+export const DRAFT_MISSING_MIN_MS = 90_000;
+const MISSING_MIN_CHECKS = DRAFT_MISSING_MIN_CHECKS;
+const MISSING_MIN_MS = DRAFT_MISSING_MIN_MS;
 const CREATING_TIMEOUT_MS = 10 * 60_000;
 const RECONCILE_IMAP_TIMEOUT_MS = 45_000;
 
@@ -66,8 +78,18 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
+/** Normalize Message-ID for Drafts ↔ Sent matching (angle brackets / case). */
+export function normalizeDraftMessageId(
+  s: string | null | undefined,
+): string {
+  return (s || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^<|>$/g, "");
+}
+
 function normMid(s: string | null | undefined): string {
-  return (s || "").trim().toLowerCase();
+  return normalizeDraftMessageId(s);
 }
 
 function subjectKey(subject: string): string {
@@ -147,13 +169,13 @@ function findSentProof(row: GmailDraftRow): number | null {
     if (byThrid?.id) return byThrid.id;
   }
 
-  const mid = row.messageIdHdr;
+  const mid = normMid(row.messageIdHdr);
   if (mid && !mid.startsWith("legacy:")) {
     const byMid = sqlite
       .prepare(
         `SELECT id FROM mail_messages
          WHERE gone_at IS NULL
-           AND message_id = ?
+           AND lower(replace(replace(trim(message_id), '<', ''), '>', '')) = ?
            AND (labels_json IS NULL OR labels_json NOT LIKE '%Draft%'
                 OR labels_json LIKE '%Sent%')
            AND (
@@ -169,6 +191,7 @@ function findSentProof(row: GmailDraftRow): number | null {
   // Application: same recipient + subject outbound after created_at
   if (row.kind === "application" && row.toAddr && row.subject) {
     const sk = subjectKey(row.subject);
+    const toNeedle = row.toAddr.trim().toLowerCase();
     const candidates = getDb()
       .select()
       .from(mailMessages)
@@ -183,11 +206,20 @@ function findSentProof(row: GmailDraftRow): number | null {
         const when = m.internalDate || m.dateIso || m.createdAt;
         if (Date.parse(when) < createdMs) return false;
         if (!subjectsLooseMatch(sk, subjectKey(m.subject || ""))) return false;
-        return (m.toAddr || "")
-          .toLowerCase()
-          .includes(row.toAddr.trim().toLowerCase());
+        return (m.toAddr || "").toLowerCase().includes(toNeedle);
       });
     if (candidates.length === 1) return candidates[0].id;
+    // Prefer the mail already assigned to this item when several match.
+    if (candidates.length > 1) {
+      const assigned = sqlite
+        .prepare(
+          `SELECT mail_id AS mailId FROM mail_assignments WHERE item_id = ?`,
+        )
+        .all(row.itemId) as { mailId: number }[];
+      const assignedIds = new Set(assigned.map((a) => a.mailId));
+      const onItem = candidates.filter((c) => assignedIds.has(c.id));
+      if (onItem.length === 1) return onItem[0].id;
+    }
   }
 
   return null;
@@ -213,6 +245,44 @@ function markSent(row: GmailDraftRow, mailId: number): void {
        WHERE id = ?`,
     )
     .run(mailId, new Date().toISOString(), row.id);
+
+  // Bridge draft → item: without mail_assignments, status stays ready_to_send
+  // forever even though gmail_drafts.state is already "sent".
+  const mail = getDb()
+    .select()
+    .from(mailMessages)
+    .where(eq(mailMessages.id, mailId))
+    .get();
+  if (mail) {
+    writeAssignment({
+      mailId,
+      itemId: row.itemId,
+      source: "draft",
+      confidence: 0.99,
+      mail,
+    });
+  }
+
+  const item = getDb()
+    .select()
+    .from(trackerItems)
+    .where(eq(trackerItems.id, row.itemId))
+    .get();
+  if (item) {
+    dropPreparedFilesForSentDraft({
+      workspaceFolder: item.workspaceFolder,
+      kind: row.kind as "application" | "follow_up" | "thanks" | "reply",
+      contentHash: row.contentHash,
+    });
+  }
+
+  try {
+    const { followUpDays } = statusSettingsFromRow(getSettingsRow());
+    refreshItemFacts(row.itemId, new Map(), followUpDays);
+  } catch (err) {
+    console.error("[drafts-reconcile] refreshItemFacts after sent failed", err);
+  }
+
   bumpTrackerRevision("drafts", "upsert", [row.itemId]);
 }
 
@@ -350,12 +420,45 @@ export function reconcileAgainstLiveMetas(opts: {
       continue;
     }
 
+    // Draft left Drafts but SENT is not in DB yet — pull mail before deleting.
+    result.triggerMailSync = true;
     const { deleted } = bumpMissing(row, nowIso);
     if (deleted) result.deleted += 1;
   }
 
+  // Recover drafts we wrongly marked deleted/failed before SENT landed in DB.
+  recoverTerminalDrafts(accountId, result);
+
   void result.unknown;
   return result;
+}
+
+/**
+ * After a premature deleted_by_user (SENT not synced yet), a later reconcile
+ * can still promote the row to sent once mail_messages has the outbound.
+ */
+function recoverTerminalDrafts(
+  accountId: string,
+  result: DraftsReconcileResult,
+): void {
+  const terminal = getDb()
+    .select()
+    .from(gmailDrafts)
+    .where(
+      and(
+        eq(gmailDrafts.accountId, accountId),
+        inArray(gmailDrafts.state, ["deleted_by_user", "failed"]),
+        isNull(gmailDrafts.sentMailId),
+      ),
+    )
+    .all();
+  for (const row of terminal) {
+    const sentId = findSentProof(row);
+    if (!sentId) continue;
+    markSent(row, sentId);
+    result.sent += 1;
+    result.triggerMailSync = true;
+  }
 }
 
 async function recoverCreatingAsync(
@@ -399,9 +502,21 @@ export async function runDraftsReconcile(opts?: {
     }
     const accountId = normalizeAccountId(creds.address);
     const liveRows = listLiveDrafts(accountId);
+    const recoverable = getDb()
+      .select()
+      .from(gmailDrafts)
+      .where(
+        and(
+          eq(gmailDrafts.accountId, accountId),
+          inArray(gmailDrafts.state, ["deleted_by_user", "failed"]),
+          isNull(gmailDrafts.sentMailId),
+        ),
+      )
+      .all();
+
+    // No live drafts: still try to revive wrongly-deleted rows once SENT is in DB.
     if (!liveRows.length) {
-      opts?.onProgress?.("ok", t("sync.draftsNoLive"));
-      return {
+      const result: DraftsReconcileResult = {
         checked: 0,
         present: 0,
         sent: 0,
@@ -410,6 +525,27 @@ export async function runDraftsReconcile(opts?: {
         unknown: 0,
         triggerMailSync: false,
       };
+      if (recoverable.length) {
+        opts?.onProgress?.(
+          "think",
+          t("sync.draftsReconcileStart", { count: recoverable.length }),
+        );
+        recoverTerminalDrafts(accountId, result);
+      } else {
+        opts?.onProgress?.("ok", t("sync.draftsNoLive"));
+      }
+      if (result.sent) {
+        opts?.onProgress?.(
+          "ok",
+          t("sync.draftsSummary", {
+            present: result.present,
+            sent: result.sent,
+            deleted: result.deleted,
+            failed: result.failed,
+          }),
+        );
+      }
+      return result;
     }
 
     opts?.onProgress?.(
@@ -433,7 +569,8 @@ export async function runDraftsReconcile(opts?: {
           markUnknown(row, msg);
         }
       }
-      return {
+      // IMAP failed — still try local SENT proof for live + terminal rows.
+      const result: DraftsReconcileResult = {
         checked: liveRows.length,
         present: 0,
         sent: 0,
@@ -442,6 +579,16 @@ export async function runDraftsReconcile(opts?: {
         unknown: liveRows.filter((r) => r.state === "present").length,
         triggerMailSync: false,
       };
+      for (const row of liveRows) {
+        if (row.state === "creating") continue;
+        const sentId = findSentProof(row);
+        if (!sentId) continue;
+        markSent(row, sentId);
+        result.sent += 1;
+        result.triggerMailSync = true;
+      }
+      recoverTerminalDrafts(accountId, result);
+      return result;
     }
 
     // Recover creating rows via Message-ID SEARCH when not in full scan (race).

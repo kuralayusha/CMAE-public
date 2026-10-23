@@ -670,13 +670,7 @@ export function FolderBrowser() {
       ) : null}
 
       {deleteTarget ? (
-        <div
-          className="cmae-fb-modal-backdrop"
-          role="presentation"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !busy) setDeleteTarget(null);
-          }}
-        >
+        <div className="cmae-fb-modal-backdrop" role="presentation">
           <div
             className="cmae-fb-modal"
             role="alertdialog"

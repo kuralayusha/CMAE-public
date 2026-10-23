@@ -135,6 +135,60 @@ function mojibakeScore(s: string): number {
   return hits ? hits.length : 0;
 }
 
+/**
+ * Decode a raw MIME part that is still quoted-printable (soft breaks intact).
+ * Single `=XX` inside an already-plain URL is left alone.
+ */
+export function decodeLooseQuotedPrintable(raw: string): string {
+  if (!raw || !/=\r?\n|=[0-9A-Fa-f]{2}/.test(raw)) return raw;
+  const hex = raw.match(/=[0-9A-Fa-f]{2}/g) || [];
+  if (!/=\r?\n/.test(raw) && hex.length < 2) return raw;
+  const buf = quotedPrintableToBuffer(raw);
+  return repairUtf8Mojibake(iconv.decode(buf, "windows-1252"));
+}
+
+/**
+ * Snippets already had their line breaks turned into spaces, which left
+ * quoted-printable behind: `f=FCr`, `=96`, `apprec= iate`, `Term= in`.
+ */
+export function repairCollapsedQuotedPrintable(text: string): string {
+  if (!text || !text.includes("=")) return text;
+  let s = text.replace(/=\r?\n/g, "");
+  s = s.replace(/(?:=[0-9A-Fa-f]{2})+/g, (run) => {
+    const bytes = (run.match(/[0-9A-Fa-f]{2}/g) || []).map((hex) =>
+      Number.parseInt(hex, 16),
+    );
+    return repairUtf8Mojibake(iconv.decode(Buffer.from(bytes), "windows-1252"));
+  });
+  // The space after "=" is usually the collapsed newline. Keep it between
+  // real words ("wie für", "das Du", "Royal in"); drop it when the line was
+  // cut through a word ("Term"+"in", "apprec"+"iate", "(M/W/"+"D").
+  s = s.replace(/(?<=\S)=\s+/gu, (match, offset, whole) => {
+    const source = String(whole);
+    const left = /\p{L}+$/u.exec(source.slice(0, offset))?.[0] ?? "";
+    const right = /^\p{L}+/u.exec(source.slice(offset + match.length))?.[0] ?? "";
+    const fragment =
+      /^(?:in|an|am|im|at|on|or|to|as|be|we|is|it|if|so|a|es|er|en|el|em)$/i.test(
+        right,
+      );
+    const safe =
+      /^(?:für|fur|und|der|die|das|den|dem|von|mit|auf|aus|bei|nach|the|and|for|you|our|wir|ich|ein|eine|zu|of)$/i.test(
+        right,
+      );
+    if (fragment && left.length >= 5) return " ";
+    if (safe && left.length >= 2) return " ";
+    if (/^\p{Lu}/u.test(right) && right.length >= 2 && left.length >= 3) {
+      return " ";
+    }
+    if (left.length >= 3 && right.length >= 6) return " ";
+    return "";
+  });
+  s = s.replace(/\s+=\s+/g, " ");
+  s = s.replace(/^=\s+/, "");
+  s = s.replace(/=[0-9A-Fa-f]?$/g, "");
+  return s;
+}
+
 export function transferEncodingOf(headers: string): "quoted-printable" | "base64" | "7bit" {
   const m = headers.match(/Content-Transfer-Encoding:\s*([^\s;]+)/i);
   const enc = (m?.[1] || "7bit").toLowerCase();
