@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    agentUpgrade: "security",
+  },
   async redirects() {
     return [
       { source: "/search", destination: "/research", permanent: true },
