@@ -369,6 +369,18 @@ export function analyzeBasvuruLinkleri(content: string): {
   return { count, empty: count === 0 };
 }
 
+async function hasTranslatedCompanyInfo(dir: string): Promise<boolean> {
+  for (const file of ["company_info_translated.md", "sirket_bilgileri_translated.md"]) {
+    try {
+      await fs.access(path.join(/*turbopackIgnore: true*/ dir, file));
+      return true;
+    } catch {
+      /* try next */
+    }
+  }
+  return false;
+}
+
 async function badgesForEntry(
   name: string,
   kind: "dir" | "file",
@@ -385,7 +397,17 @@ async function badgesForEntry(
     tone: "ai",
   });
 
-  if (isCompanyInfoFile(name) || isTranslatedMailFile(name)) {
+  if (isCompanyInfoFile(name)) {
+    if (/_translated\.md$/i.test(name)) return [forUser()];
+    // Original-language note. With a translated copy the user reads that one
+    // and the original is CMAE's input. Without one (site language = user's
+    // language, so no translation is made) this single file serves both.
+    return (await hasTranslatedCompanyInfo(path.dirname(fullPath)))
+      ? [forAi()]
+      : [forUser(), forAi()];
+  }
+
+  if (isTranslatedMailFile(name)) {
     return [forUser()];
   }
 

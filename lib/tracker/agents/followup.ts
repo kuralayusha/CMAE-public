@@ -23,6 +23,15 @@ import {
   getWorkspaceRoot,
   writeFile,
 } from "@/lib/research/workspace";
+import { detectSiteLanguageFromFolder, getBestCvText } from "@/lib/cv/library";
+import {
+  buildApplicationMailPrompt,
+  buildJobContext,
+  buildMailTranslatePrompt,
+  canonicalizeMailDraft,
+} from "@/lib/research/agents/application-mail";
+import { getJob } from "@/lib/research/events";
+import { WS } from "@/lib/workspace/filenames";
 import { markLiveDraftSuperseded } from "../gmail-drafts-store";
 import { assertItemActiveForDrafts } from "../inactive";
 import { currentUsageRunId, withUsageRunAsync } from "@/lib/ai-usage";
@@ -492,45 +501,58 @@ async function prepareApplicationDraftForItemBody(itemId: number): Promise<{
     throw new Error(t("tracker.error.applicationPrepareNoResearch"));
   }
 
-  const prefsBlock = formatPreferencesForApplication(
-    getJobPreferences(),
-    userLang,
-  );
+  // Same prompt system as the research writer (MAIL CRAFT + field rules + CV),
+  // so a mail rewritten after the user deleted it matches a fresh research run.
+  const cvText =
+    (
+      await getBestCvText({
+        preferredLanguage: userLang,
+        position: item.position,
+      })
+    )?.trim() ||
+    settings?.cvText?.trim() ||
+    "";
+  if (!cvText) throw new Error(t("research.error.cvMissing"));
+
+  const siteLanguage =
+    detectSiteLanguageFromFolder(folder) ||
+    readOptional(folder, WS.companyInfo)
+      .split("\n", 1)[0]
+      ?.match(/\(([a-zA-Z]{2,3})\)\s*$/)?.[1]
+      ?.toLowerCase() ||
+    userLang;
+  const jobLinks =
+    readOptional(folder, WS.jobLinks) ||
+    readOptional(folder, "basvuru_linkleri.md");
+  // Matched roles are numbered "## 1. Title" sections; the no-match note has none.
+  const matchedRoles = /^## \d+\./m.test(jobLinks) ? jobLinks : "";
   const replyTo = item.primaryTo || item.selectedRecipient || "unknown";
 
-  const prompt = `${MAIL_FIELD_RULES}
-
-${MAIL_VOICE_RULES}
-
-Write a spontaneous / targeted application email.
-Write in the company's language when clear from the notes; otherwise use language code "${userLang}".
-This draft is the original that will be sent.
-Candidate name: ${userName || "(from CV/signature if known)"}
-Company: ${item.company}
-Position / field: ${item.position || "infer from CV / notes"}
-Recipient hint: ${replyTo}
-
-Candidate preferences:
-${prefsBlock}
-
-Company research / notes:
-${companyNotes || "(none)"}
-
-Contact notes:
-${contactNotes || "(none)"}
-
-Summary:
-${summaryNotes || "(none)"}
-
-After SUBJECT/BODY, add exactly one extra line (not inside BODY):
-SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, tr, de>
-`;
-
-  const rawText = await askTrackerLlm(prompt, {
-    feature: "tracker.followup",
+  const prompt = buildApplicationMailPrompt({
+    siteLanguage,
+    fullName: userName || "Candidate",
+    email: settings?.gmailAddress || "",
+    companyName: item.company,
+    url: (item.researchJobId && getJob(item.researchJobId)?.url) || "(unknown)",
+    recipient: replyTo,
+    jobContext: buildJobContext(matchedRoles, ""),
+    prefsBlock: formatPreferencesForApplication(
+      getJobPreferences(),
+      siteLanguage || userLang,
+    ),
+    cvText,
+    researchMd: [
+      companyNotes,
+      contactNotes && `Contact notes:\n${contactNotes}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
   });
-  const { text, language: sendLanguage } = extractSendLanguage(rawText);
-  const parsed = parseSubjectBody(text);
+
+  const rawText = await askTrackerLlm(prompt, { feature: "research.writer" });
+  const parsed = parseSubjectBody(
+    canonicalizeMailDraft(rawText, userName || null),
+  );
   if (!parsed) {
     throw new Error(t("tracker.error.agentSubjectBody"));
   }
@@ -560,21 +582,15 @@ SEND_LANGUAGE: <iso639-1 code of the language you wrote the email in, e.g. en, t
     console.error("[prepare-application] workspace index write failed", err);
   }
 
-  const skipTranslate =
-    Boolean(sendLanguage) && sameLanguage(sendLanguage, userLang);
+  const skipTranslate = sameLanguage(siteLanguage, userLang);
   if (!skipTranslate) {
     try {
-      const translatePrompt = `${MAIL_FIELD_RULES}
-
-Rewrite the following email into language code "${userLang}".
-Keep the same facts, the same short length, and the same plain voice.
-Do not invent claims. Output SUBJECT:/BODY: only.
-
-Source:
-${toWrite}
-`;
+      const translatePrompt = buildMailTranslatePrompt({
+        preferredLang: userLang,
+        draft: toWrite,
+      });
       const translatedRaw = await askTrackerLlm(translatePrompt, {
-        feature: "tracker.followup",
+        feature: "research.writer",
       });
       const translatedParsed = parseSubjectBody(translatedRaw);
       if (translatedParsed) {

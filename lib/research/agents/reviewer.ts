@@ -60,12 +60,12 @@ Check:
 - research: concrete, non-hallucinated, about the TARGET URL entity only, useful for personalization?
 - writer: email matches CV + research + job/cold intent for the TARGET company? correct language? no fake claims? tone?
 - writer craft quality (penalize heavily if missing):
-  · length ~100–150 words (fail if clearly over ~200 or padded fluff)
-  · 3–4 short paragraphs, scannable in ~10–15 seconds
-  · subject short/specific (≤8 words); not vague ("Hello", "Job application", "İş başvurusu", "Merhaba")
-  · body order: greeting → who/what → value (1–2 wins, preferably quantified from CV) → why this company (research-specific) → open close + CV attached mention
-  · personalized to this company (not copy-paste generic); clear target role/field (not "any position")
-  · professional-warm tone; company name spelled correctly; plain text only
+  · body ~70–110 words (fail if clearly over ~140 or padded); exactly three short paragraphs: (1) who I am + why this mail, (2) fit with THIS company, (3) small concrete ask + CV attached
+  · paragraph 1 states identity as a plain fact and never opens with "my name is" / "I am writing to" / "Mein Name ist" / "Hiermit bewerbe ich mich"; it never mentions that no vacancy exists or apologises for writing unasked
+  · paragraph 2 names ONE concrete, research-backed company detail and maps ONE CV achievement (with a number) onto it; generic flattery ("spricht mich an", "aligns with", "resonates") or a skill list is a fail
+  · human voice: penalize stock AI phrases (excited, passionate, thrilled, "I came across", leverage, cutting-edge, "freue mich sehr", "dazu könnte ich gern beitragen"), dashes inside sentences, triads of adjectives, rhetorical questions, exclamation marks
+  · subject short/specific (≤8 words) with role/field + exact full name, no dashes; not vague ("Hello", "Job application", "İş başvurusu", "Merhaba")
+  · greeting uses the real name if known, else the company team; plain text only; company name spelled correctly; clear target field (not "any position")
 - writer HARD FAIL (score writer ≤ 40 and rewindTo=writer) if SUBJECT/BODY contain notes, TODOs, placeholders ([…], TBD, N/A, "unknown", "bulunamadı"), meta comments, or explanations about missing info. SUBJECT+BODY must be paste-ready for Gmail draft — no agent chatter inside the mail fields. Missing facts must be omitted, never annotated.
 - writer HARD FAIL (score writer ≤ 35 and rewindTo=writer) if the mail applies for / names a specific open vacancy that is NOT in JobFit's matched jobs list, OR applies for a role clearly outside the CV's job family (e.g. sales/HR/auditor/stage tech when CV is software engineering). Cold mails must target the CV field, not an unmatched posting.
 - jobfit HARD FAIL (score jobfit ≤ 40 and rewindTo=jobfit) if jobs[] includes roles that are clearly not CV matches (wrong family, missing required certs/stack, junior-only for senior CV, etc.).
