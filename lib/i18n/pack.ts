@@ -93,11 +93,13 @@ export function loadActivePack(): { code: string; pack: LocalePack } {
       return { code: APP_LANGUAGE, pack: en };
     }
     let pack = mergeShape(en, user);
-    // en.json changed but no missing keys — stamp new hash without LLM
+    // en.json changed but no missing keys — stamp new hash without LLM.
+    // Count on the raw user pack: `pack` is already English-filled, so it can
+    // never look incomplete, and saving it would freeze new keys in English.
     const hash = hashEnPack(en);
     if (
       meta.enSourceHash !== hash &&
-      countMissingLeaves(en, pack) === 0
+      countMissingLeaves(en, user) === 0
     ) {
       try {
         saveUserPack(meta.code, pack);

@@ -201,8 +201,9 @@ export default function SettingsPage() {
     prev: string;
   } | null>(null);
   const localeLocked = Boolean(localePrep);
+  // Gmail sync alone only shows the hint; research / draft prep still lock.
   const opsLocked = ops.busy;
-  const formLocked = localeLocked || opsLocked;
+  const formLocked = localeLocked || ops.research || ops.trackerDraft;
 
   useEffect(() => {
     setIsDesktop(Boolean(window.cmaeDesktop?.isDesktop));
@@ -1112,6 +1113,22 @@ export default function SettingsPage() {
             >
               {t("settings.dangerWipeBtn")}
             </Button>
+
+            {process.env.NODE_ENV !== "production" ? (
+              <>
+                <p className="cmae-form-hint" style={{ marginTop: "1.25rem" }}>
+                  {t("settings.dangerPreviewHint")}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={busy || localeLocked}
+                  onClick={() => window.location.assign("/onboarding/preview")}
+                >
+                  {t("settings.dangerPreviewBtn")}
+                </Button>
+              </>
+            ) : null}
 
             {isDesktop ? (
               <>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
 import { CvDropzone } from "@/components/CvDropzone";
+import { ExternalLink } from "@/components/ExternalLink";
 import { useI18n, useLocaleUpper } from "@/components/I18nProvider";
 import {
   LLM_FORM_DEFAULTS,
@@ -99,7 +100,12 @@ function pickFilled(local: string, server: string | null | undefined): string {
   return server?.trim() ? String(server) : local;
 }
 
-export function OnboardingWizard() {
+/**
+ * `preview` walks every step visually and writes NOTHING: no settings/CV/DB
+ * calls, no key verification, no translation, no `complete`. Used from
+ * Settings → Danger zone in development builds only.
+ */
+export function OnboardingWizard({ preview = false }: { preview?: boolean } = {}) {
   const router = useRouter();
   const { t, setPack } = useI18n();
   const upper = useLocaleUpper();
@@ -132,6 +138,7 @@ export function OnboardingWizard() {
   const stepId: StepId = STEPS[step] ?? "language";
 
   useEffect(() => {
+    if (preview) return;
     void (async () => {
       try {
         await fetch("/api/onboarding/reconcile", {
@@ -179,7 +186,7 @@ export function OnboardingWizard() {
         /* first boot */
       }
     })();
-  }, [router]);
+  }, [router, preview]);
 
   const canNext = useMemo(() => {
     switch (stepId) {
@@ -226,6 +233,7 @@ export function OnboardingWizard() {
     form: typeof form;
     prefs: JobPreferences;
   }) {
+    if (preview) return;
     const f = snapshot?.form ?? formRef.current;
     const p = snapshot?.prefs ?? prefsRef.current;
     const body: Record<string, unknown> = {
@@ -277,6 +285,11 @@ export function OnboardingWizard() {
   async function goNext() {
     setError(null);
     if (stepId === "language") {
+      if (preview) {
+        // No pack download / translation: the UI language stays as it is.
+        setStep(STEPS.indexOf("welcome"));
+        return;
+      }
       const lang = form.preferredLanguage.trim() || APP_LANGUAGE;
       const code = lang.toLowerCase();
 
@@ -329,6 +342,11 @@ export function OnboardingWizard() {
       setStep(STEPS.indexOf("profile"));
       return;
     }
+    if (stepId === "cv" && preview) {
+      setStep(STEPS.length - 1);
+      void runBootSequence();
+      return;
+    }
     if (stepId === "cv") {
       setBusy(true);
       try {
@@ -358,7 +376,7 @@ export function OnboardingWizard() {
       await persistPartial();
       // AI step: live-check the key + both models before moving on; an env key
       // alone used to look "ready" then vanish after restart.
-      if (stepId === "ai") {
+      if (stepId === "ai" && !preview) {
         const check = await fetch("/api/onboarding/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -476,6 +494,14 @@ export function OnboardingWizard() {
       await sleep(420);
       patchBoot(id, { status: "ok" });
     };
+
+    if (preview) {
+      for (const item of BOOT_TEMPLATE) await softOk(item.id);
+      setBootDone(true);
+      await sleep(1200);
+      window.location.assign("/settings");
+      return;
+    }
 
     try {
       await softOk("db");
@@ -613,6 +639,18 @@ export function OnboardingWizard() {
   }
 
   async function uploadCv(file: File) {
+    if (preview) {
+      setCvs((prev) => [
+        ...prev,
+        {
+          id: globalThis.crypto.randomUUID(),
+          fileName: file.name,
+          label: file.name.replace(/\.pdf$/i, ""),
+          language: form.preferredLanguage || "en",
+        },
+      ]);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -632,6 +670,10 @@ export function OnboardingWizard() {
   }
 
   async function removeCv(id: string) {
+    if (preview) {
+      setCvs((prev) => prev.filter((c) => c.id !== id));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -649,6 +691,10 @@ export function OnboardingWizard() {
   }
 
   async function patchCvLanguage(id: string, language: string) {
+    if (preview) {
+      setCvs((prev) => prev.map((c) => (c.id === id ? { ...c, language } : c)));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -764,6 +810,12 @@ export function OnboardingWizard() {
         <BrandMark size={28} className="cmae-onb-brand-mark" />
         CMAE
       </div>
+      {preview ? (
+        <p className="cmae-onb-preview" role="status">
+          {t("onboarding.previewBanner")}{" "}
+          <a href="/settings">{t("onboarding.previewExit")}</a>
+        </p>
+      ) : null}
       <div className="cmae-onb-card">
         {showProgress ? (
           <>
@@ -851,33 +903,62 @@ export function OnboardingWizard() {
               {t("onboarding.gmailWhy")}
             </p>
             <ol className="cmae-onb-guide">
-              <li>{t("onboarding.gmailGuide0")}</li>
               <li>
                 <RichText
-                  text={t("onboarding.gmailGuide1")}
+                  text={t("onboarding.gmailStep1")}
                   parts={{
                     link: (
-                      <a
-                        href="https://myaccount.google.com/apppasswords"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {t("onboarding.gmailGuide1Link")}
-                      </a>
+                      <ExternalLink href="https://myaccount.google.com/">
+                        {t("onboarding.gmailStep1Link")}
+                      </ExternalLink>
                     ),
                   }}
                 />
               </li>
               <li>
                 <RichText
-                  text={t("onboarding.gmailGuide2")}
+                  text={t("onboarding.gmailStep2")}
                   parts={{
-                    app: <strong>CMAE</strong>,
+                    link: (
+                      <ExternalLink href="https://myaccount.google.com/signinoptions/twosv">
+                        {t("onboarding.gmailStep2Link")}
+                      </ExternalLink>
+                    ),
                   }}
                 />
               </li>
-              <li>{t("onboarding.gmailGuide3")}</li>
+              <li>
+                <RichText
+                  text={t("onboarding.gmailStep3")}
+                  parts={{
+                    link: (
+                      <ExternalLink href="https://myaccount.google.com/apppasswords">
+                        {t("onboarding.gmailStep3Link")}
+                      </ExternalLink>
+                    ),
+                  }}
+                />
+              </li>
+              <li>
+                <RichText
+                  text={t("onboarding.gmailStep4")}
+                  parts={{ app: <strong>CMAE</strong> }}
+                />
+              </li>
+              <li>{t("onboarding.gmailStep5")}</li>
             </ol>
+            <p className="cmae-form-hint">
+              <RichText
+                text={t("onboarding.gmailImapNote")}
+                parts={{
+                  link: (
+                    <ExternalLink href="https://mail.google.com/mail/u/0/#settings/fwdandpop">
+                      {t("onboarding.gmailImapNoteLink")}
+                    </ExternalLink>
+                  ),
+                }}
+              />
+            </p>
             <div className="cmae-onb-fields">
               <Field label={t("fields.gmailAddress")}>
                 <input
@@ -921,45 +1002,60 @@ export function OnboardingWizard() {
             <ol className="cmae-onb-guide">
               <li>
                 <RichText
-                  text={t("onboarding.aiGuide0")}
+                  text={t("onboarding.aiStep1")}
                   parts={{
                     link: (
-                      <a
-                        href="https://openrouter.ai/settings/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {t("onboarding.aiGuide0Link")}
-                      </a>
+                      <ExternalLink href="https://openrouter.ai/">
+                        {t("onboarding.aiStep1Link")}
+                      </ExternalLink>
                     ),
                   }}
                 />
               </li>
               <li>
+                {t("onboarding.aiStep2")}
+                <ul>
+                  <li>
+                    <RichText
+                      text={t("onboarding.aiPayCredits")}
+                      parts={{
+                        link: (
+                          <ExternalLink href="https://openrouter.ai/settings/credits">
+                            {t("onboarding.aiPayCreditsLink")}
+                          </ExternalLink>
+                        ),
+                      }}
+                    />
+                  </li>
+                  <li>
+                    <RichText
+                      text={t("onboarding.aiPayByok")}
+                      parts={{
+                        link: (
+                          <ExternalLink href="https://openrouter.ai/settings/integrations">
+                            {t("onboarding.aiPayByokLink")}
+                          </ExternalLink>
+                        ),
+                      }}
+                    />
+                  </li>
+                </ul>
+              </li>
+              <li>
                 <RichText
-                  text={t("onboarding.aiGuide1")}
+                  text={t("onboarding.aiStep3")}
                   parts={{
+                    link: (
+                      <ExternalLink href="https://openrouter.ai/settings/keys">
+                        {t("onboarding.aiStep3Link")}
+                      </ExternalLink>
+                    ),
                     name: <strong>CMAE local</strong>,
                   }}
                 />
               </li>
-              <li>{t("onboarding.aiGuide2")}</li>
-              <li>
-                <RichText
-                  text={t("onboarding.aiGuideByok")}
-                  parts={{
-                    link: (
-                      <a
-                        href="https://openrouter.ai/settings/integrations"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {t("onboarding.aiGuideByokLink")}
-                      </a>
-                    ),
-                  }}
-                />
-              </li>
+              <li>{t("onboarding.aiStep4")}</li>
+              <li>{t("onboarding.aiStep5")}</li>
             </ol>
             <div className="cmae-onb-fields">
               <LlmSettingsFields

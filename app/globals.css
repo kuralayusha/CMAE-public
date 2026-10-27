@@ -2542,23 +2542,17 @@ a.cmae-btn {
   z-index: 80;
   max-width: min(360px, calc(100vw - 24px));
   padding: 8px 10px;
-  border: 1px solid var(--line-strong);
+  /* Inverted vs the page: black plate on light, white plate on dark. */
+  border: 1px solid var(--ink);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
-  color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
   font-size: 12.5px;
   line-height: 1.4;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   pointer-events: none;
   white-space: normal;
   word-break: break-word;
-}
-
-/* Inverted: black on light, white on dark (--ink on --bg flips with theme) */
-.cmae-truncate-tip.cmae-hover-tip {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--bg);
 }
 
 .cmae-hover-tip-wrap {
@@ -3266,4 +3260,18 @@ a.cmae-btn {
 
 .cmae-usage-call-status.is-missing {
   color: var(--ink-faint);
+}
+
+/* External link: text + icon share one underline (border, since text-decoration skips the svg). */
+.cmae-ext-link,
+.cmae-onb-guide a.cmae-ext-link {
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 1px;
+}
+
+.cmae-ext-link-icon {
+  display: inline-block;
+  margin-left: 3px;
+  vertical-align: -1px;
 }

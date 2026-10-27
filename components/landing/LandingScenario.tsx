@@ -15,7 +15,8 @@ export type ScenarioCompany = {
   folder: string;
   url: string;
   hostname: string;
-  role: string;
+  /** i18n key (landing.demo.role*) for the job title shown in the tracker demo. */
+  roleKey: string;
 };
 
 export type ScenarioFile = {
@@ -32,7 +33,7 @@ export const SCENARIO_COMPANIES: ScenarioCompany[] = [
     folder: "01-stripe",
     url: "https://stripe.com/jobs",
     hostname: "stripe.com",
-    role: "Backend Engineer",
+    roleKey: "landing.demo.roleBackend",
   },
   {
     id: "vercel",
@@ -40,7 +41,7 @@ export const SCENARIO_COMPANIES: ScenarioCompany[] = [
     folder: "02-vercel",
     url: "https://vercel.com/careers",
     hostname: "vercel.com",
-    role: "Product Engineer",
+    roleKey: "landing.demo.roleProduct",
   },
   {
     id: "linear",
@@ -48,7 +49,7 @@ export const SCENARIO_COMPANIES: ScenarioCompany[] = [
     folder: "03-linear",
     url: "https://linear.app/careers",
     hostname: "linear.app",
-    role: "Full-stack Engineer",
+    roleKey: "landing.demo.roleFullstack",
   },
 ];
 

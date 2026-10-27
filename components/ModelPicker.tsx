@@ -231,17 +231,20 @@ export function ModelPicker({
               {t("llm.recommendedBadge")}
             </span>
           ) : rec && recModel ? (
+            // Shows WHAT is recommended (not a generic "use this" that reads
+            // like a save). Picking it only fills the form; once the choice
+            // matches, this is replaced by the badge above.
             <button
               type="button"
               className="cmae-btn cmae-btn-ghost cmae-llm-btn cmae-llm-summary-end"
-              title={t("llm.recommended", {
-                model: shortName(recModel.name),
-                effort: rec.effort ? ` · ${t(`llm.efforts.${rec.effort}`)}` : "",
-              })}
+              title={t("llm.recommendedApplyHint")}
               onClick={() => onChange({ model: rec.model, effort: rec.effort })}
             >
               <WandIcon size={12} />
-              {t("llm.useRecommended")}
+              {t("llm.recommended", {
+                model: shortName(recModel.name),
+                effort: rec.effort ? ` · ${t(`llm.efforts.${rec.effort}`)}` : "",
+              })}
             </button>
           ) : null}
         </div>

@@ -137,5 +137,12 @@
   "llm.effort": "LABEL noun: how much the AI model thinks before answering (reasoning effort).",
   "llm.customize": "BUTTON imperative: pick a separate model for this one step instead of the default.",
   "llm.followSlot": "BUTTON imperative: stop using a separate model for this step and use the default model again.",
-  "llm.useRecommended": "BUTTON imperative: apply the recommended model shown next to it."
+  "llm.recommended": "Text ON a button that selects the recommended model. {model} and {effort} are filled in (effort already starts with a middle dot) — keep both placeholders. Short label like \"Recommended: Claude Sonnet 5.5 · Medium\".",
+  "landing.demo.roleSoftware": "JOB TITLE shown in the demo tracker table (a noun, not an action). Keep company/product names out; translate the title the way job ads in the target language do.",
+  "landing.demo.roleProduct": "JOB TITLE shown in the demo tracker table (noun).",
+  "landing.demo.roleBackend": "JOB TITLE shown in the demo tracker table (noun).",
+  "landing.demo.roleFullstack": "JOB TITLE shown in the demo tracker table (noun).",
+  "onboarding.aiPayByok": "Setup step. Keep the acronym BYOK (bring your own key) unchanged. {link} is a link to OpenRouter's Integrations page — keep the placeholder.",
+  "llm.error.noCredits": "Error shown when a model can't be used. {model} is a model id and {provider} a company name (OpenAI, Anthropic…) — keep both placeholders; keep BYOK-style wording about 'your own key saved in OpenRouter'.",
+  "onboarding.gmailStep3": "Setup step for Google's App passwords page. Keep {link}. 'App passwords' is Google's own UI name — use the term Google uses in the target language."
 }

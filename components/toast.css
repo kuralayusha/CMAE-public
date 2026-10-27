@@ -1,4 +1,8 @@
 .cmae-toast {
+  /* Inverted vs the page: black plate on light, white plate on dark. The
+     accent greens are picked for contrast on that plate, so they are the
+     opposite of the page's --ok. */
+  --toast-ok: #5dca8e;
   position: fixed;
   right: 24px;
   top: 24px;
@@ -8,26 +12,29 @@
   gap: 10px;
   max-width: min(420px, calc(100vw - 32px));
   padding: 12px 10px 12px 14px;
-  border: 1px solid var(--line-strong);
-  background: var(--bg-elevated);
-  color: var(--ink);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
   font-size: 13px;
   line-height: 1.45;
   animation: cmae-toast-in 0.18s ease-out;
 }
+[data-theme="dark"] .cmae-toast {
+  --toast-ok: #0f7a45;
+}
 .cmae-toast.is-ok {
-  border-left: 3px solid var(--ok);
+  border-left: 3px solid var(--toast-ok);
 }
 .cmae-toast.is-err {
-  border-left: 3px solid var(--ink);
+  border-left: 3px solid var(--bg);
 }
 .cmae-toast-icon {
   display: inline-flex;
   margin-top: 2px;
 }
 .cmae-toast.is-ok .cmae-toast-icon {
-  color: var(--ok);
+  color: var(--toast-ok);
 }
 .cmae-toast-text {
   flex: 1;
@@ -39,11 +46,12 @@
   padding: 4px;
   border: 0;
   background: transparent;
-  color: var(--ink-faint);
+  color: var(--bg);
+  opacity: 0.6;
   cursor: pointer;
 }
 .cmae-toast-close:hover {
-  color: var(--ink);
+  opacity: 1;
 }
 @keyframes cmae-toast-in {
   from {

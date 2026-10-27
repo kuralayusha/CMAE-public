@@ -45,7 +45,7 @@ export function LandingTrackerDemo() {
       {
         id: "notion",
         company: "Notion",
-        role: "Software Engineer",
+        role: t("landing.demo.roleSoftware"),
         status: "in_progress",
         label: statusLabel.in_progress,
         activity: t("landing.demo.activity2d"),
@@ -53,7 +53,7 @@ export function LandingTrackerDemo() {
       {
         id: "figma",
         company: "Figma",
-        role: "Product Engineer",
+        role: t("landing.demo.roleProduct"),
         status: "follow_up_due",
         label: statusLabel.follow_up_due,
         activity: t("landing.demo.activity5d"),
@@ -61,7 +61,7 @@ export function LandingTrackerDemo() {
       {
         id: "anthropic",
         company: "Anthropic",
-        role: "Full-stack",
+        role: t("landing.demo.roleFullstack"),
         status: "needs_reply",
         label: statusLabel.needs_reply,
         activity: t("landing.demo.activity1d"),
@@ -75,7 +75,7 @@ export function LandingTrackerDemo() {
       {
         id: "stripe",
         company: SCENARIO_COMPANIES[0]!.name,
-        role: SCENARIO_COMPANIES[0]!.role,
+        role: t(SCENARIO_COMPANIES[0]!.roleKey),
         status: "ready_to_send",
         label: statusLabel.ready_to_send,
         activity: t("landing.demo.activityJustNow"),
@@ -84,7 +84,7 @@ export function LandingTrackerDemo() {
       {
         id: "vercel",
         company: SCENARIO_COMPANIES[1]!.name,
-        role: SCENARIO_COMPANIES[1]!.role,
+        role: t(SCENARIO_COMPANIES[1]!.roleKey),
         status: "ready_to_send",
         label: statusLabel.ready_to_send,
         activity: t("landing.demo.activityJustNow"),
@@ -93,7 +93,7 @@ export function LandingTrackerDemo() {
       {
         id: "linear",
         company: SCENARIO_COMPANIES[2]!.name,
-        role: SCENARIO_COMPANIES[2]!.role,
+        role: t(SCENARIO_COMPANIES[2]!.roleKey),
         status: "ready_to_send",
         label: statusLabel.ready_to_send,
         activity: t("landing.demo.activityJustNow"),
@@ -102,7 +102,7 @@ export function LandingTrackerDemo() {
       {
         id: "notion",
         company: "Notion",
-        role: "Software Engineer",
+        role: t("landing.demo.roleSoftware"),
         status: "in_progress",
         label: statusLabel.in_progress,
         activity: t("landing.demo.activity2d"),
@@ -110,7 +110,7 @@ export function LandingTrackerDemo() {
       {
         id: "figma",
         company: "Figma",
-        role: "Product Engineer",
+        role: t("landing.demo.roleProduct"),
         status: "needs_reply",
         label: statusLabel.needs_reply,
         activity: t("landing.demo.activityJustNow"),
@@ -118,7 +118,7 @@ export function LandingTrackerDemo() {
       {
         id: "anthropic",
         company: "Anthropic",
-        role: "Full-stack",
+        role: t("landing.demo.roleFullstack"),
         status: "needs_reply",
         label: statusLabel.needs_reply,
         activity: t("landing.demo.activity1d"),
