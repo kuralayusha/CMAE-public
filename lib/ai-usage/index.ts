@@ -4,8 +4,11 @@
  * `./call` directly instead.
  */
 
-import { setUsageBackend } from "./call";
+import { describeOpenRouterError } from "../llm/errors";
+import { setLlmErrorDescriber, setUsageBackend } from "./call";
 import { createDbBackend } from "./store";
+
+setLlmErrorDescriber(describeOpenRouterError);
 
 // Vercel hosts only the i18n proxy and has no per-user SQLite. Measured
 // translation calls are returned to the desktop, which writes ai_usage_events.

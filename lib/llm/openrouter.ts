@@ -43,6 +43,8 @@ export type OpenRouterChatResult = {
 export class OpenRouterError extends Error {
   readonly status: number;
   readonly code: string | null;
+  /** OpenRouter's own message, kept when `message` is rewritten for the user. */
+  detail: string | null = null;
   constructor(message: string, status: number, code: string | null = null) {
     super(message);
     this.name = "OpenRouterError";

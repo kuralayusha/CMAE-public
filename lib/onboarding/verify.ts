@@ -6,7 +6,7 @@ import {
   resolveOpenRouterKey,
   savedOpenRouterKey,
 } from "@/lib/llm/config";
-import { OpenRouterError } from "@/lib/llm/openrouter";
+import { describeOpenRouterError } from "@/lib/llm/errors";
 import {
   getGmailCredentials,
   updateSettings,
@@ -122,7 +122,7 @@ export async function verifyOpenRouter(): Promise<VerifyCheck> {
   } catch (err) {
     if (err instanceof NoResponseError) return { ok: false, error: err.message };
     const model = (err as { verifyModel?: string }).verifyModel ?? models[0]!;
-    return { ok: false, error: humanizeOpenRouterError(err, model) };
+    return { ok: false, error: describeOpenRouterError(err, model) };
   }
 }
 
@@ -150,24 +150,6 @@ function humanizeImapError(msg: string): string {
   }
   if (m.includes("timeout") || m.includes("timed out")) {
     return t("onboarding.verify.gmailTimeout");
-  }
-  return msg.slice(0, 200);
-}
-
-function humanizeOpenRouterError(err: unknown, model: string): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  const status = err instanceof OpenRouterError ? err.status : 0;
-  const m = msg.toLowerCase();
-  if (status === 401 || status === 403 || m.includes("no auth") || m.includes("invalid api key")) {
-    return t("onboarding.verify.openrouterInvalid");
-  }
-  if (status === 402) return t("onboarding.verify.openrouterCredits");
-  if (status === 404 || m.includes("no endpoints") || m.includes("not a valid model")) {
-    return t("onboarding.verify.openrouterModel", { model });
-  }
-  if (status === 429) return t("onboarding.verify.openrouterRateLimit");
-  if (m.includes("timeout") || m.includes("timed out")) {
-    return t("onboarding.verify.openrouterTimeout");
   }
   return msg.slice(0, 200);
 }

@@ -19,12 +19,36 @@
  * recorded as `timeout` / `canceled` with `usage_missing = 1`.
  */
 
-import { openRouterChat, type OpenRouterChatResult, type OpenRouterUsage } from "../llm/openrouter";
+import {
+  openRouterChat,
+  OpenRouterError,
+  type OpenRouterChatResult,
+  type OpenRouterUsage,
+} from "../llm/openrouter";
 import { cacheKey } from "./cache-key";
 import { isCacheableFeature, type AiFeature, type SyncMode } from "./features";
 import { computeCostMicroUsd, EMBEDDED_PRICES, selectPrice } from "./pricing";
 import { currentUsageRunId } from "./run-context";
 import type { TokenCounts, UsageBackend, UsageEvent, UsageStatus } from "./types";
+
+type ErrorDescriber = (err: unknown, model: string) => string;
+let errorDescriber: ErrorDescriber | null = null;
+
+/**
+ * Registered by the server entry (`./index`): rewrites OpenRouter errors into
+ * user-facing text (needs i18n, so it cannot live here — this file stays
+ * DB/i18n-free for the eval harness).
+ */
+export function setLlmErrorDescriber(fn: ErrorDescriber | null): void {
+  errorDescriber = fn;
+}
+
+function describeLlmError(err: unknown, model: string): unknown {
+  if (!errorDescriber || !(err instanceof OpenRouterError)) return err;
+  err.detail ??= err.message;
+  err.message = errorDescriber(err, model);
+  return err;
+}
 
 export type PromptWithUsageInput = {
   feature: AiFeature;
@@ -353,7 +377,7 @@ export async function promptWithUsage(
       costMicroUsd: 0,
       durationMs: Date.now() - started,
     });
-    throw settled.err;
+    throw describeLlmError(settled.err, input.model);
   }
   const result = settled.result;
   const counts = toCounts(result.usage);

@@ -13,7 +13,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import Database from "better-sqlite3";
 import { getAnonId, regenerateAnonId, anonIdPath } from "../../lib/ai-usage/anon-id";
-import { promptWithUsage } from "../../lib/ai-usage/call";
+import { promptWithUsage, setLlmErrorDescriber } from "../../lib/ai-usage/call";
 import { cacheKey } from "../../lib/ai-usage/cache-key";
 import { cacheGet, cachePrune, cachePut } from "../../lib/ai-usage/cache";
 import {
@@ -385,6 +385,25 @@ describe("cache policy + promptWithUsage", () => {
     const r = await run("research.writer");
     assert.equal(r.text, "after-retry");
     assert.equal(calls, 2);
+  });
+
+  it("the registered describer rewrites OpenRouter errors with the model, keeping the original", async () => {
+    setLlmErrorDescriber((err, model) => `no credits for ${model} (${(err as { status: number }).status})`);
+    try {
+      handler = () =>
+        new Response(JSON.stringify({ error: { message: "Insufficient credits", code: 402 } }), { status: 402 });
+      let caught: unknown;
+      try {
+        await run("research.writer", { model: "openai/gpt-x" });
+      } catch (e) {
+        caught = e;
+      }
+      assert.match((caught as Error).message, /^no credits for openai\/gpt-x \(402\)$/);
+      assert.equal((caught as { detail: string }).detail, "Insufficient credits");
+      assert.equal(events()[0]!.status, "error");
+    } finally {
+      setLlmErrorDescriber(null);
+    }
   });
 
   it("empty completion → emptyError, tokens still metered", async () => {
