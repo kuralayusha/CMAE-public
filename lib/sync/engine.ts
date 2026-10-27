@@ -266,6 +266,9 @@ function isSoftRecentSkipReason(reason: SyncTriggerReason): boolean {
   );
 }
 
+/** Cheap re-check of a draft that left Gmail Drafts but is not yet marked deleted. */
+const DRAFT_MISSING_RECHECK_MS = 35_000;
+
 function lastMailSyncSuccessAgeMs(): number {
   try {
     const row = getSqlite()
@@ -989,7 +992,23 @@ async function runClaimedJobBody(job: JobRow): Promise<void> {
           if (isAutoSyncBlockedByAuth() || isMaintenanceActive()) return;
           requestSync({ reason: "post_mutation", mode: "incremental" });
         }, 60_000).unref?.();
-        requestSync({ reason: "post_mutation", mode: "incremental" });
+        // Only chain immediately when the last mail sync is not fresh: a draft
+        // that left Drafts keeps reporting triggerMailSync until it is marked
+        // deleted (>= 2 checks and 90 s), and mail_sync enqueues the next
+        // reconcile — chaining unconditionally looped every ~6 s. The 60 s timer
+        // above still retries.
+        if (lastMailSyncSuccessAgeMs() >= 60_000) {
+          requestSync({ reason: "post_mutation", mode: "incremental" });
+        }
+        // A draft missing from Gmail is only marked deleted after 2 checks
+        // spanning >= 90 s. Re-check cheaply (no mail sync) so the green dot
+        // clears in ~1.5 min instead of waiting for the 60 s / 2 min timers.
+        if (!result.sent && !result.deleted) {
+          setTimeout(() => {
+            if (isAutoSyncBlockedByAuth() || isMaintenanceActive()) return;
+            enqueueDraftsReconcile("post_mutation");
+          }, DRAFT_MISSING_RECHECK_MS).unref?.();
+        }
       }
       const list = listTrackerSections();
       finishSession(session, "done", {

@@ -41,10 +41,11 @@ export function getOperationsStatus(): OperationsStatus {
   };
 }
 
-/** 409 when settings mutations would race with sync / research / draft prep. */
+/** 409 when settings mutations would race with research / draft prep. */
 export function settingsBusyResponse(): NextResponse | null {
   const status = getOperationsStatus();
-  if (!status.busy) return null;
+  // Gmail sync alone never blocks settings (credential changes cancel it).
+  if (!status.research && !status.trackerDraft) return null;
   return NextResponse.json(
     {
       error: t("settings.error.opsBusy"),

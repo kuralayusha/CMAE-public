@@ -125,7 +125,13 @@ export async function PUT(req: Request) {
       const busy = settingsBusyResponse();
       if (busy) return busy;
     } else if (ops.gmailSync) {
-      cancelTrackerSyncSession();
+      // Only a credential change invalidates the running sync; other settings
+      // can be saved while it runs.
+      const touchesGmail =
+        gmailAddress !== undefined ||
+        (typeof body.gmailAppPassword === "string" &&
+          body.gmailAppPassword.trim() !== "");
+      if (touchesGmail) cancelTrackerSyncSession();
     } else {
       const busy = settingsBusyResponse();
       if (busy) return busy;
