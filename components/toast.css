@@ -1,7 +1,7 @@
 .cmae-toast {
   position: fixed;
   right: 24px;
-  bottom: 24px;
+  top: 24px;
   z-index: 200;
   display: flex;
   align-items: flex-start;
@@ -48,7 +48,7 @@
 @keyframes cmae-toast-in {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(-8px);
   }
   to {
     opacity: 1;

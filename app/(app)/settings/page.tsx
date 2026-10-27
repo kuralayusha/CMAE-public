@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CvDropzone } from "@/components/CvDropzone";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { HoverTip } from "@/components/HoverTip";
 import { Toast } from "@/components/Toast";
 import { LlmSettingsFields, llmFormFromSettings } from "@/components/LlmSettingsFields";
 import type { Effort, LlmOverrides } from "@/lib/llm/slots";
@@ -987,13 +988,11 @@ export default function SettingsPage() {
           </SettingsAcc>
 
           <div className="cmae-form-actions">
-            <Button
-              type="submit"
-              disabled={busy || formLocked || !dirty}
-              title={!dirty && !busy ? t("settings.noChanges") : undefined}
-            >
-              {busy ? t("common.saving") : t("common.save")}
-            </Button>
+            <HoverTip label={!dirty && !busy ? t("settings.noChanges") : ""}>
+              <Button type="submit" disabled={busy || formLocked || !dirty}>
+                {busy ? t("common.saving") : t("common.save")}
+              </Button>
+            </HoverTip>
           </div>
 
           <SettingsAcc title={t("settings.accPrivacy")}>

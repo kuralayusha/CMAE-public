@@ -1,4 +1,5 @@
 import { usageConfig } from "@/lib/ai-usage/config";
+import { getAnonId } from "@/lib/ai-usage/anon-id";
 import { buildLocalUsageReport } from "@/lib/ai-usage/local-report";
 import { NextResponse } from "next/server";
 
@@ -13,7 +14,11 @@ async function fetchAdminReport(userId?: string | null) {
       { status: 404 },
     );
   }
+  return respondAdmin(await requestAdminReport(userId));
+}
 
+async function requestAdminReport(userId?: string | null) {
+  const cfg = usageConfig();
   const url = new URL(cfg.reportUrl);
   if (userId) url.searchParams.set("user_id", userId);
 
@@ -36,7 +41,10 @@ async function fetchAdminReport(userId?: string | null) {
   } catch {
     body = { error: "bad_upstream", raw: text.slice(0, 200) };
   }
+  return { res, body };
+}
 
+function respondAdmin({ res, body }: { res: Response; body: unknown }) {
   if (body && typeof body === "object" && !Array.isArray(body)) {
     return NextResponse.json(
       { ...(body as Record<string, unknown>), adminAvailable: true, scope: "admin" },
@@ -47,7 +55,30 @@ async function fetchAdminReport(userId?: string | null) {
 }
 
 /**
- * Default: this machine's local AI usage (always works).
+ * This machine's own usage from Supabase: local rows get wiped on onboarding
+ * reset, the server keeps the full history. null → caller falls back to local.
+ */
+async function fetchOwnRemoteReport(adminAvailable: boolean) {
+  if (!adminAvailable) return null;
+  try {
+    const local = buildLocalUsageReport(undefined, { adminAvailable });
+    const { res, body } = await requestAdminReport(getAnonId().userId);
+    const b = body as { totals?: unknown; user?: unknown } | null;
+    if (!res.ok || !b || !b.totals || !b.user) return null;
+    return {
+      ...(b as Record<string, unknown>),
+      scope: "self",
+      adminAvailable: true,
+      telemetryEnabled: local.telemetryEnabled,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Default: this machine's AI usage — from Supabase when the report secret is
+ * set (full history), else the local rows (always works).
  * `?admin=1`: full Supabase user list — only when CMAE_USAGE_REPORT_SECRET is set.
  * Never surfaces secret-configuration warnings to the UI.
  */
@@ -62,6 +93,9 @@ export async function GET(req: Request) {
       const userId = url.searchParams.get("user_id");
       return await fetchAdminReport(userId);
     }
+
+    const remote = await fetchOwnRemoteReport(adminAvailable);
+    if (remote) return NextResponse.json(remote);
 
     return NextResponse.json(
       buildLocalUsageReport(undefined, { adminAvailable }),

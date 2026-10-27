@@ -2554,6 +2554,13 @@ a.cmae-btn {
   word-break: break-word;
 }
 
+/* Inverted: black on light, white on dark (--ink on --bg flips with theme) */
+.cmae-truncate-tip.cmae-hover-tip {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
 .cmae-hover-tip-wrap {
   display: inline-flex;
   vertical-align: middle;
