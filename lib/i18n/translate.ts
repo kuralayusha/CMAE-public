@@ -6,7 +6,7 @@ import {
   withUsageRunAsync,
   type PromptWithUsageResult,
 } from "@/lib/ai-usage";
-import { modelForFeature, resolveOpenRouterKey } from "@/lib/llm/config";
+import { llmForFeature, modelForFeature, resolveOpenRouterKey } from "@/lib/llm/config";
 import { updateSettings } from "@/lib/settings/service";
 import { formatHintsForSection } from "./hints";
 import { mapPool } from "./pool";
@@ -92,12 +92,16 @@ async function askTranslateLlm(
 ): Promise<string> {
   const apiKey = resolveOpenRouterKey();
   const model = translateModel();
+  const effort = process.env.CMAE_I18N_MODEL?.trim()
+    ? ""
+    : llmForFeature("i18n.translate").effort;
   try {
     const result = await promptWithUsage({
       feature: "i18n.translate",
       prompt,
       apiKey,
       model,
+      reasoningEffort: effort,
       emptyError: (status) => new Error(t("errors.llmNoResponse", { status })),
     });
     sink.push(usageCallFrom(result, model));

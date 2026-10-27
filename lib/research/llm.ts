@@ -1,6 +1,6 @@
 import { promptWithUsage, type AiFeature } from "@/lib/ai-usage";
 import { t } from "@/lib/i18n/t";
-import { modelForFeature, resolveOpenRouterKey } from "@/lib/llm/config";
+import { llmForFeature, resolveOpenRouterKey } from "@/lib/llm/config";
 import { throwIfCanceled, whenJobAborted } from "./cancel";
 import { speak } from "./speak";
 import type { SpecialistId } from "./types";
@@ -25,12 +25,14 @@ export async function askLlm(
 
   // promptWithUsage races the request against the job abort promise and
   // aborts the fetch, so cancel unblocks the pipeline immediately.
+  const choice = llmForFeature(feature);
   const result = await promptWithUsage({
     feature,
     runId: jobId,
     prompt,
     apiKey,
-    model: modelForFeature(feature),
+    model: choice.model,
+    reasoningEffort: choice.effort,
     cancelRace: whenJobAborted(jobId),
     emptyError: (status) => new Error(t("errors.llmNoResponse", { status })),
   });

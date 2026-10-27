@@ -2,7 +2,7 @@ import { currentUsageRunId, promptWithUsage, withUsageRunAsync } from "@/lib/ai-
 import { ImapFlow } from "imapflow";
 import { t } from "@/lib/i18n/t";
 import {
-  modelForSlot,
+  allConfiguredChoices,
   resolveOpenRouterKey,
   savedOpenRouterKey,
 } from "@/lib/llm/config";
@@ -88,17 +88,20 @@ export async function verifyOpenRouter(): Promise<VerifyCheck> {
     return { ok: false, error: t("onboarding.verify.openrouterMissing") };
   }
 
-  const models = [...new Set([modelForSlot("fast"), modelForSlot("smart")])];
+  const choices = allConfiguredChoices();
+  const models = choices.map((c) => c.model);
   try {
     // Live check: never cached (feature policy), but its tokens are metered.
     const verify = async () => {
-      for (const model of models) {
+      // In parallel: detailed mode can pin a dozen features to different models.
+      await Promise.all(choices.map(async ({ model, effort }) => {
         try {
           await promptWithUsage({
             feature: "onboarding.verify",
             prompt: "Reply with exactly one word: pong. No other text.",
             apiKey,
             model,
+            reasoningEffort: effort,
             timeoutMs: 45_000,
             emptyError: (status) =>
               new NoResponseError(
@@ -110,7 +113,7 @@ export async function verifyOpenRouter(): Promise<VerifyCheck> {
             verifyModel: model,
           });
         }
-      }
+      }));
     };
     if (currentUsageRunId()) await verify();
     else await withUsageRunAsync(globalThis.crypto.randomUUID(), verify);

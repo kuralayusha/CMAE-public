@@ -38,6 +38,8 @@ export type PromptWithUsageInput = {
   bypassCache?: boolean;
   /** OpenRouter slug, e.g. `anthropic/claude-sonnet-5.5`. */
   model: string;
+  /** OpenRouter `reasoning.effort`; omitted/"" = model default. Part of the cache key. */
+  reasoningEffort?: string | null;
   /** Bump when the prompt template changes; part of the cache key. */
   promptVersion?: string | number;
   prompt: string;
@@ -183,7 +185,7 @@ export async function promptWithUsage(
   const cacheable = isCacheableFeature(input.feature);
   const key = cacheable
     ? cacheKey({
-        model,
+        model: input.reasoningEffort ? `${model}#${input.reasoningEffort}` : model,
         feature: input.feature,
         promptVersion: input.promptVersion,
         prompt: input.prompt,
@@ -296,6 +298,7 @@ export async function promptWithUsage(
     apiKey: input.apiKey,
     model,
     prompt: input.prompt,
+    reasoningEffort: input.reasoningEffort,
     signal: controller.signal,
     fetchImpl: input.fetchImpl,
   });

@@ -7,7 +7,14 @@ import {
 import { isTelemetryEnabled } from "@/lib/ai-usage/store";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
-import { DEFAULT_MODELS, type ModelSlot } from "@/lib/llm/slots";
+import {
+  DEFAULT_MODELS,
+  isEffort,
+  parseLlmOverrides,
+  type Effort,
+  type LlmOverrides,
+  type ModelSlot,
+} from "@/lib/llm/slots";
 import { notifyCredentialsChanged } from "@/lib/sync/credentials";
 import {
   DEFAULT_FOLLOW_UP_DAYS,
@@ -36,6 +43,11 @@ export type SettingsPublic = {
   /** False while the slot still uses the built-in default. */
   llmModelFastCustom: boolean;
   llmModelSmartCustom: boolean;
+  /** "" = the model's own default effort. */
+  llmEffortFast: Effort | "";
+  llmEffortSmart: Effort | "";
+  /** Detailed mode: per-feature model + effort; empty = every feature follows its slot. */
+  llmOverrides: LlmOverrides;
   cvFileName: string | null;
   hasCv: boolean;
   followUpDays: number;
@@ -57,6 +69,15 @@ export type SettingsPublic = {
 function slotOverride(raw: string, slot: ModelSlot): string | null {
   const v = raw.trim();
   return !v || v === DEFAULT_MODELS[slot] ? null : v;
+}
+
+function effortOrNull(raw: string): string | null {
+  return isEffort(raw.trim()) ? raw.trim() : null;
+}
+
+function overridesJson(raw: unknown): string | null {
+  const parsed = parseLlmOverrides(raw);
+  return Object.keys(parsed).length ? JSON.stringify(parsed) : null;
 }
 
 function hasDecryptableSecret(enc: string | null | undefined): boolean {
@@ -97,6 +118,9 @@ export function getPublicSettings(): SettingsPublic {
     llmModelSmart: row?.llmModelSmart?.trim() || DEFAULT_MODELS.smart,
     llmModelFastCustom: Boolean(row?.llmModelFast?.trim()),
     llmModelSmartCustom: Boolean(row?.llmModelSmart?.trim()),
+    llmEffortFast: isEffort(row?.llmEffortFast) ? row!.llmEffortFast as Effort : "",
+    llmEffortSmart: isEffort(row?.llmEffortSmart) ? row!.llmEffortSmart as Effort : "",
+    llmOverrides: parseLlmOverrides(row?.llmOverridesJson),
     cvFileName: row?.cvFileName ?? null,
     hasCv: Boolean(row?.cvText),
     followUpDays: row?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS,
@@ -120,6 +144,11 @@ export function updateSettings(input: {
   /** OpenRouter slug; "" resets the slot to the built-in default. */
   llmModelFast?: string;
   llmModelSmart?: string;
+  /** "" resets to the model's default effort. */
+  llmEffortFast?: string;
+  llmEffortSmart?: string;
+  /** Replaces all detailed-mode pins ({} clears them). */
+  llmOverrides?: unknown;
   followUpDays?: number;
   rejectionCloseDays?: number;
   staleCloseDays?: number;
@@ -179,6 +208,18 @@ export function updateSettings(input: {
       input.llmModelSmart !== undefined
         ? slotOverride(input.llmModelSmart, "smart")
         : current?.llmModelSmart,
+    llmEffortFast:
+      input.llmEffortFast !== undefined
+        ? effortOrNull(input.llmEffortFast)
+        : current?.llmEffortFast,
+    llmEffortSmart:
+      input.llmEffortSmart !== undefined
+        ? effortOrNull(input.llmEffortSmart)
+        : current?.llmEffortSmart,
+    llmOverridesJson:
+      input.llmOverrides !== undefined
+        ? overridesJson(input.llmOverrides)
+        : current?.llmOverridesJson,
     followUpDays:
       input.followUpDays ?? current?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS,
     rejectionCloseDays:

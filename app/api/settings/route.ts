@@ -153,6 +153,12 @@ export async function PUT(req: Request) {
     openrouterApiKey,
     llmModelFast: modelSlug(body.llmModelFast),
     llmModelSmart: modelSlug(body.llmModelSmart),
+    llmEffortFast: typeof body.llmEffortFast === "string" ? body.llmEffortFast : undefined,
+    llmEffortSmart: typeof body.llmEffortSmart === "string" ? body.llmEffortSmart : undefined,
+    llmOverrides:
+      body.llmOverrides && typeof body.llmOverrides === "object"
+        ? body.llmOverrides
+        : undefined,
     followUpDays: dayCheck?.ok ? dayCheck.followUpDays : undefined,
     rejectionCloseDays: dayCheck?.ok ? dayCheck.rejectionCloseDays : undefined,
     staleCloseDays: dayCheck?.ok ? dayCheck.staleCloseDays : undefined,

@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
 import { CvDropzone } from "@/components/CvDropzone";
 import { useI18n, useLocaleUpper } from "@/components/I18nProvider";
-import { LlmSettingsFields } from "@/components/LlmSettingsFields";
+import {
+  LLM_FORM_DEFAULTS,
+  LlmSettingsFields,
+  llmFormFromSettings,
+} from "@/components/LlmSettingsFields";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import { RichText } from "@/components/RichText";
 import { Button, Field } from "@/components/ui";
 import { APP_LANGUAGE, type LocalePack } from "@/lib/i18n/types";
-import { DEFAULT_MODELS } from "@/lib/llm/slots";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
 import "./onboarding.css";
 
@@ -116,8 +119,7 @@ export function OnboardingWizard() {
     gmailAddress: "",
     gmailAppPassword: "",
     openrouterApiKey: "",
-    llmModelFast: DEFAULT_MODELS.fast,
-    llmModelSmart: DEFAULT_MODELS.smart,
+    ...LLM_FORM_DEFAULTS,
     preferredLanguage: "en",
     emailSignature: "",
   });
@@ -168,8 +170,7 @@ export function OnboardingWizard() {
         setAiKeyFromEnv(Boolean(s.openrouterApiKeyFromEnv));
         setForm((f) => ({
           ...f,
-          llmModelFast: s.llmModelFast || f.llmModelFast,
-          llmModelSmart: s.llmModelSmart || f.llmModelSmart,
+          ...llmFormFromSettings(s),
         }));
         if (Array.isArray(data.cvs) && data.cvs.length) {
           setCvs(data.cvs);
@@ -242,6 +243,9 @@ export function OnboardingWizard() {
     }
     body.llmModelFast = f.llmModelFast;
     body.llmModelSmart = f.llmModelSmart;
+    body.llmEffortFast = f.llmEffortFast;
+    body.llmEffortSmart = f.llmEffortSmart;
+    body.llmOverrides = f.llmOverrides;
     const res = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -557,6 +561,9 @@ export function OnboardingWizard() {
             : {}),
           llmModelFast: snapshot.form.llmModelFast,
           llmModelSmart: snapshot.form.llmModelSmart,
+          llmEffortFast: snapshot.form.llmEffortFast,
+          llmEffortSmart: snapshot.form.llmEffortSmart,
+          llmOverrides: snapshot.form.llmOverrides,
         }),
       });
       const completeData = await completeRes.json();
@@ -960,6 +967,9 @@ export function OnboardingWizard() {
                   openrouterApiKey: form.openrouterApiKey,
                   llmModelFast: form.llmModelFast,
                   llmModelSmart: form.llmModelSmart,
+                  llmEffortFast: form.llmEffortFast,
+                  llmEffortSmart: form.llmEffortSmart,
+                  llmOverrides: form.llmOverrides,
                 }}
                 onChange={(v) => setForm((f) => ({ ...f, ...v }))}
                 hasKey={hasAiKey}

@@ -1,5 +1,5 @@
 import { t } from "@/lib/i18n/t";
-import { modelForFeature, resolveOpenRouterKey } from "@/lib/llm/config";
+import { llmForFeature, modelForFeature, resolveOpenRouterKey } from "@/lib/llm/config";
 import "@/lib/ai-usage"; // registers the usage/cache backend
 import type { AiFeature, SyncMode } from "@/lib/ai-usage/features";
 import { promptLlm, TRACKER_LLM_TIMEOUT_MS } from "./llm-core";
@@ -23,11 +23,13 @@ export async function askTrackerLlm(
   opts: TrackerLlmOpts,
 ): Promise<string> {
   const apiKey = resolveOpenRouterKey();
+  const choice = llmForFeature(opts.feature);
   return promptLlm({
     ...opts,
     prompt,
     apiKey,
-    model: modelForFeature(opts.feature),
+    model: choice.model,
+    reasoningEffort: choice.effort,
     timeoutMs: TRACKER_LLM_TIMEOUT_MS,
     timeoutError: () =>
       new Error(

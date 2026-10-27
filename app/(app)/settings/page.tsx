@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { CvDropzone } from "@/components/CvDropzone";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
-import { LlmSettingsFields } from "@/components/LlmSettingsFields";
+import { LlmSettingsFields, llmFormFromSettings } from "@/components/LlmSettingsFields";
+import type { Effort, LlmOverrides } from "@/lib/llm/slots";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import {
   useOperations,
@@ -46,6 +47,9 @@ type Settings = {
   openrouterApiKeyFromEnv?: boolean;
   llmModelFast: string;
   llmModelSmart: string;
+  llmEffortFast?: Effort | "";
+  llmEffortSmart?: Effort | "";
+  llmOverrides?: LlmOverrides;
   cvFileName: string | null;
   hasCv: boolean;
   followUpDays: number;
@@ -125,8 +129,7 @@ export default function SettingsPage() {
     gmailAddress: "",
     gmailAppPassword: "",
     openrouterApiKey: "",
-    llmModelFast: "",
-    llmModelSmart: "",
+    ...llmFormFromSettings({}),
     followUpDays: DEFAULT_FOLLOW_UP_DAYS,
     rejectionCloseDays: DEFAULT_REJECTION_CLOSE_DAYS,
     staleCloseDays: DEFAULT_STALE_CLOSE_DAYS,
@@ -252,8 +255,7 @@ export default function SettingsPage() {
       ...f,
       fullName: data.fullName || "",
       gmailAddress: data.gmailAddress || "",
-      llmModelFast: data.llmModelFast || "",
-      llmModelSmart: data.llmModelSmart || "",
+      ...llmFormFromSettings(data),
       followUpDays: data.followUpDays || DEFAULT_FOLLOW_UP_DAYS,
       rejectionCloseDays:
         data.rejectionCloseDays || DEFAULT_REJECTION_CLOSE_DAYS,
@@ -332,9 +334,16 @@ export default function SettingsPage() {
     flash(null);
     const prevLang = (meta?.preferredLanguage || "en").toLowerCase();
     const nextLang = form.preferredLanguage.trim().toLowerCase();
+    const saved = llmFormFromSettings(meta ?? {});
     const llmModelsChanged =
-      form.llmModelFast.trim() !== (meta?.llmModelFast ?? "") ||
-      form.llmModelSmart.trim() !== (meta?.llmModelSmart ?? "");
+      JSON.stringify([
+        form.llmModelFast.trim(), form.llmModelSmart.trim(),
+        form.llmEffortFast, form.llmEffortSmart, form.llmOverrides,
+      ]) !==
+      JSON.stringify([
+        saved.llmModelFast, saved.llmModelSmart,
+        saved.llmEffortFast, saved.llmEffortSmart, saved.llmOverrides,
+      ]);
     try {
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -363,8 +372,7 @@ export default function SettingsPage() {
         ...f,
         gmailAppPassword: "",
         openrouterApiKey: "",
-        llmModelFast: data.llmModelFast || "",
-        llmModelSmart: data.llmModelSmart || "",
+        ...llmFormFromSettings(data),
       }));
 
       // Live-check the key + both models right after a change, so a typo shows
@@ -618,6 +626,9 @@ export default function SettingsPage() {
                 openrouterApiKey: form.openrouterApiKey,
                 llmModelFast: form.llmModelFast,
                 llmModelSmart: form.llmModelSmart,
+                llmEffortFast: form.llmEffortFast,
+                llmEffortSmart: form.llmEffortSmart,
+                llmOverrides: form.llmOverrides,
               }}
               onChange={(v) => setForm((f) => ({ ...f, ...v }))}
               hasKey={Boolean(meta?.hasOpenrouterApiKey)}

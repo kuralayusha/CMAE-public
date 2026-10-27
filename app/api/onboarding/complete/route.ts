@@ -35,6 +35,14 @@ export async function POST(req: Request) {
           typeof body.llmModelFast === "string" ? body.llmModelFast : undefined,
         llmModelSmart:
           typeof body.llmModelSmart === "string" ? body.llmModelSmart : undefined,
+        llmEffortFast:
+          typeof body.llmEffortFast === "string" ? body.llmEffortFast : undefined,
+        llmEffortSmart:
+          typeof body.llmEffortSmart === "string" ? body.llmEffortSmart : undefined,
+        llmOverrides:
+          body.llmOverrides && typeof body.llmOverrides === "object"
+            ? body.llmOverrides
+            : undefined,
         preferredLanguage:
           typeof body.preferredLanguage === "string"
             ? body.preferredLanguage

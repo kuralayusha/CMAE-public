@@ -57,6 +57,8 @@ export type OpenRouterChatInput = {
   prompt: string;
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  /** `reasoning.effort`; omitted = the model's own default. */
+  reasoningEffort?: string | null;
   /** Retries for 429 / 5xx / network errors (not for 4xx). Default 2. */
   retries?: number;
 };
@@ -136,6 +138,9 @@ export async function openRouterChat(
           model: input.model,
           messages: [{ role: "user", content: input.prompt }],
           stream: false,
+          ...(input.reasoningEffort
+            ? { reasoning: { effort: input.reasoningEffort } }
+            : {}),
         }),
         signal: input.signal,
       });
@@ -178,6 +183,12 @@ export type OpenRouterModel = {
   promptPerM: number | null;
   completionPerM: number | null;
   free: boolean;
+  /** Unix seconds; newest-first ordering inside a model family. */
+  created: number | null;
+  /** `reasoning.effort` values the model accepts; null = no effort control. */
+  efforts: string[] | null;
+  /** True when the model always reasons (effort "none" is not offered). */
+  reasoningMandatory: boolean;
 };
 
 const perM = (v: unknown): number | null => {
@@ -185,7 +196,37 @@ const perM = (v: unknown): number | null => {
   return Number.isFinite(n) && n >= 0 ? Math.round(n * 1e6 * 1e4) / 1e4 : null;
 };
 
-/** Public catalog (no key needed). Text-output models only. */
+/** Names that are text-out on paper but are not chat models for this app. */
+const NOT_CHAT = /(guard|embed|moderat|whisper|voxtral|tts\b|transcri|safeguard|rerank|speech|audio|image|vision|omni|-vl\b)/i;
+
+/**
+ * Text → text chat models only. Output must be exactly text (no image/audio
+ * output), input must accept text, and aliases/routers, batch/free/variant
+ * suffixes (`:batch`, `:free`, …), expired and non-chat models are dropped.
+ */
+export function isTextChatModel(m: Record<string, unknown>): boolean {
+  const id = typeof m.id === "string" ? m.id : "";
+  if (!id || id.startsWith("~") || id.startsWith("openrouter/") || id.includes(":")) {
+    return false;
+  }
+  const arch = (m.architecture ?? {}) as {
+    input_modalities?: string[];
+    output_modalities?: string[];
+  };
+  const out = arch.output_modalities;
+  if (!Array.isArray(out) || out.length !== 1 || out[0] !== "text") return false;
+  if (Array.isArray(arch.input_modalities) && !arch.input_modalities.includes("text")) {
+    return false;
+  }
+  if (NOT_CHAT.test(id) || NOT_CHAT.test(typeof m.name === "string" ? m.name : "")) {
+    return false;
+  }
+  const exp = typeof m.expiration_date === "string" ? Date.parse(m.expiration_date) : NaN;
+  if (Number.isFinite(exp) && exp < Date.now()) return false;
+  return true;
+}
+
+/** Public catalog (no key needed), filtered by {@link isTextChatModel}. */
 export async function fetchOpenRouterModels(
   fetchImpl: typeof fetch = fetch,
   signal?: AbortSignal,
@@ -198,20 +239,30 @@ export async function fetchOpenRouterModels(
   const body = (await res.json()) as { data?: Array<Record<string, unknown>> };
   const out: OpenRouterModel[] = [];
   for (const m of body.data ?? []) {
-    const id = typeof m.id === "string" ? m.id : "";
-    if (!id) continue;
-    const arch = (m.architecture ?? {}) as { output_modalities?: string[] };
-    if (arch.output_modalities && !arch.output_modalities.includes("text")) continue;
+    if (!isTextChatModel(m)) continue;
+    const id = m.id as string;
     const pricing = (m.pricing ?? {}) as Record<string, unknown>;
     const promptPerM = perM(pricing.prompt);
     const completionPerM = perM(pricing.completion);
+    const rsn = (m.reasoning ?? null) as {
+      mandatory?: boolean;
+      supported_efforts?: unknown;
+    } | null;
+    const efforts = Array.isArray(rsn?.supported_efforts)
+      ? (rsn!.supported_efforts as unknown[]).filter(
+          (e): e is string => typeof e === "string",
+        )
+      : [];
     out.push({
       id,
       name: typeof m.name === "string" && m.name ? m.name : id,
       contextLength: typeof m.context_length === "number" ? m.context_length : null,
       promptPerM,
       completionPerM,
-      free: id.endsWith(":free") || (promptPerM === 0 && completionPerM === 0),
+      free: promptPerM === 0 && completionPerM === 0,
+      created: typeof m.created === "number" ? m.created : null,
+      efforts: efforts.length ? efforts : null,
+      reasoningMandatory: Boolean(rsn?.mandatory),
     });
   }
   return out.sort((a, b) => a.id.localeCompare(b.id));

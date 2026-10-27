@@ -2,31 +2,63 @@
 
 import { useEffect, useState } from "react";
 import { useT } from "@/components/I18nProvider";
+import { ModelPicker } from "@/components/ModelPicker";
 import { Field } from "@/components/ui";
-import { DEFAULT_MODELS, type ModelSlot } from "@/lib/llm/slots";
-
-type CatalogModel = {
-  id: string;
-  name: string;
-  contextLength: number | null;
-  promptPerM: number | null;
-  completionPerM: number | null;
-  free: boolean;
-};
+import { PROVIDERS, recommendationFor, shortName } from "@/lib/llm/catalog";
+import type { OpenRouterModel } from "@/lib/llm/openrouter";
+import {
+  DEFAULT_MODELS,
+  TUNABLE_FEATURES,
+  slotForFeature,
+  type Effort,
+  type LlmChoice,
+  type LlmOverrides,
+  type ModelSlot,
+} from "@/lib/llm/slots";
 
 export type LlmFormValue = {
   openrouterApiKey: string;
   llmModelFast: string;
   llmModelSmart: string;
+  llmEffortFast: Effort | "";
+  llmEffortSmart: Effort | "";
+  /** Detailed mode: features pinned to their own model; absent = follows the slot. */
+  llmOverrides: LlmOverrides;
 };
 
-let catalogPromise: Promise<CatalogModel[]> | null = null;
+/** Initial form state before settings load (the built-in models, no pins). */
+export const LLM_FORM_DEFAULTS: Omit<LlmFormValue, "openrouterApiKey"> = {
+  llmModelFast: DEFAULT_MODELS.fast,
+  llmModelSmart: DEFAULT_MODELS.smart,
+  llmEffortFast: "",
+  llmEffortSmart: "",
+  llmOverrides: {},
+};
+
+/** Pick the LLM fields out of a GET/PUT /api/settings response. */
+export function llmFormFromSettings(s: {
+  llmModelFast?: string;
+  llmModelSmart?: string;
+  llmEffortFast?: Effort | "";
+  llmEffortSmart?: Effort | "";
+  llmOverrides?: LlmOverrides;
+}): Omit<LlmFormValue, "openrouterApiKey"> {
+  return {
+    llmModelFast: s.llmModelFast || DEFAULT_MODELS.fast,
+    llmModelSmart: s.llmModelSmart || DEFAULT_MODELS.smart,
+    llmEffortFast: s.llmEffortFast ?? "",
+    llmEffortSmart: s.llmEffortSmart ?? "",
+    llmOverrides: s.llmOverrides ?? {},
+  };
+}
+
+let catalogPromise: Promise<OpenRouterModel[]> | null = null;
 
 /** One fetch per page load; a failure is not cached so the next mount retries. */
-function loadCatalog(): Promise<CatalogModel[]> {
+function loadCatalog(): Promise<OpenRouterModel[]> {
   catalogPromise ??= fetch("/api/llm/models")
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-    .then((d: { models?: CatalogModel[] }) => d.models ?? [])
+    .then((d: { models?: OpenRouterModel[] }) => d.models ?? [])
     .catch((err) => {
       catalogPromise = null;
       throw err;
@@ -34,20 +66,13 @@ function loadCatalog(): Promise<CatalogModel[]> {
   return catalogPromise;
 }
 
-const usd = (n: number | null) =>
-  n == null ? "?" : `$${n < 0.01 ? n.toFixed(4) : n.toFixed(2)}`;
-
-const SLOTS: ModelSlot[] = ["fast", "smart"];
-const FIELD: Record<ModelSlot, keyof LlmFormValue> = {
-  fast: "llmModelFast",
-  smart: "llmModelSmart",
-};
+/** "research.writer" → "researchWriter" (i18n key under llm.features). */
+const featureKey = (f: string) => f.replace(/\.(\w)/g, (_, c: string) => c.toUpperCase());
 
 /**
- * OpenRouter key + the two model slots. Shared by the onboarding wizard and
- * Settings; the parent owns the state and sends it to PUT /api/settings.
- * Model inputs are free text with a searchable catalog (<datalist>), so a
- * model missing from the catalog can still be typed in.
+ * OpenRouter key + the two model slots (+ optional per-feature "detailed
+ * mode"). Shared by the onboarding wizard and Settings; the parent owns the
+ * state and sends it to PUT /api/settings.
  */
 export function LlmSettingsFields({
   value,
@@ -61,33 +86,57 @@ export function LlmSettingsFields({
   keyFromEnv: boolean;
 }) {
   const t = useT();
-  const [catalog, setCatalog] = useState<CatalogModel[] | null>(null);
-  const [catalogFailed, setCatalogFailed] = useState(false);
+  const [catalog, setCatalog] = useState<OpenRouterModel[] | null>(null);
+  const [detailed, setDetailed] = useState(Object.keys(value.llmOverrides).length > 0);
 
   useEffect(() => {
     let alive = true;
     loadCatalog()
       .then((m) => alive && setCatalog(m))
-      .catch(() => alive && setCatalogFailed(true));
+      .catch(() => {
+        /* picker degrades to a plain slug field */
+      });
     return () => {
       alive = false;
     };
   }, []);
 
-  const byId = new Map((catalog ?? []).map((m) => [m.id, m]));
+  const slotChoice = (slot: ModelSlot): LlmChoice =>
+    slot === "fast"
+      ? { model: value.llmModelFast, effort: value.llmEffortFast }
+      : { model: value.llmModelSmart, effort: value.llmEffortSmart };
 
-  function modelNote(slot: ModelSlot): string {
-    const id = value[FIELD[slot]].trim();
-    if (!id) return t("fields.llmModelEmpty", { model: DEFAULT_MODELS[slot] });
-    if (!catalog) return catalogFailed ? t("fields.llmCatalogFailed") : "";
-    const m = byId.get(id);
-    if (!m) return t("fields.llmModelUnknown");
-    const price = t("fields.llmModelPrice", {
-      prompt: usd(m.promptPerM),
-      completion: usd(m.completionPerM),
+  const setSlot = (slot: ModelSlot, c: LlmChoice) =>
+    onChange(
+      slot === "fast"
+        ? { ...value, llmModelFast: c.model, llmEffortFast: c.effort }
+        : { ...value, llmModelSmart: c.model, llmEffortSmart: c.effort },
+    );
+
+  function quickSetup(providerId: string) {
+    const fast = recommendationFor(providerId, "fast", catalog);
+    const smart = recommendationFor(providerId, "smart", catalog);
+    if (!fast || !smart) return;
+    onChange({
+      ...value,
+      llmModelFast: fast.model,
+      llmEffortFast: fast.effort,
+      llmModelSmart: smart.model,
+      llmEffortSmart: smart.effort,
     });
-    return m.free ? `${price} · ${t("fields.llmModelFree")}` : price;
   }
+
+  function setOverride(feature: (typeof TUNABLE_FEATURES)[number]["feature"], c: LlmChoice | null) {
+    const next = { ...value.llmOverrides };
+    if (c) next[feature] = c;
+    else delete next[feature];
+    onChange({ ...value, llmOverrides: next });
+  }
+
+  const nameOf = (id: string) => {
+    const m = catalog?.find((x) => x.id === id);
+    return m ? shortName(m.name) : id;
+  };
 
   const keyHint = hasKey
     ? t("fields.openrouterKeySaved")
@@ -108,34 +157,117 @@ export function LlmSettingsFields({
         />
       </Field>
 
-      {SLOTS.map((slot) => (
-        <Field
-          key={slot}
-          label={t(slot === "fast" ? "fields.llmModelFast" : "fields.llmModelSmart")}
-          hint={`${t(
-            slot === "fast" ? "fields.llmModelFastHint" : "fields.llmModelSmartHint",
-          )}${modelNote(slot) ? ` — ${modelNote(slot)}` : ""}`}
+      <Field label={t("llm.quickSetup")} hint={t("llm.quickSetupHint")}>
+        <select
+          className="cmae-input"
+          value=""
+          disabled={!catalog}
+          onChange={(e) => e.target.value && quickSetup(e.target.value)}
         >
-          <input
-            className="cmae-input"
-            type="text"
-            list="cmae-llm-models"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={DEFAULT_MODELS[slot]}
-            value={value[FIELD[slot]]}
-            onChange={(e) => onChange({ ...value, [FIELD[slot]]: e.target.value })}
+          <option value="">{t("llm.quickSetupPick")}</option>
+          {PROVIDERS.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {(["fast", "smart"] as const).map((slot) => (
+        <div key={slot} className="cmae-llm-block">
+          <div>
+            <span className="cmae-field-label">
+              {t(slot === "fast" ? "fields.llmModelFast" : "fields.llmModelSmart")}
+            </span>
+            <p className="cmae-field-hint">
+              {t(slot === "fast" ? "fields.llmModelFastHint" : "fields.llmModelSmartHint")}
+            </p>
+          </div>
+          <ModelPicker
+            catalog={catalog}
+            slot={slot}
+            value={slotChoice(slot)}
+            onChange={(c) => setSlot(slot, c)}
           />
-        </Field>
+        </div>
       ))}
 
-      <datalist id="cmae-llm-models">
-        {(catalog ?? []).map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.name}
-          </option>
-        ))}
-      </datalist>
+      <div className="cmae-llm-block">
+        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={detailed}
+            onChange={(e) => {
+              setDetailed(e.target.checked);
+              // Switching it off must not leave hidden pins that still apply.
+              if (!e.target.checked && Object.keys(value.llmOverrides).length) {
+                onChange({ ...value, llmOverrides: {} });
+              }
+            }}
+          />
+          <span className="cmae-field-label">{t("llm.detailedMode")}</span>
+        </label>
+        <p className="cmae-field-hint">{t("llm.detailedModeHint")}</p>
+
+        {detailed
+          ? (["research", "tracker"] as const).map((group) => (
+              <div key={group}>
+                <span className="cmae-field-label">{t(`llm.groups.${group}`)}</span>
+                {TUNABLE_FEATURES.filter((f) => f.group === group).map(({ feature }) => {
+                  const pin = value.llmOverrides[feature];
+                  const slot = slotForFeature(feature);
+                  const slotModel = slotChoice(slot).model;
+                  return (
+                    <div key={feature} className="cmae-llm-feature">
+                      <div className="cmae-llm-feature-head">
+                        <div>
+                          <strong>{t(`llm.features.${featureKey(feature)}`)}</strong>
+                          <p className="cmae-field-hint">
+                            {t(`llm.features.${featureKey(feature)}Hint`)}
+                          </p>
+                        </div>
+                        {pin ? (
+                          <button
+                            type="button"
+                            className="cmae-btn cmae-btn-ghost"
+                            onClick={() => setOverride(feature, null)}
+                          >
+                            {t("llm.followSlot")}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="cmae-btn cmae-btn-ghost"
+                            onClick={() => setOverride(feature, slotChoice(slot))}
+                          >
+                            {t("llm.customize")}
+                          </button>
+                        )}
+                      </div>
+                      {pin ? (
+                        <ModelPicker
+                          catalog={catalog}
+                          slot={slot}
+                          value={pin}
+                          onChange={(c) => setOverride(feature, c)}
+                        />
+                      ) : (
+                        <p className="cmae-field-hint">
+                          {t("llm.followsSlot", {
+                            slot: t(
+                              slot === "fast" ? "fields.llmModelFast" : "fields.llmModelSmart",
+                            ),
+                            model: nameOf(slotModel),
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))
+          : null}
+      </div>
     </>
   );
 }

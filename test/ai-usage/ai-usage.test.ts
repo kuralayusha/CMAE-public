@@ -37,8 +37,16 @@ import {
 import { MIGRATIONS } from "../../lib/db/migrations";
 import { migration017OpenRouter } from "../../lib/db/migrations/017_openrouter";
 import { mapPool } from "../../lib/i18n/pool";
-import { fetchOpenRouterModels } from "../../lib/llm/openrouter";
-import { DEFAULT_MODELS, isPlausibleModelId, slotForFeature } from "../../lib/llm/slots";
+import { fetchOpenRouterModels, openRouterChat } from "../../lib/llm/openrouter";
+import {
+  PROVIDERS,
+  RECOMMENDED,
+  effortFor,
+  familiesFor,
+  familyLabel,
+  recommendationFor,
+} from "../../lib/llm/catalog";
+import { DEFAULT_MODELS, isPlausibleModelId, parseLlmOverrides, slotForFeature } from "../../lib/llm/slots";
 
 let dir: string;
 let db: Database.Database;
@@ -711,21 +719,106 @@ describe("models: report, migration, slots", () => {
     for (const bad of ["", "gpt", "a/b c", "../x/y", 5, null]) assert.equal(isPlausibleModelId(bad), false, String(bad));
   });
 
-  it("catalog parsing: text models only, $/1M prices, free flag", async () => {
+  it("catalog parsing: text→text chat models only, $/1M prices, efforts", async () => {
+    const t = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      name: id,
+      architecture: { input_modalities: ["text"], output_modalities: ["text"] },
+      pricing: { prompt: "0.000001", completion: "0.000005" },
+      ...extra,
+    });
     const body = {
       data: [
-        { id: "b/paid", name: "Paid", context_length: 1000, architecture: { output_modalities: ["text"] }, pricing: { prompt: "0.000001", completion: "0.000005" } },
-        { id: "a/free:free", name: "Free", architecture: { output_modalities: ["text"] }, pricing: { prompt: "0", completion: "0" } },
-        { id: "c/image", name: "Img", architecture: { output_modalities: ["image"] }, pricing: { prompt: "0.1", completion: "0.1" } },
+        t("b/paid", {
+          name: "B: Paid 2",
+          context_length: 1000,
+          created: 5,
+          reasoning: { mandatory: true, supported_efforts: ["low", "high"] },
+        }),
+        t("a/free:free"), // variant suffix
+        t("a/batch:batch"),
+        t("c/image", { architecture: { output_modalities: ["image"] } }),
+        t("c/image-and-text", { architecture: { input_modalities: ["text"], output_modalities: ["image", "text"] } }),
+        t("c/voice", { architecture: { input_modalities: ["text"], output_modalities: ["text", "audio"] } }),
+        t("c/no-text-in", { architecture: { input_modalities: ["image"], output_modalities: ["text"] } }),
+        t("c/llama-guard-4"),
+        t("c/whisper-large"),
+        t("~c/alias-latest"),
+        t("openrouter/auto"),
+        t("c/old", { expiration_date: "2020-01-01" }),
+        t("d/multimodal-in", { architecture: { input_modalities: ["text", "image", "audio"], output_modalities: ["text"] } }),
       ],
     };
     const f = (async () => new Response(JSON.stringify(body))) as typeof fetch;
     const models = await fetchOpenRouterModels(f);
-    assert.deepEqual(models.map((m) => m.id), ["a/free:free", "b/paid"]);
-    assert.equal(models[1]!.promptPerM, 1);
-    assert.equal(models[1]!.completionPerM, 5);
-    assert.equal(models[0]!.free, true);
-    assert.equal(models[1]!.free, false);
+    assert.deepEqual(models.map((m) => m.id), ["b/paid", "d/multimodal-in"]);
+    const paid = models[0]!;
+    assert.equal(paid.promptPerM, 1);
+    assert.equal(paid.completionPerM, 5);
+    assert.equal(paid.free, false);
+    assert.deepEqual(paid.efforts, ["low", "high"]);
+    assert.equal(paid.reasoningMandatory, true);
+    assert.equal(models[1]!.efforts, null);
+  });
+
+  it("reasoning effort: sent only when set, and part of the cache key", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const f = (async (_u: unknown, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }));
+    }) as typeof fetch;
+    await openRouterChat({ apiKey: "k", model: "a/m", prompt: "p", fetchImpl: f });
+    await openRouterChat({ apiKey: "k", model: "a/m", prompt: "p", reasoningEffort: "high", fetchImpl: f });
+    assert.equal("reasoning" in bodies[0]!, false);
+    assert.deepEqual(bodies[1]!.reasoning, { effort: "high" });
+    const k = (model: string) => cacheKey({ model, feature: "tracker.sync.triage", prompt: "p" });
+    assert.notEqual(k("a/m"), k("a/m#high"));
+  });
+
+  it("detailed-mode overrides: tolerant parse, unknown features / bad models dropped", () => {
+    const parsed = parseLlmOverrides(
+      JSON.stringify({
+        "research.writer": { model: "anthropic/claude-opus-5.5", effort: "high" },
+        "tracker.followup": { model: "openai/gpt-6.1-terra", effort: "bogus" },
+        "not.a.feature": { model: "a/b", effort: "low" },
+        "research.scout": { model: "no-slash", effort: "low" },
+      }),
+    );
+    assert.deepEqual(parsed, {
+      "research.writer": { model: "anthropic/claude-opus-5.5", effort: "high" },
+      "tracker.followup": { model: "openai/gpt-6.1-terra", effort: "" },
+    });
+    assert.deepEqual(parseLlmOverrides("{not json"), {});
+    assert.deepEqual(parseLlmOverrides(null), {});
+    assert.deepEqual(parseLlmOverrides([1]), {});
+  });
+
+  it("picker: families group by tier, recommendations need the model in the catalog", () => {
+    const m = (id: string, name: string, created: number, efforts: string[] | null = null) => ({
+      id, name, created, efforts, contextLength: null, promptPerM: 1, completionPerM: 2,
+      free: false, reasoningMandatory: false,
+    });
+    const day = 86400;
+    const cat = [
+      m("anthropic/claude-sonnet-5", "Anthropic: Claude Sonnet 5", 300 * day),
+      m("anthropic/claude-sonnet-5.5", "Anthropic: Claude Sonnet 5.5", 500 * day, ["low", "medium"]),
+      m("anthropic/claude-haiku-5.5", "Anthropic: Claude Haiku 5.5", 490 * day),
+      m("anthropic/claude-opus-4", "Anthropic: Claude Opus 4", 1 * day), // >9 months behind newest → older
+    ];
+    const fams = familiesFor("anthropic", cat);
+    assert.deepEqual(fams.map((f) => f.label), ["Claude Sonnet", "Claude Haiku", ""]);
+    assert.equal(fams[0]!.models[0]!.id, "anthropic/claude-sonnet-5.5"); // newest first
+    assert.equal(fams[2]!.older, true);
+    assert.equal(familyLabel("Google: Gemini 3.5 Flash Lite"), "Gemini Flash Lite");
+    assert.equal(familyLabel("Qwen: Qwen3.8 Max (preview)"), "Qwen Max");
+    assert.deepEqual(recommendationFor("anthropic", "smart", cat), {
+      model: "anthropic/claude-sonnet-5.5",
+      effort: "medium",
+    });
+    // model gone from the catalog → no recommendation; unsupported effort → model default
+    assert.equal(recommendationFor("openai", "smart", cat), null);
+    assert.equal(effortFor(cat[1], "high"), "");
+    for (const p of PROVIDERS) assert.ok(RECOMMENDED[p.id], p.id);
   });
 });
 

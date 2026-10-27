@@ -19,6 +19,11 @@ export const settings = sqliteTable("settings", {
   /** OpenRouter slugs for the two model slots; null = built-in default. */
   llmModelFast: text("llm_model_fast"),
   llmModelSmart: text("llm_model_smart"),
+  /** Reasoning effort per slot; null = the model's default. */
+  llmEffortFast: text("llm_effort_fast"),
+  llmEffortSmart: text("llm_effort_smart"),
+  /** JSON {feature: {model, effort}} from "detailed mode"; null = none. */
+  llmOverridesJson: text("llm_overrides_json"),
   cvText: text("cv_text"),
   cvFileName: text("cv_file_name"),
   followUpDays: integer("follow_up_days").notNull().default(7),

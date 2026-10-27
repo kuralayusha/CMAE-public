@@ -131,5 +131,11 @@
   "fields.llmModelSmart": "FIELD label: the stronger AI model slot used for writing. A noun phrase, not a verb.",
   "fields.llmModelPrice": "Price note under a model field. {prompt} and {completion} are already formatted dollar amounts and MUST stay unchanged.",
   "fields.llmModelEmpty": "Note under an empty model field. {model} is a model id and MUST stay unchanged.",
-  "settings.accAi": "Settings section title for the AI provider (OpenRouter) key and model choice. Keep the product name OpenRouter."
+  "settings.accAi": "Settings section title for the AI provider (OpenRouter) key and model choice. Keep the product name OpenRouter.",
+  "llm.model": "LABEL noun above a dropdown: the exact version of an AI model (e.g. 5.5 vs 5). Not a verb.",
+  "llm.family": "LABEL noun above a dropdown: the model line / tier of one AI company (e.g. Opus, Sonnet, Flash). Not a verb.",
+  "llm.effort": "LABEL noun: how much the AI model thinks before answering (reasoning effort).",
+  "llm.customize": "BUTTON imperative: pick a separate model for this one step instead of the default.",
+  "llm.followSlot": "BUTTON imperative: stop using a separate model for this step and use the default model again.",
+  "llm.useRecommended": "BUTTON imperative: apply the recommended model shown next to it."
 }
