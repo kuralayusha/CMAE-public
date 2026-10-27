@@ -50,9 +50,9 @@ never a guessed price. The remote table (`CMAE_USAGE_PRICES_URL`, refreshed
 daily, cached in `app_meta.ai_prices_json`) only matters for that fallback and
 for pre-OpenRouter `composer-2.5` rows.
 
-## Local store (migrations `012_ai_usage`, `014_ai_usage_run_id`, `016_openrouter`)
+## Local store (migrations `012_ai_usage`, `014_ai_usage_run_id`, `017_openrouter`)
 - `ai_usage_events`: counters + labels only, doubles as the upload queue
-  (`uploaded_at`). `model` is the OpenRouter slug. Migration 016 labels rows
+  (`uploaded_at`). `model` is the OpenRouter slug. Migration 017 labels rows
   with an empty model `composer-2.5` (everything before OpenRouter).
   `run_id` groups many LLM calls into one UI-level run (sync job id, research
   job id, or a translate-batch UUID). Kept across account switch; removed only

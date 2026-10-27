@@ -33,7 +33,7 @@ export type PriceTable = {
 
 /**
  * Model of every event recorded before the OpenRouter migration (Cursor SDK).
- * Old rows are backfilled with it (migration 016); the price row keeps their
+ * Old rows are backfilled with it (migration 017); the price row keeps their
  * historical cost recomputable.
  */
 export const LEGACY_MODEL = "composer-2.5";

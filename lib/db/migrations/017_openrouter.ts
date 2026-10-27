@@ -8,9 +8,13 @@ import type { Migration } from "./types";
  * - Every usage row written before this migration came from the Cursor SDK;
  *   rows with an empty model are labelled `composer-2.5`.
  * Additive otherwise.
+ *
+ * Numbered 17 on purpose: `feature/filler-assisted-apply` owns 016_filler, and
+ * databases that ever ran that branch already have version 16 recorded — a
+ * second 016 would be skipped as "already applied" and the columns never created.
  */
-export const migration016OpenRouter: Migration = {
-  version: 16,
+export const migration017OpenRouter: Migration = {
+  version: 17,
   name: "openrouter",
   up(db) {
     const cols = new Set(

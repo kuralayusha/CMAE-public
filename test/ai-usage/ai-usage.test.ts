@@ -35,7 +35,7 @@ import {
   uploaderBackoffUntil,
 } from "../../lib/ai-usage/uploader";
 import { MIGRATIONS } from "../../lib/db/migrations";
-import { migration016OpenRouter } from "../../lib/db/migrations/016_openrouter";
+import { migration017OpenRouter } from "../../lib/db/migrations/017_openrouter";
 import { mapPool } from "../../lib/i18n/pool";
 import { fetchOpenRouterModels } from "../../lib/llm/openrouter";
 import { DEFAULT_MODELS, isPlausibleModelId, slotForFeature } from "../../lib/llm/slots";
@@ -685,12 +685,12 @@ describe("models: report, migration, slots", () => {
     ]);
   });
 
-  it("migration 016 labels old rows composer-2.5 and drops the Cursor secret", () => {
+  it("migration 017 labels old rows composer-2.5 and drops the Cursor secret", () => {
     insert("old", "", "research.writer", 10, null);
     insert("new", "x/y", "research.writer", 10, null);
     db.prepare(`INSERT OR IGNORE INTO settings (id) VALUES (1)`).run();
     db.prepare(`UPDATE settings SET cursor_api_key_enc = 'secret' WHERE id = 1`).run();
-    migration016OpenRouter.up(db); // idempotent re-run
+    migration017OpenRouter.up(db); // idempotent re-run
     const models = db.prepare(`SELECT event_id, model FROM ai_usage_events ORDER BY event_id`).all();
     assert.deepEqual(models, [
       { event_id: "new", model: "x/y" },
