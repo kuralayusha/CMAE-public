@@ -5,7 +5,7 @@ import {
   isOnboardingComplete,
   markOnboardingComplete,
 } from "@/lib/onboarding/status";
-import { persistEnvCursorKeyIfNeeded } from "@/lib/onboarding/verify";
+import { persistEnvOpenRouterKeyIfNeeded } from "@/lib/onboarding/verify";
 import { getGmailCredentials, updateSettings } from "@/lib/settings/service";
 import { wakeScheduler } from "@/lib/sync/scheduler";
 
@@ -27,8 +27,14 @@ export async function POST(req: Request) {
           typeof body.gmailAppPassword === "string"
             ? body.gmailAppPassword
             : undefined,
-        cursorApiKey:
-          typeof body.cursorApiKey === "string" ? body.cursorApiKey : undefined,
+        openrouterApiKey:
+          typeof body.openrouterApiKey === "string"
+            ? body.openrouterApiKey
+            : undefined,
+        llmModelFast:
+          typeof body.llmModelFast === "string" ? body.llmModelFast : undefined,
+        llmModelSmart:
+          typeof body.llmModelSmart === "string" ? body.llmModelSmart : undefined,
         preferredLanguage:
           typeof body.preferredLanguage === "string"
             ? body.preferredLanguage
@@ -46,8 +52,8 @@ export async function POST(req: Request) {
       });
     }
 
-    // Env-only Cursor key would leave a gap after restart / packaged app
-    persistEnvCursorKeyIfNeeded();
+    // Env-only OpenRouter key would leave a gap after restart / packaged app
+    persistEnvOpenRouterKeyIfNeeded();
 
     const gaps = getOnboardingGaps();
     if (gaps.length) {

@@ -1,0 +1,14 @@
+# The Vercel site is the download landing + API host only. Desktop build
+# outputs and local runtime data must never be uploaded (CLI deploys ignore
+# .gitignore, and these dirs exceed the 100 MB upload limit).
+/dist-desktop
+/desktop-resources
+/desktop-pack
+/.desktop-data
+/data
+/workspace
+/.next
+/node_modules
+.env*
+!.env.example
+*.tsbuildinfo

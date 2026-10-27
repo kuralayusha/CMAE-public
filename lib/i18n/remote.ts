@@ -1,7 +1,7 @@
 /**
  * Remote i18n translation host.
  *
- * Desktop/local apps proxy language-pack translation here so CURSOR_API_KEY
+ * Desktop/local apps proxy language-pack translation here so OPENROUTER_API_KEY
  * lives only on the server — not inside the shipped desktop app.
  */
 

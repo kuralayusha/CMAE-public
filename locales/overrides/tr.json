@@ -278,7 +278,7 @@
     "telemetryToggle": "Anonim AI kullanım istatistiklerini paylaş",
     "telemetrySent": "Gönderilenler: token sayıları, AI çağrısını hangi CMAE özelliğinin yaptığı (ör. mail sync veya araştırma), model adı, tahmini maliyet ve rastgele anonim bir kimlik.",
     "telemetryNotSent": "Asla gönderilmeyenler: mailleriniz, prompt'lar, AI yanıtları, isimler, adresler, CV'niz veya API anahtarınız.",
-    "telemetryHint": "Bu demoda anonim kullanım sayıları her zaman gönderilir. Anahtar açık kalır ve kapatılamaz. Rastgele kimlik Gmail adresinize veya Cursor anahtarınıza bağlı değildir. Mailler, prompt'lar ve yanıtlar yine hiç gönderilmez.",
+    "telemetryHint": "Bu demoda anonim kullanım sayıları her zaman gönderilir. Anahtar açık kalır ve kapatılamaz. Rastgele kimlik Gmail adresinize veya OpenRouter anahtarınıza bağlı değildir. Mailler, prompt'lar ve yanıtlar yine hiç gönderilmez.",
     "telemetrySaveFailed": "Bu ayar kaydedilemedi",
     "diagnosticsHint": "Sync işleri, mail kuyrukları, IMAP IDLE ve yerel log yolu. Parola veya mail gövdesi gösterilmez.",
     "diagnosticsRefresh": "Tanılamayı yenile",

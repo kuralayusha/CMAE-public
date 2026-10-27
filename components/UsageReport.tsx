@@ -28,6 +28,8 @@ type UserCard = {
   last_seen: string | null;
   app_version: string | null;
   platform: string | null;
+  /** Distinct models this user called (admin payload, optional). */
+  models?: string[];
 };
 
 type Grand = {
@@ -39,6 +41,23 @@ type Grand = {
   output_tokens: number;
   cache_read_tokens: number;
   reasoning_tokens: number;
+  /** Spend per model across all users (admin payload, optional). */
+  by_model?: ModelRow[];
+};
+
+type ModelRow = {
+  model: string;
+  calls: number;
+  runs?: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens?: number;
+  reasoning_tokens?: number;
+  cost_usd: number;
+  saved_usd?: number;
+  cache_hits?: number;
+  features?: string[];
 };
 
 type FeatureRow = {
@@ -98,6 +117,7 @@ type RunRow = {
   cost_usd: number;
   first_ts: string | null;
   last_ts: string | null;
+  models?: string[];
   events?: CallRow[];
 };
 
@@ -126,6 +146,7 @@ type SelfReport = {
     last_event_at: string | null;
   };
   by_feature: FeatureRow[];
+  by_model?: ModelRow[];
   runs: RunRow[];
 };
 
@@ -151,6 +172,7 @@ type UserDetail = {
     last_event_at: string | null;
   };
   by_feature: FeatureRow[];
+  by_model?: ModelRow[];
   runs: RunRow[];
 };
 
@@ -295,6 +317,7 @@ function RunsAccordionTable({ runs }: { runs: RunRow[] }) {
             <th>{t("usage.colKind")}</th>
             <th>{t("usage.colCalls")}</th>
             <th>{t("usage.colFeatures")}</th>
+            <th>{t("usage.colModels")}</th>
             <th>{t("usage.colTokens")}</th>
             <th>{t("usage.colCost")}</th>
             <th>{t("usage.colWhen")}</th>
@@ -342,6 +365,9 @@ function RunsAccordionTable({ runs }: { runs: RunRow[] }) {
                   <td>{r.calls}</td>
                   <td className="cmae-usage-features">
                     {r.features.join(", ")}
+                  </td>
+                  <td className="cmae-usage-features">
+                    {(r.models ?? []).join(", ") || dash(t)}
                   </td>
                   <td>
                     {t("usage.tokensInOut", {
@@ -438,6 +464,46 @@ function RunsAccordionTable({ runs }: { runs: RunRow[] }) {
   );
 }
 
+function ModelsTable({ rows }: { rows: ModelRow[] }) {
+  const t = useT();
+  return (
+    <div className="cmae-usage-table-wrap">
+      <table className="cmae-usage-table is-wide">
+        <thead>
+          <tr>
+            <th>{t("usage.colModel")}</th>
+            <th>{t("usage.colFeatures")}</th>
+            <th>{t("usage.colCalls")}</th>
+            <th>{t("usage.colInput")}</th>
+            <th>{t("usage.colOutput")}</th>
+            <th>{t("usage.colCacheRead")}</th>
+            <th>{t("usage.colCacheHits")}</th>
+            <th>{t("usage.colCost")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m) => (
+            <tr key={m.model}>
+              <td>
+                <code>{m.model}</code>
+              </td>
+              <td className="cmae-usage-features">
+                {(m.features ?? []).join(", ") || dash(t)}
+              </td>
+              <td>{m.calls}</td>
+              <td>{fmtTokens(m.input_tokens, t)}</td>
+              <td>{fmtTokens(m.output_tokens, t)}</td>
+              <td>{fmtTokens(m.cache_read_tokens, t)}</td>
+              <td>{m.cache_hits ?? dash(t)}</td>
+              <td>{fmtUsd(m.cost_usd, t)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function DetailBody({ detail }: { detail: UserDetail }) {
   const t = useT();
   return (
@@ -514,6 +580,12 @@ function DetailBody({ detail }: { detail: UserDetail }) {
             </tbody>
           </table>
         </UsageAccordion>
+
+        {detail.by_model && detail.by_model.length > 0 ? (
+          <UsageAccordion title={t("usage.accByModel")}>
+            <ModelsTable rows={detail.by_model} />
+          </UsageAccordion>
+        ) : null}
 
         <UsageAccordion title={t("usage.accByFeature")}>
           {detail.by_feature.length === 0 ? (
@@ -774,6 +846,14 @@ export function UsageReport() {
         </div>
       ) : null}
 
+      {mode === "admin" && !selected && grand?.by_model?.length ? (
+        <div className="cmae-usage-detail">
+          <UsageAccordion title={t("usage.accByModel")}>
+            <ModelsTable rows={grand.by_model} />
+          </UsageAccordion>
+        </div>
+      ) : null}
+
       {mode === "admin" && !selected && !loading ? (
         <div className="cmae-usage-grid">
           {users.length === 0 ? (
@@ -811,6 +891,13 @@ export function UsageReport() {
                     cache: fmtTokens(u.cache_read_tokens, t),
                   })}
                 </div>
+                {u.models?.length ? (
+                  <div className="cmae-usage-card-meta" title={u.models.join(", ")}>
+                    {u.models.length <= 2
+                      ? u.models.join(", ")
+                      : t("usage.cardModels", { count: u.models.length })}
+                  </div>
+                ) : null}
                 <div className="cmae-usage-card-when">
                   {t("usage.lastLabel", {
                     when: fmtWhen(u.last_event_at || u.last_seen, t),

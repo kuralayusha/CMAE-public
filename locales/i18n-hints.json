@@ -126,5 +126,10 @@
   "versionGate.openRelease": "BUTTON: open the product website (imperative + object — clear).",
   "versionGate.dismiss": "BUTTON: postpone update (adverb/interjection, not a verb tense).",
   "help.gotIt": "BUTTON: dismiss help (acknowledgment).",
-  "sync.incrementalRouteSummary": "Log line verbs skip/attach/create are English action codes in a compact log — translate surrounding words; keep action sense as nouns/states of the routing decision if natural."
+  "sync.incrementalRouteSummary": "Log line verbs skip/attach/create are English action codes in a compact log — translate surrounding words; keep action sense as nouns/states of the routing decision if natural.",
+  "fields.llmModelFast": "FIELD label: the cheaper, quicker AI model slot. A noun phrase, not a verb.",
+  "fields.llmModelSmart": "FIELD label: the stronger AI model slot used for writing. A noun phrase, not a verb.",
+  "fields.llmModelPrice": "Price note under a model field. {prompt} and {completion} are already formatted dollar amounts and MUST stay unchanged.",
+  "fields.llmModelEmpty": "Note under an empty model field. {model} is a model id and MUST stay unchanged.",
+  "settings.accAi": "Settings section title for the AI provider (OpenRouter) key and model choice. Keep the product name OpenRouter."
 }

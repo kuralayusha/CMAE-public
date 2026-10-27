@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import {
-  verifyCursorApiKey,
+  verifyOpenRouter,
   verifyGmailImap,
 } from "@/lib/onboarding/verify";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-type Check = "gmail" | "cursor" | "all";
+type Check = "gmail" | "ai" | "all";
 
-/** Live-check Gmail IMAP and/or Cursor API. */
+/** Live-check Gmail IMAP and/or OpenRouter key + models. */
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as { check?: string };
@@ -23,11 +23,11 @@ export async function POST(req: Request) {
       );
     }
 
-    if (check === "cursor") {
-      const cursor = await verifyCursorApiKey();
+    if (check === "ai") {
+      const ai = await verifyOpenRouter();
       return NextResponse.json(
-        { check: "cursor", cursor, ok: cursor.ok },
-        { status: cursor.ok ? 200 : 422 },
+        { check: "ai", ai, ok: ai.ok },
+        { status: ai.ok ? 200 : 422 },
       );
     }
 
@@ -44,16 +44,16 @@ export async function POST(req: Request) {
         { status: 422 },
       );
     }
-    const cursor = await verifyCursorApiKey();
+    const ai = await verifyOpenRouter();
     return NextResponse.json(
       {
         check: "all",
         gmail,
-        cursor,
-        ok: cursor.ok,
-        failStep: cursor.ok ? undefined : "cursor",
+        ai,
+        ok: ai.ok,
+        failStep: ai.ok ? undefined : "ai",
       },
-      { status: cursor.ok ? 200 : 422 },
+      { status: ai.ok ? 200 : 422 },
     );
   } catch (err) {
     return NextResponse.json(

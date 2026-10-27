@@ -16,7 +16,7 @@ import {
   attachMailsToEvents,
   eventsMissingMailLinks,
   generateTimelineSummary,
-  TIMELINE_MODEL,
+  timelineModel,
   type TimelineEvent,
   type TimelineMailBrief,
   type TimelineOrigin,
@@ -208,7 +208,7 @@ function emptyTimeline(
     locale,
     mailCount,
     cached: true,
-    model: TIMELINE_MODEL,
+    model: timelineModel(),
     updatedAt: null,
   };
 }
@@ -301,7 +301,7 @@ export async function getOrCreateTimeline(
         position: item.position,
         eventsJson: JSON.stringify(generated.events),
         origin: generated.origin,
-        model: TIMELINE_MODEL,
+        model: timelineModel(),
         locale,
         mailCount: mails.length,
         updatedAt: now,
@@ -316,7 +316,7 @@ export async function getOrCreateTimeline(
         position: item.position,
         eventsJson: JSON.stringify(generated.events),
         origin: generated.origin,
-        model: TIMELINE_MODEL,
+        model: timelineModel(),
         locale,
         mailCount: mails.length,
         createdAt: now,
@@ -332,7 +332,7 @@ export async function getOrCreateTimeline(
     locale,
     mailCount: mails.length,
     cached: false,
-    model: TIMELINE_MODEL,
+    model: timelineModel(),
     updatedAt: now,
   };
 }

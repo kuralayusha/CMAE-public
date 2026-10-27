@@ -81,7 +81,8 @@ export function classifySyncError(err: unknown): {
   }
   if (
     lower.includes("llm") ||
-    lower.includes("timeout") && lower.includes("composer")
+    lower.includes("openrouter") ||
+    lower.includes("no endpoints found")
   ) {
     return { kind: "llm", message };
   }

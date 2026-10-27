@@ -11,7 +11,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { Agent } from "@cursor/sdk";
 import Database from "better-sqlite3";
 import { getAnonId, regenerateAnonId, anonIdPath } from "../../lib/ai-usage/anon-id";
 import { promptWithUsage } from "../../lib/ai-usage/call";
@@ -36,6 +35,9 @@ import {
   uploaderBackoffUntil,
 } from "../../lib/ai-usage/uploader";
 import { MIGRATIONS } from "../../lib/db/migrations";
+import { migration016OpenRouter } from "../../lib/db/migrations/016_openrouter";
+import { fetchOpenRouterModels } from "../../lib/llm/openrouter";
+import { DEFAULT_MODELS, isPlausibleModelId, slotForFeature } from "../../lib/llm/slots";
 
 let dir: string;
 let db: Database.Database;
@@ -104,7 +106,7 @@ describe("cost formula", () => {
     assert.equal(computeCostMicroUsd(withReasoning, price), computeCostMicroUsd(base, price));
   });
 
-  it("cache write is free for composer-2.5", () => {
+  it("cache write is free for the legacy composer-2.5 price row", () => {
     assert.equal(
       computeCostMicroUsd(
         { inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 5000, outputTokens: 0 },
@@ -127,13 +129,13 @@ describe("price version selection", () => {
   };
 
   it("picks the latest price valid at the call time", () => {
-    assert.equal(selectPrice(table, "composer-2.5", "2026-03-01T00:00:00Z").input, 0.5);
-    assert.equal(selectPrice(table, "composer-2.5", "2026-07-01T00:00:00Z").input, 1);
-    assert.equal(selectPrice(table, "other", "2026-07-01T00:00:00Z").input, 9);
+    assert.equal(selectPrice(table, "composer-2.5", "2026-03-01T00:00:00Z")?.input, 0.5);
+    assert.equal(selectPrice(table, "composer-2.5", "2026-07-01T00:00:00Z")?.input, 1);
+    assert.equal(selectPrice(table, "other", "2026-07-01T00:00:00Z")?.input, 9);
   });
 
-  it("unknown model falls back to the default model price", () => {
-    assert.equal(selectPrice(table, "nope", "2026-07-01T00:00:00Z").input, 1);
+  it("unknown model has no price (never a guessed one)", () => {
+    assert.equal(selectPrice(table, "nope", "2026-07-01T00:00:00Z"), null);
   });
 
   it("parses a remote table and rejects garbage", () => {
@@ -170,36 +172,38 @@ describe("cache key", () => {
 
 /* ------------------------------------------------------------------ */
 describe("cache policy + promptWithUsage", () => {
-  const realPrompt = Agent.prompt;
   let calls = 0;
   let withUsage = true;
+  let handler: (signal: AbortSignal | null | undefined) => Promise<Response> | Response;
+
+  const ok = (text: string, usage?: Record<string, unknown>) =>
+    new Response(
+      JSON.stringify({
+        choices: [{ message: { role: "assistant", content: text }, finish_reason: "stop" }],
+        ...(usage ? { usage } : {}),
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+
+  /** 3000 prompt tokens of which 2000 cached → 1000 uncached input. */
+  const USAGE = {
+    prompt_tokens: 3000,
+    completion_tokens: 500,
+    total_tokens: 3500,
+    cost: 0.00215,
+    prompt_tokens_details: { cached_tokens: 2000 },
+    completion_tokens_details: { reasoning_tokens: 100 },
+  };
+
+  const fetchImpl = (async (_url: unknown, init?: RequestInit) => {
+    calls += 1;
+    return handler(init?.signal);
+  }) as typeof fetch;
 
   beforeEach(() => {
     calls = 0;
     withUsage = true;
-    (Agent as unknown as { prompt: unknown }).prompt = async () => {
-      calls += 1;
-      return {
-        id: "run-1",
-        status: "finished",
-        result: `answer-${calls}`,
-        ...(withUsage
-          ? {
-              usage: {
-                inputTokens: 1000,
-                outputTokens: 500,
-                cacheReadTokens: 2000,
-                cacheWriteTokens: 0,
-                totalTokens: 3500,
-                reasoningTokens: 100,
-              },
-            }
-          : {}),
-      };
-    };
-  });
-  afterEach(() => {
-    (Agent as unknown as { prompt: unknown }).prompt = realPrompt;
+    handler = () => ok(`answer-${calls}`, withUsage ? USAGE : undefined);
   });
 
   const run = (feature: AiFeature, extra: Record<string, unknown> = {}) =>
@@ -207,8 +211,9 @@ describe("cache policy + promptWithUsage", () => {
       feature,
       prompt: "some prompt",
       apiKey: "k",
-      cwd: dir,
+      model: "test/model",
       backend: createDbBackend(() => db),
+      fetchImpl,
       ...extra,
     });
 
@@ -288,20 +293,97 @@ describe("cache policy + promptWithUsage", () => {
     assert.equal(calls, 3);
   });
 
-  it("timeout still records the late usage (status timeout) and throws", async () => {
-    (Agent as unknown as { prompt: unknown }).prompt = async () => {
-      await new Promise((r) => setTimeout(r, 60));
-      return {
-        id: "r", status: "finished", result: "late",
-        usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 15 },
-      };
-    };
+  it("timeout aborts the request and records status timeout (no usage to read)", async () => {
+    let aborted = false;
+    handler = (signal) =>
+      new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
     await assert.rejects(run("research.writer", { timeoutMs: 10 }), /timeout/i);
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(aborted, true);
     const ev = events();
     assert.equal(ev.length, 1);
     assert.equal(ev[0]!.status, "timeout");
-    assert.equal(ev[0]!.input_tokens, 10);
+    assert.equal(ev[0]!.usage_missing, 1);
+  });
+
+  it("a lost cancel race aborts the request and records canceled", async () => {
+    let aborted = false;
+    handler = (signal) =>
+      new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(new DOMException("aborted", "AbortError"));
+        });
+      });
+    const cancel = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("job canceled")), 10),
+    );
+    await assert.rejects(run("research.writer", { cancelRace: cancel }), /job canceled/);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(aborted, true);
+    assert.equal(events()[0]!.status, "canceled");
+  });
+
+  it("reports the model and OpenRouter's own cost; BYOK adds the upstream cost", async () => {
+    handler = () =>
+      ok("byok", { ...USAGE, cost: 0.00005, cost_details: { upstream_inference_cost: 0.001 } });
+    await run("research.writer");
+    const e = events()[0]!;
+    assert.equal(e.model, "test/model");
+    assert.equal(e.cost_micro_usd, 1050); // 50 fee + 1000 upstream
+  });
+
+  it("normal requests report upstream cost too — it must NOT be added (dashboard parity)", async () => {
+    handler = () => ok("normal", { ...USAGE, cost: 0.00215, cost_details: { upstream_inference_cost: 0.00215 } });
+    await run("research.writer");
+    handler = () => ok("normal2", { ...USAGE, cost: 0.002, cost_details: { upstream_inference_cost: 0.0019 } });
+    await run("research.writer");
+    handler = () => ok("free-byok", { ...USAGE, cost: 0, cost_details: { upstream_inference_cost: 0.001 } });
+    await run("research.writer");
+    assert.deepEqual(events().map((e) => e.cost_micro_usd), [2150, 2000, 1000]);
+  });
+
+  it("no reported cost → price table for known models, 0 (not a guess) for unknown", async () => {
+    const noCost = { ...USAGE, cost: undefined };
+    handler = () => ok("legacy", noCost);
+    await run("research.writer", { model: "composer-2.5" });
+    handler = () => ok("unknown", noCost);
+    await run("research.writer", { model: "vendor/unpriced" });
+    const [known, unknown] = events();
+    assert.equal(known!.cost_micro_usd, 2150);
+    assert.equal(unknown!.cost_micro_usd, 0);
+    assert.equal(unknown!.usage_missing, 0); // tokens are real, only the price is unknown
+    assert.equal(unknown!.input_tokens, 1000);
+  });
+
+  it("HTTP errors throw OpenRouterError, are metered as error, and 429 is retried", async () => {
+    handler = () =>
+      new Response(JSON.stringify({ error: { message: "No auth credentials", code: 401 } }), { status: 401 });
+    await assert.rejects(run("research.writer"), /No auth credentials/);
+    assert.equal(calls, 1); // 4xx is not retried
+    assert.equal(events()[0]!.status, "error");
+
+    calls = 0;
+    handler = () =>
+      calls === 1
+        ? new Response(JSON.stringify({ error: { message: "slow down" } }), { status: 429 })
+        : ok("after-retry", USAGE);
+    const r = await run("research.writer");
+    assert.equal(r.text, "after-retry");
+    assert.equal(calls, 2);
+  });
+
+  it("empty completion → emptyError, tokens still metered", async () => {
+    handler = () => ok("", USAGE);
+    await assert.rejects(
+      run("research.writer", { emptyError: (s: string) => new Error(`empty:${s}`) }),
+      /empty:/,
+    );
   });
 
   it("cache TTL expiry and LRU pruning", () => {
@@ -569,8 +651,86 @@ describe("local usage report", () => {
 });
 
 /* ------------------------------------------------------------------ */
+describe("models: report, migration, slots", () => {
+  const insert = (id: string, model: string, feature: string, cost: number, runId: string | null) =>
+    db
+      .prepare(
+        `INSERT INTO ai_usage_events (
+           event_id, ts, feature, sync_mode, run_id, model, price_version,
+           input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+           reasoning_tokens, cost_micro_usd, duration_ms, status, usage_missing,
+           cache_hit, saved_input_tokens, saved_cost_micro_usd
+         ) VALUES (?, '2026-10-27T10:00:00.000Z', ?, NULL, ?, ?, 'p', 10, 4, 0, 0, 0, ?, 20, 'ok', 0, 0, 0, 0)`,
+      )
+      .run(id, feature, runId, model, cost);
+
+  it("report breaks spend down by model, with the features each served", () => {
+    insert("a", "anthropic/claude-haiku-5.5", "tracker.sync.triage", 100, "r1");
+    insert("b", "anthropic/claude-haiku-5.5", "i18n.translate", 50, "r2");
+    insert("c", "anthropic/claude-sonnet-5.5", "research.writer", 900, "r1");
+    const report = buildLocalUsageReport(db, { anonRoot: dir });
+    assert.deepEqual(
+      report.by_model.map((m) => [m.model, m.calls, m.cost_usd]),
+      [
+        ["anthropic/claude-sonnet-5.5", 1, 0.0009],
+        ["anthropic/claude-haiku-5.5", 2, 0.00015],
+      ],
+    );
+    assert.deepEqual(report.by_model[0]!.features, ["research.writer"]);
+    const run1 = report.runs.find((r) => r.run_id === "r1")!;
+    assert.deepEqual([...run1.models].sort(), [
+      "anthropic/claude-haiku-5.5",
+      "anthropic/claude-sonnet-5.5",
+    ]);
+  });
+
+  it("migration 016 labels old rows composer-2.5 and drops the Cursor secret", () => {
+    insert("old", "", "research.writer", 10, null);
+    insert("new", "x/y", "research.writer", 10, null);
+    db.prepare(`INSERT OR IGNORE INTO settings (id) VALUES (1)`).run();
+    db.prepare(`UPDATE settings SET cursor_api_key_enc = 'secret' WHERE id = 1`).run();
+    migration016OpenRouter.up(db); // idempotent re-run
+    const models = db.prepare(`SELECT event_id, model FROM ai_usage_events ORDER BY event_id`).all();
+    assert.deepEqual(models, [
+      { event_id: "new", model: "x/y" },
+      { event_id: "old", model: "composer-2.5" },
+    ]);
+    const row = db.prepare(`SELECT cursor_api_key_enc AS k FROM settings WHERE id = 1`).get() as { k: string | null };
+    assert.equal(row.k, null);
+  });
+
+  it("slots: writing/judgement is smart, bulk structured work is fast", () => {
+    for (const f of AI_FEATURES) {
+      const smart = ["research.research", "research.writer", "research.reviewer", "research.jobfit", "tracker.followup"];
+      assert.equal(slotForFeature(f), smart.includes(f) ? "smart" : "fast", f);
+    }
+    assert.ok(isPlausibleModelId(DEFAULT_MODELS.fast));
+    assert.ok(isPlausibleModelId(DEFAULT_MODELS.smart));
+    assert.ok(isPlausibleModelId("google/gemini-3.7-flash:free"));
+    for (const bad of ["", "gpt", "a/b c", "../x/y", 5, null]) assert.equal(isPlausibleModelId(bad), false, String(bad));
+  });
+
+  it("catalog parsing: text models only, $/1M prices, free flag", async () => {
+    const body = {
+      data: [
+        { id: "b/paid", name: "Paid", context_length: 1000, architecture: { output_modalities: ["text"] }, pricing: { prompt: "0.000001", completion: "0.000005" } },
+        { id: "a/free:free", name: "Free", architecture: { output_modalities: ["text"] }, pricing: { prompt: "0", completion: "0" } },
+        { id: "c/image", name: "Img", architecture: { output_modalities: ["image"] }, pricing: { prompt: "0.1", completion: "0.1" } },
+      ],
+    };
+    const f = (async () => new Response(JSON.stringify(body))) as typeof fetch;
+    const models = await fetchOpenRouterModels(f);
+    assert.deepEqual(models.map((m) => m.id), ["a/free:free", "b/paid"]);
+    assert.equal(models[1]!.promptPerM, 1);
+    assert.equal(models[1]!.completionPerM, 5);
+    assert.equal(models[0]!.free, true);
+    assert.equal(models[1]!.free, false);
+  });
+});
+
+/* ------------------------------------------------------------------ */
 describe("call coverage", () => {
-  it("no direct Agent.prompt( call remains outside lib/ai-usage", () => {
+  it("model API is only reached through lib/ai-usage + lib/llm; the Cursor SDK is gone", () => {
     const root = path.resolve(import.meta.dirname, "../..");
     const skip = new Set(["node_modules", ".next", "dist-desktop", "desktop-pack", "desktop-resources", ".git", "docs"]);
     const offenders: string[] = [];
@@ -579,11 +739,11 @@ describe("call coverage", () => {
         if (skip.has(e.name)) continue;
         const p = path.join(d, e.name);
         if (e.isDirectory()) {
-          if (p === path.join(root, "lib", "ai-usage") || p === path.join(root, "test", "ai-usage")) continue;
+          if ([path.join(root, "lib", "ai-usage"), path.join(root, "lib", "llm"), path.join(root, "test", "ai-usage")].includes(p)) continue;
           walk(p);
         } else if (/\.(ts|tsx|js|mjs|cjs)$/.test(e.name)) {
           const src = fs.readFileSync(p, "utf8");
-          if (/\bAgent\s*\.\s*prompt\s*\(/.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ""))) {
+          if (/@cursor\/sdk|\bopenRouterChat\s*\(|openrouter\.ai\/api\/v1\/chat/.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ""))) {
             offenders.push(path.relative(root, p));
           }
         }

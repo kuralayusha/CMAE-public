@@ -838,7 +838,7 @@ Olay zaman bağımsız bir fact'tir; item başına kronolojik zaman çizelgesi `
 
 ```bash
 node --import tsx test/tracker-eval/run-eval.ts [--events=fallback|oracle|llm] [--verbose] [--json]
-# gerçek LLM ile Aşama 1+2 (+3): yerel gövde DB'si gerekir, CURSOR_API_KEY (.env)
+# gerçek LLM ile Aşama 1+2 (+3): yerel gövde DB'si gerekir, OPENROUTER_API_KEY (.env)
 node --import tsx test/tracker-eval/run-eval.ts --grouping=llm --events=llm \
   --bodies-db=<cmae.db kopyası> [--llm-cache=<dizin>|--no-cache] [--dump-triage=<regex>]
 ```

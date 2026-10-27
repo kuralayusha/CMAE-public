@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { settingsBusyResponse } from "@/lib/operations/status";
-import { persistEnvCursorKeyIfNeeded } from "@/lib/onboarding/verify";
+import { persistEnvOpenRouterKeyIfNeeded } from "@/lib/onboarding/verify";
 import { t } from "@/lib/i18n/t";
+import { isPlausibleModelId } from "@/lib/llm/slots";
 import {
   getPublicSettings,
   updateSettings,
@@ -136,15 +137,22 @@ export async function PUT(req: Request) {
     typeof body.gmailAppPassword === "string" && body.gmailAppPassword.trim()
       ? body.gmailAppPassword.trim()
       : undefined;
-  const cursorApiKey =
-    typeof body.cursorApiKey === "string" && body.cursorApiKey.trim()
-      ? body.cursorApiKey.trim()
+  const openrouterApiKey =
+    typeof body.openrouterApiKey === "string" && body.openrouterApiKey.trim()
+      ? body.openrouterApiKey.trim()
+      : undefined;
+  // Model slots: a string (incl. "" = back to default) sets, anything else keeps.
+  const modelSlug = (v: unknown) =>
+    typeof v === "string" && (v.trim() === "" || isPlausibleModelId(v.trim()))
+      ? v.trim()
       : undefined;
   updateSettings({
     fullName: typeof body.fullName === "string" ? body.fullName : undefined,
     gmailAddress,
     gmailAppPassword,
-    cursorApiKey,
+    openrouterApiKey,
+    llmModelFast: modelSlug(body.llmModelFast),
+    llmModelSmart: modelSlug(body.llmModelSmart),
     followUpDays: dayCheck?.ok ? dayCheck.followUpDays : undefined,
     rejectionCloseDays: dayCheck?.ok ? dayCheck.rejectionCloseDays : undefined,
     staleCloseDays: dayCheck?.ok ? dayCheck.staleCloseDays : undefined,
@@ -161,6 +169,6 @@ export async function PUT(req: Request) {
     usageTelemetryEnabled: true,
   });
   // Env-only key → copy into SQLite so desktop stays onboarded without .env
-  persistEnvCursorKeyIfNeeded();
+  persistEnvOpenRouterKeyIfNeeded();
   return NextResponse.json(getPublicSettings());
 }

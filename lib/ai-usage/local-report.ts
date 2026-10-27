@@ -22,6 +22,22 @@ export type LocalFeatureRow = {
   cache_hits: number;
 };
 
+export type LocalModelRow = {
+  model: string;
+  calls: number;
+  runs: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  reasoning_tokens: number;
+  cost_usd: number;
+  saved_usd: number;
+  cache_hits: number;
+  /** Features this model served, most-called first. */
+  features: string[];
+};
+
 export type LocalCallRow = {
   event_id: string;
   ts: string;
@@ -59,6 +75,8 @@ export type LocalRunRow = {
   sync_mode: "hard" | "incremental" | null;
   calls: number;
   features: string[];
+  /** Distinct models used in this run (a run can mix fast + smart models). */
+  models: string[];
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
@@ -132,6 +150,7 @@ export type LocalUsageReport = {
     last_event_at: string | null;
   };
   by_feature: LocalFeatureRow[];
+  by_model: LocalModelRow[];
   runs: LocalRunRow[];
 };
 
@@ -211,6 +230,51 @@ export function buildLocalUsageReport(
     saved_micro: number;
     cache_hits: number;
   }>;
+
+  const modelRows = db
+    .prepare(
+      `SELECT
+         model,
+         COUNT(*) AS calls,
+         (
+           COUNT(DISTINCT CASE WHEN run_id IS NOT NULL AND run_id != '' THEN run_id END)
+           + COALESCE(SUM(CASE WHEN run_id IS NULL OR run_id = '' THEN 1 ELSE 0 END), 0)
+         ) AS runs,
+         COALESCE(SUM(input_tokens), 0) AS input_tokens,
+         COALESCE(SUM(output_tokens), 0) AS output_tokens,
+         COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+         COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+         COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
+         COALESCE(SUM(cost_micro_usd), 0) AS cost_micro,
+         COALESCE(SUM(saved_cost_micro_usd), 0) AS saved_micro,
+         COALESCE(SUM(CASE WHEN cache_hit = 1 THEN 1 ELSE 0 END), 0) AS cache_hits
+       FROM ai_usage_events
+       GROUP BY model
+       ORDER BY cost_micro DESC, calls DESC`,
+    )
+    .all() as Array<{
+    model: string;
+    calls: number;
+    runs: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cache_write_tokens: number;
+    reasoning_tokens: number;
+    cost_micro: number;
+    saved_micro: number;
+    cache_hits: number;
+  }>;
+  const featuresByModel = new Map<string, string[]>();
+  for (const r of db
+    .prepare(
+      `SELECT model, feature FROM ai_usage_events GROUP BY model, feature ORDER BY COUNT(*) DESC`,
+    )
+    .all() as Array<{ model: string; feature: string }>) {
+    const list = featuresByModel.get(r.model) ?? [];
+    list.push(r.feature);
+    featuresByModel.set(r.model, list);
+  }
 
   const runAgg = db
     .prepare(
@@ -313,6 +377,7 @@ export function buildLocalUsageReport(
         sync_mode: labeled.sync_mode,
         calls: 1,
         features,
+        models: [c.model],
         input_tokens: c.input_tokens,
         output_tokens: c.output_tokens,
         cache_read_tokens: c.cache_read_tokens,
@@ -367,6 +432,20 @@ export function buildLocalUsageReport(
       saved_usd: microToUsd(f.saved_micro),
       cache_hits: f.cache_hits,
     })),
+    by_model: modelRows.map((m) => ({
+      model: m.model,
+      calls: m.calls,
+      runs: m.runs,
+      input_tokens: m.input_tokens,
+      output_tokens: m.output_tokens,
+      cache_read_tokens: m.cache_read_tokens,
+      cache_write_tokens: m.cache_write_tokens,
+      reasoning_tokens: m.reasoning_tokens,
+      cost_usd: microToUsd(m.cost_micro),
+      saved_usd: microToUsd(m.saved_micro),
+      cache_hits: m.cache_hits,
+      features: featuresByModel.get(m.model) ?? [],
+    })),
     runs: [
       ...runAgg.map((r) => {
         const features = (r.features || "")
@@ -385,6 +464,7 @@ export function buildLocalUsageReport(
           sync_mode,
           calls: r.calls,
           features,
+          models: [...new Set((eventsByRun.get(r.run_id) ?? []).map((e) => e.model))],
           input_tokens: r.input_tokens,
           output_tokens: r.output_tokens,
           cache_read_tokens: r.cache_read_tokens,

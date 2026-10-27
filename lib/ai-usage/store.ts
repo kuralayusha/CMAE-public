@@ -11,6 +11,7 @@ import { cacheGet, cachePut } from "./cache";
 import { usageConfig } from "./config";
 import {
   EMBEDDED_PRICES,
+  LEGACY_MODEL,
   parsePriceTable,
   type PriceTable,
 } from "./pricing";
@@ -122,7 +123,7 @@ export function recordImportedTranslateUsage(
     const model =
       typeof c.model === "string" && c.model.trim()
         ? c.model.trim().slice(0, 80)
-        : "composer-2.5";
+        : LEGACY_MODEL;
     const cached = c.cached === true;
     backend.record({
       eventId: crypto.randomUUID(),

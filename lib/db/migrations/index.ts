@@ -13,6 +13,7 @@ import { migration012AiUsage } from "./012_ai_usage";
 import { migration013MailEventScheduled } from "./013_mail_event_scheduled";
 import { migration014AiUsageRunId } from "./014_ai_usage_run_id";
 import { migration015TrackerRecent } from "./015_tracker_recent";
+import { migration016OpenRouter } from "./016_openrouter";
 import type { Migration } from "./types";
 
 export const MIGRATIONS: Migration[] = [
@@ -31,4 +32,5 @@ export const MIGRATIONS: Migration[] = [
   migration013MailEventScheduled,
   migration014AiUsageRunId,
   migration015TrackerRecent,
+  migration016OpenRouter,
 ];

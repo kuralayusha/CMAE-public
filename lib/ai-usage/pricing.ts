@@ -5,10 +5,11 @@
  * Rates are USD per 1M tokens, which equals micro-USD per token — so
  * `tokens * rate` is already micro-USD and the stored cost is an integer.
  *
- * Token semantics (verified in @cursor/sdk usage-types: `totalTokens =
- * input + output + cacheRead + cacheWrite`): `inputTokens` is the UNCACHED
- * input, `cacheReadTokens` / `cacheWriteTokens` are separate buckets, and
- * `reasoningTokens` is a SUBSET of `outputTokens` (reported, never billed again).
+ * Token semantics (kept from the Cursor era so old and new rows add up):
+ * `inputTokens` is the UNCACHED input, `cacheReadTokens` / `cacheWriteTokens`
+ * are separate buckets, and `reasoningTokens` is a SUBSET of `outputTokens`
+ * (reported, never billed again). OpenRouter's `prompt_tokens` includes cached
+ * tokens, so lib/ai-usage/call.ts subtracts them when mapping.
  */
 
 import type { TokenCounts } from "./types";
@@ -30,13 +31,23 @@ export type PriceTable = {
   prices: ModelPrice[];
 };
 
-export const DEFAULT_MODEL = "composer-2.5";
+/**
+ * Model of every event recorded before the OpenRouter migration (Cursor SDK).
+ * Old rows are backfilled with it (migration 016); the price row keeps their
+ * historical cost recomputable.
+ */
+export const LEGACY_MODEL = "composer-2.5";
 
+/**
+ * OpenRouter reports the charged cost itself (`usage.cost`), so this table is
+ * only a fallback for responses without one. Unknown models have no price →
+ * cost 0 with the token counts kept (never a guessed price).
+ */
 export const EMBEDDED_PRICES: PriceTable = {
-  version: "embedded-2026-10-21",
+  version: "embedded-2026-10-27",
   prices: [
     {
-      model: DEFAULT_MODEL,
+      model: LEGACY_MODEL,
       input: 0.5,
       cacheRead: 0.2,
       cacheWrite: 0,
@@ -46,21 +57,17 @@ export const EMBEDDED_PRICES: PriceTable = {
   ],
 };
 
-/** Latest price of `model` with validFrom <= `atIso`; unknown model → default model. */
+/** Latest price of `model` with validFrom <= `atIso`; null for an unknown model. */
 export function selectPrice(
   table: PriceTable,
   model: string,
   atIso: string = new Date().toISOString(),
-): ModelPrice {
+): ModelPrice | null {
   const at = Date.parse(atIso);
-  const pick = (m: string) =>
-    table.prices
-      .filter((p) => p.model === m && Date.parse(p.validFrom) <= at)
-      .sort((a, b) => Date.parse(b.validFrom) - Date.parse(a.validFrom))[0];
   return (
-    pick(model) ??
-    pick(DEFAULT_MODEL) ??
-    EMBEDDED_PRICES.prices[0]!
+    table.prices
+      .filter((p) => p.model === model && Date.parse(p.validFrom) <= at)
+      .sort((a, b) => Date.parse(b.validFrom) - Date.parse(a.validFrom))[0] ?? null
   );
 }
 

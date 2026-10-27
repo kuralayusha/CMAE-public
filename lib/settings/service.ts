@@ -7,6 +7,7 @@ import {
 import { isTelemetryEnabled } from "@/lib/ai-usage/store";
 import { getDb, getSqlite } from "@/lib/db/client";
 import { settings } from "@/lib/db/schema";
+import { DEFAULT_MODELS, type ModelSlot } from "@/lib/llm/slots";
 import { notifyCredentialsChanged } from "@/lib/sync/credentials";
 import {
   DEFAULT_FOLLOW_UP_DAYS,
@@ -26,9 +27,15 @@ export type SettingsPublic = {
   gmailAddress: string | null;
   hasGmailAppPassword: boolean;
   /** True only when a key is stored in SQLite (not .env). */
-  hasCursorApiKey: boolean;
-  /** True when process.env.CURSOR_API_KEY is set (survives data wipe). */
-  cursorApiKeyFromEnv: boolean;
+  hasOpenrouterApiKey: boolean;
+  /** True when process.env.OPENROUTER_API_KEY is set (survives data wipe). */
+  openrouterApiKeyFromEnv: boolean;
+  /** Effective OpenRouter slugs (saved choice or built-in default). */
+  llmModelFast: string;
+  llmModelSmart: string;
+  /** False while the slot still uses the built-in default. */
+  llmModelFastCustom: boolean;
+  llmModelSmartCustom: boolean;
   cvFileName: string | null;
   hasCv: boolean;
   followUpDays: number;
@@ -45,6 +52,12 @@ export type SettingsPublic = {
   usageTelemetryEnabled: boolean;
   updatedAt: string | null;
 };
+
+/** Store a slot only when it differs from the built-in default (so default upgrades still apply). */
+function slotOverride(raw: string, slot: ModelSlot): string | null {
+  const v = raw.trim();
+  return !v || v === DEFAULT_MODELS[slot] ? null : v;
+}
 
 function hasDecryptableSecret(enc: string | null | undefined): boolean {
   if (!enc?.trim()) return false;
@@ -78,8 +91,12 @@ export function getPublicSettings(): SettingsPublic {
     gmailAddress: row?.gmailAddress ?? null,
     hasGmailAppPassword: hasDecryptableSecret(row?.gmailAppPasswordEnc),
     /** Decryptable key in SQLite only — .env alone does not count as "saved". */
-    hasCursorApiKey: hasDecryptableSecret(row?.cursorApiKeyEnc),
-    cursorApiKeyFromEnv: Boolean(process.env.CURSOR_API_KEY?.trim()),
+    hasOpenrouterApiKey: hasDecryptableSecret(row?.openrouterApiKeyEnc),
+    openrouterApiKeyFromEnv: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+    llmModelFast: row?.llmModelFast?.trim() || DEFAULT_MODELS.fast,
+    llmModelSmart: row?.llmModelSmart?.trim() || DEFAULT_MODELS.smart,
+    llmModelFastCustom: Boolean(row?.llmModelFast?.trim()),
+    llmModelSmartCustom: Boolean(row?.llmModelSmart?.trim()),
     cvFileName: row?.cvFileName ?? null,
     hasCv: Boolean(row?.cvText),
     followUpDays: row?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS,
@@ -99,7 +116,10 @@ export function updateSettings(input: {
   fullName?: string;
   gmailAddress?: string;
   gmailAppPassword?: string;
-  cursorApiKey?: string;
+  openrouterApiKey?: string;
+  /** OpenRouter slug; "" resets the slot to the built-in default. */
+  llmModelFast?: string;
+  llmModelSmart?: string;
   followUpDays?: number;
   rejectionCloseDays?: number;
   staleCloseDays?: number;
@@ -147,10 +167,18 @@ export function updateSettings(input: {
       input.gmailAppPassword !== undefined && input.gmailAppPassword !== ""
         ? encryptOptional(input.gmailAppPassword)
         : current?.gmailAppPasswordEnc,
-    cursorApiKeyEnc:
-      input.cursorApiKey !== undefined && input.cursorApiKey !== ""
-        ? encryptOptional(input.cursorApiKey)
-        : current?.cursorApiKeyEnc,
+    openrouterApiKeyEnc:
+      input.openrouterApiKey !== undefined && input.openrouterApiKey !== ""
+        ? encryptOptional(input.openrouterApiKey)
+        : current?.openrouterApiKeyEnc,
+    llmModelFast:
+      input.llmModelFast !== undefined
+        ? slotOverride(input.llmModelFast, "fast")
+        : current?.llmModelFast,
+    llmModelSmart:
+      input.llmModelSmart !== undefined
+        ? slotOverride(input.llmModelSmart, "smart")
+        : current?.llmModelSmart,
     followUpDays:
       input.followUpDays ?? current?.followUpDays ?? DEFAULT_FOLLOW_UP_DAYS,
     rejectionCloseDays:

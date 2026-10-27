@@ -58,8 +58,11 @@ export function getOnboardingGaps(): OnboardingGaps {
   if (!filled(row?.fullName)) gaps.push("fullName");
   if (!filled(row?.gmailAddress)) gaps.push("gmailAddress");
   if (!filled(row?.gmailAppPasswordEnc)) gaps.push("gmailAppPassword");
-  if (!filled(row?.cursorApiKeyEnc) && !filled(process.env.CURSOR_API_KEY)) {
-    gaps.push("cursorApiKey");
+  if (
+    !filled(row?.openrouterApiKeyEnc) &&
+    !filled(process.env.OPENROUTER_API_KEY)
+  ) {
+    gaps.push("openrouterApiKey");
   }
   if (!filled(row?.emailSignature)) gaps.push("emailSignature");
   if (!filled(row?.preferredLanguage)) gaps.push("preferredLanguage");

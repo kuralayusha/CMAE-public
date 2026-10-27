@@ -5,6 +5,7 @@
  * eval harness never registers one, so it stays DB-free.
  */
 
+import { DEFAULT_MODELS } from "../llm/slots";
 import {
   LlmTimeoutError,
   promptWithUsage,
@@ -13,7 +14,6 @@ import {
 
 export { LlmTimeoutError };
 
-export const TRACKER_LLM_MODEL = "composer-2.5";
 export const TRACKER_LLM_TIMEOUT_MS = 90_000;
 
 /** prompt → raw model text. Throws on timeout / empty response. */
@@ -21,13 +21,14 @@ export type LlmFn = (prompt: string) => Promise<string>;
 
 export async function promptLlm(
   input: Omit<PromptWithUsageInput, "model" | "timeoutMs"> & {
+    /** Defaults to the "fast" slot's built-in model (eval harness). */
     model?: string;
     timeoutMs?: number;
   },
 ): Promise<string> {
   const r = await promptWithUsage({
     ...input,
-    model: input.model ?? TRACKER_LLM_MODEL,
+    model: input.model ?? DEFAULT_MODELS.fast,
     timeoutMs: input.timeoutMs ?? TRACKER_LLM_TIMEOUT_MS,
   });
   return r.text;

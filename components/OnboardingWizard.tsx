@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/BrandMark";
 import { CvDropzone } from "@/components/CvDropzone";
 import { useI18n, useLocaleUpper } from "@/components/I18nProvider";
+import { LlmSettingsFields } from "@/components/LlmSettingsFields";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import { RichText } from "@/components/RichText";
 import { Button, Field } from "@/components/ui";
 import { APP_LANGUAGE, type LocalePack } from "@/lib/i18n/types";
+import { DEFAULT_MODELS } from "@/lib/llm/slots";
 import { PREFERRED_LANGUAGES } from "@/lib/settings/languages";
 import "./onboarding.css";
 
@@ -38,7 +40,7 @@ const STEPS = [
   "welcome",
   "profile",
   "gmail",
-  "cursor",
+  "ai",
   "prefs",
   "job",
   "cv",
@@ -65,7 +67,7 @@ const BOOT_TEMPLATE: Omit<BootItem, "status" | "detail">[] = [
   { id: "db", label: "db" },
   { id: "profile", label: "profile" },
   { id: "gmail", label: "gmail" },
-  { id: "cursor", label: "cursor" },
+  { id: "ai", label: "ai" },
   { id: "locale", label: "locale" },
   { id: "cv", label: "cv" },
   { id: "unlock", label: "unlock" },
@@ -102,8 +104,8 @@ export function OnboardingWizard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasGmailPw, setHasGmailPw] = useState(false);
-  const [hasCursorKey, setHasCursorKey] = useState(false);
-  const [cursorFromEnv, setCursorFromEnv] = useState(false);
+  const [hasAiKey, setHasAiKey] = useState(false);
+  const [aiKeyFromEnv, setAiKeyFromEnv] = useState(false);
   const [cvs, setCvs] = useState<CvItem[]>([]);
   const [bootItems, setBootItems] = useState<BootItem[]>(freshBootItems);
   const [bootDone, setBootDone] = useState(false);
@@ -113,7 +115,9 @@ export function OnboardingWizard() {
     fullName: "",
     gmailAddress: "",
     gmailAppPassword: "",
-    cursorApiKey: "",
+    openrouterApiKey: "",
+    llmModelFast: DEFAULT_MODELS.fast,
+    llmModelSmart: DEFAULT_MODELS.smart,
     preferredLanguage: "en",
     emailSignature: "",
   });
@@ -160,8 +164,13 @@ export function OnboardingWizard() {
           });
         }
         setHasGmailPw(Boolean(s.hasGmailAppPassword));
-        setHasCursorKey(Boolean(s.hasCursorApiKey));
-        setCursorFromEnv(Boolean(s.cursorApiKeyFromEnv));
+        setHasAiKey(Boolean(s.hasOpenrouterApiKey));
+        setAiKeyFromEnv(Boolean(s.openrouterApiKeyFromEnv));
+        setForm((f) => ({
+          ...f,
+          llmModelFast: s.llmModelFast || f.llmModelFast,
+          llmModelSmart: s.llmModelSmart || f.llmModelSmart,
+        }));
         if (Array.isArray(data.cvs) && data.cvs.length) {
           setCvs(data.cvs);
         }
@@ -186,11 +195,11 @@ export function OnboardingWizard() {
           form.gmailAddress.trim() &&
           (form.gmailAppPassword.trim().length >= 8 || hasGmailPw)
         );
-      case "cursor":
+      case "ai":
         return (
-          form.cursorApiKey.trim().length >= 8 ||
-          hasCursorKey ||
-          cursorFromEnv
+          (form.openrouterApiKey.trim().length >= 8 || hasAiKey || aiKeyFromEnv) &&
+          form.llmModelFast.trim().length > 0 &&
+          form.llmModelSmart.trim().length > 0
         );
       case "prefs":
         return form.emailSignature.trim().length >= 3;
@@ -210,7 +219,7 @@ export function OnboardingWizard() {
       default:
         return false;
     }
-  }, [stepId, form, prefs, cvs, hasGmailPw, hasCursorKey, cursorFromEnv]);
+  }, [stepId, form, prefs, cvs, hasGmailPw, hasAiKey, aiKeyFromEnv]);
 
   async function persistPartial(snapshot?: {
     form: typeof form;
@@ -228,9 +237,11 @@ export function OnboardingWizard() {
     if (f.gmailAppPassword.trim()) {
       body.gmailAppPassword = f.gmailAppPassword;
     }
-    if (f.cursorApiKey.trim()) {
-      body.cursorApiKey = f.cursorApiKey;
+    if (f.openrouterApiKey.trim()) {
+      body.openrouterApiKey = f.openrouterApiKey;
     }
+    body.llmModelFast = f.llmModelFast;
+    body.llmModelSmart = f.llmModelSmart;
     const res = await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -239,9 +250,9 @@ export function OnboardingWizard() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || t("onboarding.error.saveFailed"));
     setHasGmailPw(Boolean(data.hasGmailAppPassword) || hasGmailPw);
-    setHasCursorKey(Boolean(data.hasCursorApiKey));
-    setCursorFromEnv(Boolean(data.cursorApiKeyFromEnv));
-    setForm((prev) => ({ ...prev, gmailAppPassword: "", cursorApiKey: "" }));
+    setHasAiKey(Boolean(data.hasOpenrouterApiKey));
+    setAiKeyFromEnv(Boolean(data.openrouterApiKeyFromEnv));
+    setForm((prev) => ({ ...prev, gmailAppPassword: "", openrouterApiKey: "" }));
   }
 
   async function skipToWelcomeWithLang(code: string, pack: LocalePack) {
@@ -341,22 +352,23 @@ export function OnboardingWizard() {
     setBusy(true);
     try {
       await persistPartial();
-      // Cursor step: env key alone used to look "ready" then vanish after restart
-      if (stepId === "cursor" && !hasCursorKey && cursorFromEnv) {
+      // AI step: live-check the key + both models before moving on; an env key
+      // alone used to look "ready" then vanish after restart.
+      if (stepId === "ai") {
         const check = await fetch("/api/onboarding/verify", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ check: "cursor" }),
+          body: JSON.stringify({ check: "ai" }),
         });
         const checkData = await check.json().catch(() => ({}));
         if (!check.ok || !checkData.ok) {
           throw new Error(
-            checkData.cursor?.error ||
+            checkData.ai?.error ||
               checkData.error ||
-              t("fields.cursorKeyRequired"),
+              t("fields.openrouterKeyRequired"),
           );
         }
-        setHasCursorKey(true);
+        setHasAiKey(true);
       }
       setStep((s) => Math.min(s + 1, STEPS.length - 1));
     } catch (err) {
@@ -387,9 +399,9 @@ export function OnboardingWizard() {
   }
 
   /**
-   * After Cursor is verified, only (re)build the locale pack if missing.
+   * After the AI key is verified, only (re)build the locale pack if missing.
    * Always paint a running tick first — a silent multi-minute translate
-   * after "cursor ok" looked like a freeze on the CV step.
+   * after "ai ok" looked like a freeze on the CV step.
    */
   async function ensureBootLocalePack(
     softOk: (id: string) => Promise<void>,
@@ -491,31 +503,31 @@ export function OnboardingWizard() {
 
       patchBoot("gmail", { status: "ok" });
 
-      patchBoot("cursor", { status: "running" });
+      patchBoot("ai", { status: "running" });
 
-      const cursorRes = await fetch("/api/onboarding/verify", {
+      const aiRes = await fetch("/api/onboarding/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ check: "cursor" }),
+        body: JSON.stringify({ check: "ai" }),
       });
-      const cursorData = await cursorRes.json();
-      if (!cursorData.cursor?.ok) {
+      const aiData = await aiRes.json();
+      if (!aiData.ai?.ok) {
         const msg =
-          cursorData.cursor?.error ||
-          cursorData.error ||
-          t("onboarding.bootCursorFail");
-        patchBoot("cursor", {
+          aiData.ai?.error ||
+          aiData.error ||
+          t("onboarding.bootAiFail");
+        patchBoot("ai", {
           status: "fail",
           detail: msg,
         });
         setBootFailMsg(msg);
         await sleep(1600);
         setError(msg);
-        setStep(STEPS.indexOf("cursor"));
+        setStep(STEPS.indexOf("ai"));
         return;
       }
 
-      patchBoot("cursor", { status: "ok" });
+      patchBoot("ai", { status: "ok" });
 
       // Language pack: skip if already built in localePrep; otherwise show
       // a running step (silent await here looked like a freeze).
@@ -540,9 +552,11 @@ export function OnboardingWizard() {
           ...(snapshot.form.gmailAppPassword.trim()
             ? { gmailAppPassword: snapshot.form.gmailAppPassword }
             : {}),
-          ...(snapshot.form.cursorApiKey.trim()
-            ? { cursorApiKey: snapshot.form.cursorApiKey }
+          ...(snapshot.form.openrouterApiKey.trim()
+            ? { openrouterApiKey: snapshot.form.openrouterApiKey }
             : {}),
+          llmModelFast: snapshot.form.llmModelFast,
+          llmModelSmart: snapshot.form.llmModelSmart,
         }),
       });
       const completeData = await completeRes.json();
@@ -891,24 +905,24 @@ export function OnboardingWizard() {
           </>
         ) : null}
 
-        {stepId === "cursor" ? (
+        {stepId === "ai" ? (
           <>
-            <h1 className="cmae-onb-title">{t("onboarding.cursorTitle")}</h1>
+            <h1 className="cmae-onb-title">{t("onboarding.aiTitle")}</h1>
             <p className="cmae-onb-why cmae-onb-privacy">
-              {t("onboarding.cursorWhy")}
+              {t("onboarding.aiWhy")}
             </p>
             <ol className="cmae-onb-guide">
               <li>
                 <RichText
-                  text={t("onboarding.cursorGuide0")}
+                  text={t("onboarding.aiGuide0")}
                   parts={{
                     link: (
                       <a
-                        href="https://cursor.com/dashboard/api"
+                        href="https://openrouter.ai/settings/keys"
                         target="_blank"
                         rel="noopener noreferrer"
                       >
-                        {t("onboarding.cursorGuide0Link")}
+                        {t("onboarding.aiGuide0Link")}
                       </a>
                     ),
                   }}
@@ -916,36 +930,41 @@ export function OnboardingWizard() {
               </li>
               <li>
                 <RichText
-                  text={t("onboarding.cursorGuide1")}
+                  text={t("onboarding.aiGuide1")}
                   parts={{
                     name: <strong>CMAE local</strong>,
                   }}
                 />
               </li>
-              <li>{t("onboarding.cursorGuide2")}</li>
+              <li>{t("onboarding.aiGuide2")}</li>
+              <li>
+                <RichText
+                  text={t("onboarding.aiGuideByok")}
+                  parts={{
+                    link: (
+                      <a
+                        href="https://openrouter.ai/settings/integrations"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {t("onboarding.aiGuideByokLink")}
+                      </a>
+                    ),
+                  }}
+                />
+              </li>
             </ol>
             <div className="cmae-onb-fields">
-              <Field
-                label={t("fields.cursorApiKey")}
-                hint={
-                  hasCursorKey
-                    ? t("fields.cursorKeySaved")
-                    : cursorFromEnv
-                      ? t("fields.cursorKeyFromEnv")
-                      : undefined
-                }
-              >
-                <input
-                  className="cmae-input"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={hasCursorKey ? "••••••••" : "crsr_…"}
-                  value={form.cursorApiKey}
-                  onChange={(e) =>
-                    setForm({ ...form, cursorApiKey: e.target.value })
-                  }
-                />
-              </Field>
+              <LlmSettingsFields
+                value={{
+                  openrouterApiKey: form.openrouterApiKey,
+                  llmModelFast: form.llmModelFast,
+                  llmModelSmart: form.llmModelSmart,
+                }}
+                onChange={(v) => setForm((f) => ({ ...f, ...v }))}
+                hasKey={hasAiKey}
+                keyFromEnv={aiKeyFromEnv}
+              />
             </div>
             <p className="cmae-form-hint">{t("onboarding.telemetryNotice")}</p>
           </>

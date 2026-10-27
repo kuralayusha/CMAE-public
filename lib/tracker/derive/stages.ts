@@ -33,7 +33,7 @@ import {
 import { SyncCanceledError, throwIfSyncCanceled } from "../cancel";
 import { normalizeCompanyKey, parseEmailAddr } from "../identity";
 import { softDeleteItemInTx } from "../item-tx";
-import { askTrackerLlm, TRACKER_LLM_MODEL } from "../llm";
+import { askTrackerLlm, trackerModel } from "../llm";
 import type { AiFeature } from "@/lib/ai-usage/features";
 import type { LlmFn } from "../llm-core";
 import { noteRecentItem } from "../recent";
@@ -326,7 +326,7 @@ async function runTriage(
       for (const [id, r] of results) {
         const tr = todo.find((x) => x.conversationId === id)!;
         saveTriage(tr, r, {
-          model: TRACKER_LLM_MODEL,
+          model: trackerModel("tracker.sync.triage"),
           promptVersion: TRIAGE_PROMPT_VERSION,
           accountId: ctx.accountId,
         });
@@ -358,7 +358,7 @@ async function runTriage(
     } else {
       ctx.stats.triageFailed += 1;
       saveTriageFailure(tr, aiError || o?.error || "no answer", {
-        model: TRACKER_LLM_MODEL,
+        model: trackerModel("tracker.sync.triage"),
         promptVersion: TRIAGE_PROMPT_VERSION,
       });
       out.set(tr.conversationId, null);
@@ -957,7 +957,7 @@ async function runEvents(
     if (o?.ok) {
       saveMailEvents(j.conv.key, o.events, {
         source: "ai",
-        model: TRACKER_LLM_MODEL,
+        model: trackerModel("tracker.sync.events"),
         promptVersion: EVENTS_PROMPT_VERSION,
         fingerprint: j.conv.fingerprint,
       });

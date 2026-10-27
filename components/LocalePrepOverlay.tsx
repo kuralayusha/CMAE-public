@@ -68,7 +68,7 @@ type Props = {
   doneKey?: string;
   failKey?: string;
   /**
-   * Onboarding: if Cursor key is missing, save preference and continue in EN.
+   * Onboarding: if the AI key is missing, save preference and continue in EN.
    * Settings (default false): fail loudly — user is already onboarded.
    */
   allowDeferWithoutKey?: boolean;

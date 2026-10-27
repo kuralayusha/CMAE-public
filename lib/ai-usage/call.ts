@@ -1,42 +1,28 @@
 /**
- * promptWithUsage — the ONLY place that calls `Agent.prompt` (a test enforces
- * this). Adds usage measurement + the response cache around the SDK call.
+ * promptWithUsage — the ONLY place that talks to the model API (a test
+ * enforces this). Adds usage measurement + the response cache around one
+ * OpenRouter chat completion (lib/llm/openrouter.ts).
  *
- * ── How token usage is read (verified against @cursor/sdk 1.0.37) ──────────
- * `Agent.prompt(message, options)` is implemented as
- *   `agent = Agent.create(options); run = agent.send(message); await run.wait();
- *    agent[Symbol.asyncDispose]()`
- * (see node_modules/@cursor/sdk/dist/esm, `static async prompt`). `run.wait()`
- * returns a `RunResult`, which carries
- *   `usage?: TokenUsage`  — "Cumulative token usage across turns that reported
- *                           it; absent when none did" (dist/esm/run.d.ts).
- * `TokenUsage = {inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens,
- * totalTokens, reasoningTokens?}`; the SDK builds it from the local agent's
- * `turn-ended` event via `toTokenUsage/sumTokenUsage`
- * (`totalTokens = input + output + cacheRead + cacheWrite`, so input is the
- * uncached bucket and reasoning is a subset of output).
- * So `RunResult.usage` is read directly — no `agent.getUsage()` and no manual
- * Agent.create/send/wait is needed. `agent.getUsage()` (AgentUsage with
- * `UsageCost.rawCostCents`) exists too but is eventually consistent and would
- * need a second call; we compute cost from our own price table instead.
- * When `usage` is absent we set `usage_missing = true` and never write zeros
- * as truth.
+ * ── Usage ──────────────────────────────────────────────────────────────────
+ * OpenRouter returns `usage` (tokens + `cost`) on every response. Token
+ * buckets are mapped to the schema the Cursor era used so old and new rows
+ * aggregate together: `inputTokens` is the UNCACHED input
+ * (`prompt_tokens − cached − cache_write`), cache buckets are separate and
+ * `reasoningTokens` is a subset of `outputTokens`. Cost is the amount
+ * OpenRouter reports (credits charged + upstream provider cost for BYOK);
+ * only when it is absent do we fall back to the price table. Absent usage →
+ * `usage_missing = 1` (never zeros as truth).
  *
- * Cancel / timeout: `Agent.prompt` has no abort API, so callers race it (timeout
- * and/or a cancel promise). The SDK call keeps running in the background after
- * a lost race; its usage is still recorded when it eventually settles (status
- * `timeout` / `canceled`) because the tokens were spent.
+ * ── Cancel / timeout ───────────────────────────────────────────────────────
+ * Unlike the old SDK call, the request is a real `fetch`: a timeout or a lost
+ * cancel race aborts it. An aborted call has no usage to read, so it is
+ * recorded as `timeout` / `canceled` with `usage_missing = 1`.
  */
 
-import { Agent } from "@cursor/sdk";
+import { openRouterChat, type OpenRouterChatResult, type OpenRouterUsage } from "../llm/openrouter";
 import { cacheKey } from "./cache-key";
 import { isCacheableFeature, type AiFeature, type SyncMode } from "./features";
-import {
-  computeCostMicroUsd,
-  DEFAULT_MODEL,
-  EMBEDDED_PRICES,
-  selectPrice,
-} from "./pricing";
+import { computeCostMicroUsd, EMBEDDED_PRICES, selectPrice } from "./pricing";
 import { currentUsageRunId } from "./run-context";
 import type { TokenCounts, UsageBackend, UsageEvent, UsageStatus } from "./types";
 
@@ -50,12 +36,13 @@ export type PromptWithUsageInput = {
   runId?: string | null;
   /** Skip the response-cache read (hard sync); the fresh result still replaces the entry. */
   bypassCache?: boolean;
-  model?: string;
+  /** OpenRouter slug, e.g. `anthropic/claude-sonnet-5.5`. */
+  model: string;
   /** Bump when the prompt template changes; part of the cache key. */
   promptVersion?: string | number;
   prompt: string;
+  /** OpenRouter API key. */
   apiKey: string;
-  cwd: string;
   timeoutMs?: number;
   timeoutError?: () => Error;
   emptyError?: (status: string) => Error;
@@ -63,11 +50,13 @@ export type PromptWithUsageInput = {
   cancelRace?: Promise<never>;
   /** Overrides the registered backend (tests). */
   backend?: UsageBackend | null;
+  /** Transport override (tests). */
+  fetchImpl?: typeof fetch;
 };
 
 export type PromptWithUsageResult = {
   text: string;
-  /** null when the SDK reported no usage (usage_missing) or on a cache hit. */
+  /** null when the API reported no usage (usage_missing) or on a cache hit. */
   usage: TokenCounts | null;
   cached: boolean;
   costMicroUsd: number;
@@ -96,26 +85,43 @@ const ZERO: TokenCounts = {
   reasoningTokens: 0,
 };
 
-function toCounts(
-  u:
-    | {
-        inputTokens: number;
-        outputTokens: number;
-        cacheReadTokens: number;
-        cacheWriteTokens: number;
-        reasoningTokens?: number;
-      }
-    | undefined,
-): TokenCounts | null {
+function toCounts(u: OpenRouterUsage | null | undefined): TokenCounts | null {
   if (!u) return null;
-  const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : 0);
   return {
-    inputTokens: n(u.inputTokens),
-    outputTokens: n(u.outputTokens),
-    cacheReadTokens: n(u.cacheReadTokens),
-    cacheWriteTokens: n(u.cacheWriteTokens),
-    reasoningTokens: n(u.reasoningTokens),
+    inputTokens: Math.max(0, u.promptTokens - u.cachedTokens - u.cacheWriteTokens),
+    outputTokens: u.completionTokens,
+    cacheReadTokens: u.cachedTokens,
+    cacheWriteTokens: u.cacheWriteTokens,
+    reasoningTokens: u.reasoningTokens,
   };
+}
+
+/**
+ * Micro-USD: what OpenRouter reported, else the price table, else 0.
+ *
+ * `cost` is what the OpenRouter account was charged, and it is what the
+ * OpenRouter dashboard sums. Normal requests ALSO carry
+ * `cost_details.upstream_inference_cost`, which is (about) the same money seen
+ * from the provider's side — adding it double-counts (verified: a 20-call
+ * translation summed to exactly 2× the dashboard). Only a BYOK request has a
+ * genuinely separate provider bill: `cost` is then just OpenRouter's small fee
+ * (~5%, or 0 within the free monthly allowance) while upstream is the real
+ * spend, so upstream ≫ cost. Add it only in that case.
+ */
+export function openRouterCostUsd(u: OpenRouterUsage): number | null {
+  if (u.costUsd == null) return null;
+  const byok = u.upstreamCostUsd > u.costUsd * 2;
+  return byok ? u.costUsd + u.upstreamCostUsd : u.costUsd;
+}
+
+function costOf(
+  u: OpenRouterUsage | null | undefined,
+  counts: TokenCounts | null,
+  price: ReturnType<typeof selectPrice>,
+): number {
+  const usd = u ? openRouterCostUsd(u) : null;
+  if (usd != null) return Math.round(usd * 1e6);
+  return counts && price ? computeCostMicroUsd(counts, price) : 0;
 }
 
 function safe(fn: () => void): void {
@@ -165,7 +171,7 @@ export async function promptWithUsage(
   input: PromptWithUsageInput,
 ): Promise<PromptWithUsageResult> {
   const backend = input.backend === undefined ? registeredBackend : input.backend;
-  const model = input.model ?? DEFAULT_MODEL;
+  const model = input.model;
   const table = (() => {
     try {
       return backend?.priceTable?.() ?? EMBEDDED_PRICES;
@@ -235,7 +241,7 @@ export async function promptWithUsage(
   let outcome: "timeout" | "canceled" | null = null;
 
   type Settled =
-    | { ok: true; result: Awaited<ReturnType<typeof Agent.prompt>> }
+    | { ok: true; result: OpenRouterChatResult }
     | { ok: false; err: unknown };
 
   const finalize = (s: Settled) => {
@@ -246,15 +252,19 @@ export async function promptWithUsage(
     let text: string | null = null;
     if (s.ok) {
       counts = toCounts(s.result.usage);
-      const failed = s.result.status === "error" || !s.result.result;
-      text = failed ? null : String(s.result.result).trim();
+      const failed = !s.result.text;
+      text = failed ? null : s.result.text;
       status = outcome ?? (failed ? "error" : "ok");
     } else {
       status = outcome ?? "error";
     }
     const usageMissing = counts === null;
     const tokens = counts ?? { ...ZERO };
-    const cost = counts ? computeCostMicroUsd(tokens, priceAt(new Date().toISOString())) : 0;
+    const cost = costOf(
+      s.ok ? s.result.usage : null,
+      counts,
+      priceAt(new Date().toISOString()),
+    );
     const ev: UsageEvent = {
       ...baseEvent(status, durationMs),
       tokens,
@@ -281,10 +291,13 @@ export async function promptWithUsage(
     }
   };
 
-  const call = Agent.prompt(input.prompt, {
+  const controller = new AbortController();
+  const call = openRouterChat({
     apiKey: input.apiKey,
-    model: { id: model },
-    local: { cwd: input.cwd },
+    model,
+    prompt: input.prompt,
+    signal: controller.signal,
+    fetchImpl: input.fetchImpl,
   });
   const done: Promise<Settled> = call.then(
     (result) => {
@@ -305,6 +318,7 @@ export async function promptWithUsage(
       new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => {
           outcome = "timeout";
+          controller.abort();
           reject(
             input.timeoutError?.() ??
               new LlmTimeoutError(Math.round(timeoutMs / 1000)),
@@ -317,6 +331,7 @@ export async function promptWithUsage(
     racers.push(
       input.cancelRace.catch((err) => {
         outcome ??= "canceled";
+        controller.abort();
         throw err;
       }) as Promise<never>,
     );
@@ -339,27 +354,24 @@ export async function promptWithUsage(
   }
   const result = settled.result;
   const counts = toCounts(result.usage);
-  if (result.status === "error" || !result.result) {
-    const status = String(result.status ?? "unknown");
+  const costMicroUsd = costOf(result.usage, counts, priceAt(new Date().toISOString()));
+  if (!result.text) {
+    const status = String(result.finishReason ?? "empty");
     const err =
       input.emptyError?.(status) ?? new Error(`LLM returned no result (${status})`);
     stampUsage(err, {
       usage: counts,
       cached: false,
-      costMicroUsd: counts
-        ? computeCostMicroUsd(counts, priceAt(new Date().toISOString()))
-        : 0,
+      costMicroUsd,
       durationMs: Date.now() - started,
     });
     throw err;
   }
   return {
-    text: String(result.result).trim(),
+    text: result.text,
     usage: counts,
     cached: false,
-    costMicroUsd: counts
-      ? computeCostMicroUsd(counts, priceAt(new Date().toISOString()))
-      : 0,
+    costMicroUsd,
     durationMs: Date.now() - started,
   };
 }

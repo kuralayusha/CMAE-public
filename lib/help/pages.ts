@@ -74,15 +74,15 @@ export const PAGE_HELP: Record<AppPageId, PageHelp> = {
   settings: {
     navLabel: "Settings",
     title: "Settings",
-    subtitle: "Update your profile, Gmail, Cursor key, and job preferences.",
+    subtitle: "Update your profile, Gmail, AI key and models, and job preferences.",
     helpTitle: "About Settings",
     helpBody: [
       "Everything from setup lives here. Changes apply to new drafts right away.",
-      "Your Gmail App Password and Cursor API key are encrypted and stored only on this computer.",
+      "Your Gmail App Password and OpenRouter API key are encrypted and stored only on this computer.",
     ],
     helpSteps: [
       "Update your name and language under Profile — new drafts follow these.",
-      "To change Gmail or Cursor details, paste a new value; leave the field blank to keep the current one.",
+      "To change Gmail or AI details, paste a new value; leave the field blank to keep the current one.",
       "Job preferences (work type, notice period, salary) shape application and follow-up wording.",
       "Add PDF CVs here; they attach to drafts based on language and tags.",
     ],

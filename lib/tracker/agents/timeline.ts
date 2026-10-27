@@ -3,9 +3,10 @@
  */
 
 import { t } from "@/lib/i18n/t";
-import { askTrackerLlm, extractJson } from "../llm";
+import { askTrackerLlm, extractJson, trackerModel } from "../llm";
 
-export const TIMELINE_MODEL = "composer-2.5";
+/** Model that serves timeline summaries (stored with each timeline row). */
+export const timelineModel = () => trackerModel("tracker.timeline");
 
 export type TimelineEventKind =
   | "unknown_start"

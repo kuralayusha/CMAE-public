@@ -1,23 +1,9 @@
 import { promptWithUsage, type AiFeature } from "@/lib/ai-usage";
-import { eq } from "drizzle-orm";
-import { decryptOptional } from "@/lib/crypto/encryption";
-import { getDb } from "@/lib/db/client";
-import { settings } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
-import { getAgentCwd } from "@/lib/paths";
+import { modelForFeature, resolveOpenRouterKey } from "@/lib/llm/config";
 import { throwIfCanceled, whenJobAborted } from "./cancel";
 import { speak } from "./speak";
 import type { SpecialistId } from "./types";
-
-async function resolveApiKey(): Promise<string> {
-  if (process.env.CURSOR_API_KEY) return process.env.CURSOR_API_KEY;
-  const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
-  const key = decryptOptional(row?.cursorApiKeyEnc);
-  if (!key) {
-    throw new Error(t("errors.cursorKeyMissing"));
-  }
-  return key;
-}
 
 export async function askLlm(
   jobId: string,
@@ -34,18 +20,17 @@ export async function askLlm(
     label || t("terminal.detail.modelThinking"),
     t("terminal.plain.evaluating"),
   );
-  const apiKey = await resolveApiKey();
+  const apiKey = resolveOpenRouterKey();
   throwIfCanceled(jobId);
 
-  // The SDK call has no abort API — promptWithUsage races it against the job
-  // abort promise so cancel unblocks the pipeline immediately.
+  // promptWithUsage races the request against the job abort promise and
+  // aborts the fetch, so cancel unblocks the pipeline immediately.
   const result = await promptWithUsage({
     feature,
     runId: jobId,
     prompt,
     apiKey,
-    cwd: getAgentCwd(),
-    model: "composer-2.5",
+    model: modelForFeature(feature),
     cancelRace: whenJobAborted(jobId),
     emptyError: (status) => new Error(t("errors.llmNoResponse", { status })),
   });

@@ -1,11 +1,12 @@
 import { currentUsageRunId, promptWithUsage, withUsageRunAsync } from "@/lib/ai-usage";
 import { ImapFlow } from "imapflow";
-import { eq } from "drizzle-orm";
-import { decryptOptional } from "@/lib/crypto/encryption";
-import { getDb } from "@/lib/db/client";
-import { settings } from "@/lib/db/schema";
 import { t } from "@/lib/i18n/t";
-import { getAgentCwd } from "@/lib/paths";
+import {
+  modelForSlot,
+  resolveOpenRouterKey,
+  savedOpenRouterKey,
+} from "@/lib/llm/config";
+import { OpenRouterError } from "@/lib/llm/openrouter";
 import {
   getGmailCredentials,
   updateSettings,
@@ -18,34 +19,18 @@ export type VerifyCheck = {
 
 export type OnboardingVerifyResult = {
   gmail: VerifyCheck;
-  cursor: VerifyCheck;
+  ai: VerifyCheck;
   ok: boolean;
   /** Which onboarding step to return to on failure */
-  failStep?: "gmail" | "cursor";
+  failStep?: "gmail" | "ai";
 };
 
-function resolveCursorApiKey(): string | null {
-  try {
-    const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
-    const fromDb = decryptOptional(row?.cursorApiKeyEnc)?.trim();
-    if (fromDb) return fromDb;
-  } catch {
-    /* corrupt/wrong master key — fall through to env */
-  }
-  return process.env.CURSOR_API_KEY?.trim() || null;
-}
-
-/** Persist env Cursor key into SQLite so packaged desktop stays onboarded. */
-export function persistEnvCursorKeyIfNeeded(): void {
-  try {
-    const row = getDb().select().from(settings).where(eq(settings.id, 1)).get();
-    if (decryptOptional(row?.cursorApiKeyEnc)?.trim()) return;
-  } catch {
-    /* treat as missing */
-  }
-  const env = process.env.CURSOR_API_KEY?.trim();
+/** Persist an env OpenRouter key into SQLite so packaged desktop stays onboarded. */
+export function persistEnvOpenRouterKeyIfNeeded(): void {
+  if (savedOpenRouterKey()) return;
+  const env = process.env.OPENROUTER_API_KEY?.trim();
   if (!env) return;
-  updateSettings({ cursorApiKey: env });
+  updateSettings({ openrouterApiKey: env });
 }
 
 /** Live IMAP login against Gmail — does not fetch mail. */
@@ -91,48 +76,65 @@ export async function verifyGmailImap(): Promise<VerifyCheck> {
 
 class NoResponseError extends Error {}
 
-/** Live Cursor SDK call — confirms the API key works. */
-export async function verifyCursorApiKey(): Promise<VerifyCheck> {
-  const apiKey = resolveCursorApiKey();
-  if (!apiKey) {
-    return { ok: false, error: t("onboarding.verify.cursorMissing") };
+/**
+ * Live check of the OpenRouter key AND both model slots (one tiny call per
+ * distinct model), so a mistyped slug fails here instead of mid-research.
+ */
+export async function verifyOpenRouter(): Promise<VerifyCheck> {
+  let apiKey: string;
+  try {
+    apiKey = resolveOpenRouterKey();
+  } catch {
+    return { ok: false, error: t("onboarding.verify.openrouterMissing") };
   }
 
+  const models = [...new Set([modelForSlot("fast"), modelForSlot("smart")])];
   try {
     // Live check: never cached (feature policy), but its tokens are metered.
-    const verify = () =>
-      promptWithUsage({
-        feature: "onboarding.verify",
-        prompt: "Reply with exactly one word: pong. No other text.",
-        apiKey,
-        cwd: getAgentCwd(),
-        model: "composer-2.5",
-        emptyError: (status) =>
-          new NoResponseError(t("onboarding.verify.cursorNoResponse", { status })),
-      });
+    const verify = async () => {
+      for (const model of models) {
+        try {
+          await promptWithUsage({
+            feature: "onboarding.verify",
+            prompt: "Reply with exactly one word: pong. No other text.",
+            apiKey,
+            model,
+            timeoutMs: 45_000,
+            emptyError: (status) =>
+              new NoResponseError(
+                t("onboarding.verify.openrouterNoResponse", { model, status }),
+              ),
+          });
+        } catch (err) {
+          throw Object.assign(err instanceof Error ? err : new Error(String(err)), {
+            verifyModel: model,
+          });
+        }
+      }
+    };
     if (currentUsageRunId()) await verify();
     else await withUsageRunAsync(globalThis.crypto.randomUUID(), verify);
-    persistEnvCursorKeyIfNeeded();
+    persistEnvOpenRouterKeyIfNeeded();
     return { ok: true };
   } catch (err) {
     if (err instanceof NoResponseError) return { ok: false, error: err.message };
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: humanizeCursorError(msg) };
+    const model = (err as { verifyModel?: string }).verifyModel ?? models[0]!;
+    return { ok: false, error: humanizeOpenRouterError(err, model) };
   }
 }
 
 export async function verifyOnboardingConnections(): Promise<OnboardingVerifyResult> {
   const gmail = await verifyGmailImap();
   if (!gmail.ok) {
-    return { gmail, cursor: { ok: false }, ok: false, failStep: "gmail" };
+    return { gmail, ai: { ok: false }, ok: false, failStep: "gmail" };
   }
 
-  const cursor = await verifyCursorApiKey();
-  if (!cursor.ok) {
-    return { gmail, cursor, ok: false, failStep: "cursor" };
+  const ai = await verifyOpenRouter();
+  if (!ai.ok) {
+    return { gmail, ai, ok: false, failStep: "ai" };
   }
 
-  return { gmail, cursor, ok: true };
+  return { gmail, ai, ok: true };
 }
 
 function humanizeImapError(msg: string): string {
@@ -149,18 +151,20 @@ function humanizeImapError(msg: string): string {
   return msg.slice(0, 200);
 }
 
-function humanizeCursorError(msg: string): string {
+function humanizeOpenRouterError(err: unknown, model: string): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const status = err instanceof OpenRouterError ? err.status : 0;
   const m = msg.toLowerCase();
-  if (
-    m.includes("unauthorized") ||
-    m.includes("401") ||
-    m.includes("invalid") ||
-    m.includes("api key")
-  ) {
-    return t("onboarding.verify.cursorInvalid");
+  if (status === 401 || status === 403 || m.includes("no auth") || m.includes("invalid api key")) {
+    return t("onboarding.verify.openrouterInvalid");
   }
+  if (status === 402) return t("onboarding.verify.openrouterCredits");
+  if (status === 404 || m.includes("no endpoints") || m.includes("not a valid model")) {
+    return t("onboarding.verify.openrouterModel", { model });
+  }
+  if (status === 429) return t("onboarding.verify.openrouterRateLimit");
   if (m.includes("timeout") || m.includes("timed out")) {
-    return t("onboarding.verify.cursorTimeout");
+    return t("onboarding.verify.openrouterTimeout");
   }
   return msg.slice(0, 200);
 }

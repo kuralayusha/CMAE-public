@@ -204,8 +204,3 @@ export function getResearchJobsDir(): string {
   }
   return dir;
 }
-
-/** Working directory for Cursor/local agents — prefer workspace when present. */
-export function getAgentCwd(): string {
-  return getWorkspaceRootPath();
-}

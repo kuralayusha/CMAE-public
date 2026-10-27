@@ -13,7 +13,12 @@ export const settings = sqliteTable("settings", {
   fullName: text("full_name"),
   gmailAddress: text("gmail_address"),
   gmailAppPasswordEnc: text("gmail_app_password_enc"),
+  /** Legacy (Cursor SDK). Blanked by migration 016; nothing reads it. */
   cursorApiKeyEnc: text("cursor_api_key_enc"),
+  openrouterApiKeyEnc: text("openrouter_api_key_enc"),
+  /** OpenRouter slugs for the two model slots; null = built-in default. */
+  llmModelFast: text("llm_model_fast"),
+  llmModelSmart: text("llm_model_smart"),
   cvText: text("cv_text"),
   cvFileName: text("cv_file_name"),
   followUpDays: integer("follow_up_days").notNull().default(7),

@@ -5,6 +5,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/lib/db/client";
 import { mailIntents } from "@/lib/db/schema";
+import { trackerModel } from "../llm";
 import {
   normalizeIntent,
   regexMailIntent,
@@ -16,7 +17,9 @@ import { parseAutoFlags, type AutoFlags } from "./noise";
 
 /** Bump when the AI intent prompt changes. */
 export const INTENT_PROMPT_VERSION = 1;
-export const INTENT_MODEL = "composer-2.5";
+/** Rows not produced by a model (header / regex) are labelled with their source. */
+const intentModel = (source: IntentSource) =>
+  source === "ai" ? trackerModel("tracker.sync.events") : source;
 
 export type IntentSource = "ai" | "regex" | "header";
 
@@ -75,7 +78,7 @@ export function upsertMailIntent(input: {
     waitingUntil: input.waitingUntil ?? null,
     confidence: input.confidence ?? null,
     source: input.source,
-    model: input.model ?? INTENT_MODEL,
+    model: input.model ?? intentModel(input.source),
     promptVersion: input.promptVersion ?? INTENT_PROMPT_VERSION,
     createdAt: now,
   };

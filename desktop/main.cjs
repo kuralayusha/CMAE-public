@@ -311,7 +311,7 @@ function nodeBinary() {
 
 /**
  * Env for the packaged Next server.
- * Do NOT inherit developer secrets (.env / shell CURSOR_API_KEY, etc.)
+ * Do NOT inherit developer secrets (.env / shell OPENROUTER_API_KEY, etc.)
  * so local DMG builds always behave like a clean install for testers.
  */
 function ensureInternalToken() {
@@ -410,7 +410,7 @@ function buildProductionServerEnv(port, masterKey) {
   env.CMAE_USER_DATA = userDataRoot();
   env.CMAE_MASTER_KEY = masterKey;
   env.CMAE_INTERNAL_TOKEN = ensureInternalToken();
-  // Explicitly absent: CURSOR_API_KEY, CMAE_I18N_URL, project .env vars
+  // Explicitly absent: OPENROUTER_API_KEY, CMAE_I18N_URL, project .env vars
   return env;
 }
 

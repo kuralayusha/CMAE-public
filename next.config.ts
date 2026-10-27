@@ -43,7 +43,6 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "better-sqlite3",
     "playwright",
-    "@cursor/sdk",
     "imapflow",
     "nodemailer",
     "pdf-parse",

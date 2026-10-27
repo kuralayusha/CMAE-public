@@ -24,6 +24,15 @@ export function RequireOnboarded({ children }: { children: React.ReactNode }) {
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (data.complete || data.flagSet) {
+          // Upgraded from the Cursor era: onboarded, but no OpenRouter key yet.
+          // Send them to Settings (AI section opens) instead of failing on the
+          // first model call.
+          const needsAiKey =
+            Array.isArray(data.gaps) && data.gaps.includes("openrouterApiKey");
+          if (needsAiKey && window.location.pathname !== "/settings") {
+            window.location.replace("/settings");
+            return;
+          }
           setReady(true);
           return;
         }

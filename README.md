@@ -237,7 +237,7 @@ Release sayfası: https://github.com/kuralayusha/cmae-releases/releases/tag/v0.1
 - **Tracker** (`/` → `/tracker`) — Gmail sync (last 30 days) + research outputs; application status list; Gmail Drafts (you send)
 - **Research** (`/research`) — URL list → parallel agents + live terminals → `workspace/`
 - **Folders** (`/folders`) — workspace file browser
-- **Settings** (`/settings`) — profile, CVs, Gmail App Password, Cursor API key, follow-up days, preferred language
+- **Settings** (`/settings`) — profile, CVs, Gmail App Password, OpenRouter API key + fast/smart model choice, follow-up days, preferred language
 
 ## Tracker statuses (priority order)
 
@@ -289,7 +289,7 @@ npm run desktop:publish:win       # build + upload → kuralayusha/cmae-releases
 Windows script: [`scripts/desktop-build-win.mjs`](scripts/desktop-build-win.mjs). ARM64 Windows’ta portable x64 Node: `%LOCALAPPDATA%\node-win-x64\node-v22.23.2-win-x64\`.
 
 Packaged builds (DMG/EXE) do **not** inherit your project `.env` or shell secrets
-(`CURSOR_API_KEY`, etc.). Testers always configure Gmail / Cursor in onboarding —
+(`OPENROUTER_API_KEY`, etc.). Testers always configure Gmail / OpenRouter in onboarding —
 same clean path every time. `desktop:dev` still loads `.env` for convenience.
 
 ### Updates (version gate)

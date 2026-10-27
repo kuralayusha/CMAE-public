@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CvDropzone } from "@/components/CvDropzone";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { LlmSettingsFields } from "@/components/LlmSettingsFields";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
 import {
   useOperations,
@@ -41,8 +42,10 @@ type Settings = {
   fullName: string | null;
   gmailAddress: string | null;
   hasGmailAppPassword: boolean;
-  hasCursorApiKey: boolean;
-  cursorApiKeyFromEnv?: boolean;
+  hasOpenrouterApiKey: boolean;
+  openrouterApiKeyFromEnv?: boolean;
+  llmModelFast: string;
+  llmModelSmart: string;
   cvFileName: string | null;
   hasCv: boolean;
   followUpDays: number;
@@ -80,16 +83,19 @@ function SettingsAcc({
   title,
   children,
   danger,
+  open,
 }: {
   title: string;
   children: React.ReactNode;
   danger?: boolean;
+  open?: boolean;
 }) {
   const upper = useLocaleUpper();
   return (
     <details
       className={`cmae-form-acc${danger ? " is-danger" : ""}`}
       name="cmae-settings"
+      open={open}
     >
       <summary className="cmae-form-acc-sum">
         <span className="cmae-form-section-title">{upper(title)}</span>
@@ -118,7 +124,9 @@ export default function SettingsPage() {
     fullName: "",
     gmailAddress: "",
     gmailAppPassword: "",
-    cursorApiKey: "",
+    openrouterApiKey: "",
+    llmModelFast: "",
+    llmModelSmart: "",
     followUpDays: DEFAULT_FOLLOW_UP_DAYS,
     rejectionCloseDays: DEFAULT_REJECTION_CLOSE_DAYS,
     staleCloseDays: DEFAULT_STALE_CLOSE_DAYS,
@@ -132,6 +140,9 @@ export default function SettingsPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<"ok" | "err" | null>(null);
   const [busy, setBusy] = useState(false);
+  const needsAiKey = Boolean(
+    meta && !meta.hasOpenrouterApiKey && !meta.openrouterApiKeyFromEnv,
+  );
   const [wipeOpen, setWipeOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const [accountSwitchPreview, setAccountSwitchPreview] = useState<{
@@ -241,6 +252,8 @@ export default function SettingsPage() {
       ...f,
       fullName: data.fullName || "",
       gmailAddress: data.gmailAddress || "",
+      llmModelFast: data.llmModelFast || "",
+      llmModelSmart: data.llmModelSmart || "",
       followUpDays: data.followUpDays || DEFAULT_FOLLOW_UP_DAYS,
       rejectionCloseDays:
         data.rejectionCloseDays || DEFAULT_REJECTION_CLOSE_DAYS,
@@ -319,6 +332,9 @@ export default function SettingsPage() {
     flash(null);
     const prevLang = (meta?.preferredLanguage || "en").toLowerCase();
     const nextLang = form.preferredLanguage.trim().toLowerCase();
+    const llmModelsChanged =
+      form.llmModelFast.trim() !== (meta?.llmModelFast ?? "") ||
+      form.llmModelSmart.trim() !== (meta?.llmModelSmart ?? "");
     try {
       const res = await fetch("/api/settings", {
         method: "PUT",
@@ -343,7 +359,29 @@ export default function SettingsPage() {
       setAccountSwitchPreview(null);
       setMeta(data);
       if (data.jobPreferences) setPrefs({ ...DEFAULT_PREFS, ...data.jobPreferences });
-      setForm((f) => ({ ...f, gmailAppPassword: "", cursorApiKey: "" }));
+      setForm((f) => ({
+        ...f,
+        gmailAppPassword: "",
+        openrouterApiKey: "",
+        llmModelFast: data.llmModelFast || "",
+        llmModelSmart: data.llmModelSmart || "",
+      }));
+
+      // Live-check the key + both models right after a change, so a typo shows
+      // up here and not in the middle of a research run.
+      if (form.openrouterApiKey.trim() || llmModelsChanged) {
+        const check = await fetch("/api/onboarding/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ check: "ai" }),
+        })
+          .then((r) => r.json())
+          .catch(() => null);
+        if (check && check.ok === false) {
+          flash(check.ai?.error || t("onboarding.bootAiFail"), "err");
+          return;
+        }
+      }
 
       if (nextLang && nextLang !== prevLang) {
         setBusy(false);
@@ -570,27 +608,21 @@ export default function SettingsPage() {
             <p className="cmae-field-hint">{t("onboarding.gmailPrivacy")}</p>
           </SettingsAcc>
 
-          <SettingsAcc title={t("settings.accCursor")}>
-            <p className="cmae-field-hint">{t("onboarding.cursorPrivacy")}</p>
-            <Field
-              label={t("fields.cursorApiKeyShort")}
-              hint={
-                meta?.hasCursorApiKey
-                  ? t("fields.cursorKeySavedKeep")
-                  : meta?.cursorApiKeyFromEnv
-                    ? t("fields.cursorKeyFromEnvKeep")
-                    : t("fields.cursorKeyHint")
-              }
-            >
-              <input
-                className="cmae-input"
-                type="password"
-                autoComplete="off"
-                placeholder={meta?.hasCursorApiKey ? "••••••••" : "crsr_…"}
-                value={form.cursorApiKey}
-                onChange={(e) => setForm({ ...form, cursorApiKey: e.target.value })}
-              />
-            </Field>
+          <SettingsAcc title={t("settings.accAi")} open={needsAiKey}>
+            {needsAiKey ? (
+              <p className="cmae-form-hint">{t("settings.aiRequired")}</p>
+            ) : null}
+            <p className="cmae-field-hint">{t("onboarding.aiPrivacy")}</p>
+            <LlmSettingsFields
+              value={{
+                openrouterApiKey: form.openrouterApiKey,
+                llmModelFast: form.llmModelFast,
+                llmModelSmart: form.llmModelSmart,
+              }}
+              onChange={(v) => setForm((f) => ({ ...f, ...v }))}
+              hasKey={Boolean(meta?.hasOpenrouterApiKey)}
+              keyFromEnv={Boolean(meta?.openrouterApiKeyFromEnv)}
+            />
           </SettingsAcc>
 
           <SettingsAcc title={t("settings.accEmail")}>

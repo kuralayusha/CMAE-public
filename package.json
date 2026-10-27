@@ -30,7 +30,6 @@
     "desktop:publish:win": "node scripts/desktop-build-win.mjs --upload"
   },
   "dependencies": {
-    "@cursor/sdk": "^1.0.37",
     "better-sqlite3": "^13.0.3",
     "cheerio": "^1.2.0",
     "drizzle-orm": "^0.45.4",
