@@ -3,8 +3,31 @@
 import { useEffect, useState } from "react";
 import { useT } from "@/components/I18nProvider";
 import { ModelPicker } from "@/components/ModelPicker";
-import { Field } from "@/components/ui";
+import {
+  ActivityIcon,
+  BoltIcon,
+  BuildingIcon,
+  CalendarIcon,
+  CheckIcon,
+  ClockIcon,
+  EyeIcon,
+  FilterIcon,
+  GlobeIcon,
+  KeyIcon,
+  LinkIcon,
+  MailIcon,
+  PencilIcon,
+  ResetIcon,
+  SearchIcon,
+  SendIcon,
+  SlidersIcon,
+  SparklesIcon,
+  TargetIcon,
+  WandIcon,
+} from "@/components/icons";
+import type { ReactElement } from "react";
 import { PROVIDERS, recommendationFor, shortName } from "@/lib/llm/catalog";
+import "./llm-picker.css";
 import type { OpenRouterModel } from "@/lib/llm/openrouter";
 import {
   DEFAULT_MODELS,
@@ -65,6 +88,22 @@ function loadCatalog(): Promise<OpenRouterModel[]> {
     });
   return catalogPromise;
 }
+
+const FEATURE_ICONS: Record<string, ReactElement> = {
+  "research.scout": <GlobeIcon size={16} />,
+  "research.research": <BuildingIcon size={16} />,
+  "research.jobfit": <TargetIcon size={16} />,
+  "research.discover": <LinkIcon size={16} />,
+  "research.writer": <PencilIcon size={16} />,
+  "research.reviewer": <EyeIcon size={16} />,
+  "tracker.sync.triage": <FilterIcon size={16} />,
+  "tracker.sync.identity": <BuildingIcon size={16} />,
+  "tracker.sync.events": <CalendarIcon size={16} />,
+  "tracker.signals": <ActivityIcon size={16} />,
+  "tracker.match": <LinkIcon size={16} />,
+  "tracker.timeline": <ClockIcon size={16} />,
+  "tracker.followup": <SendIcon size={16} />,
+};
 
 /** "research.writer" → "researchWriter" (i18n key under llm.features). */
 const featureKey = (f: string) => f.replace(/\.(\w)/g, (_, c: string) => c.toUpperCase());
@@ -138,28 +177,60 @@ export function LlmSettingsFields({
     return m ? shortName(m.name) : id;
   };
 
+  const keyOk = hasKey || keyFromEnv;
   const keyHint = hasKey
     ? t("fields.openrouterKeySaved")
     : keyFromEnv
       ? t("fields.openrouterKeyFromEnv")
       : t("fields.openrouterKeyHint");
+  const slotLabel = (slot: ModelSlot) =>
+    t(slot === "fast" ? "fields.llmModelFast" : "fields.llmModelSmart");
+  const SlotIcon = ({ slot }: { slot: ModelSlot }) =>
+    slot === "fast" ? <BoltIcon size={16} /> : <SparklesIcon size={16} />;
+  const pinCount = Object.keys(value.llmOverrides).length;
+
+  function toggleDetailed() {
+    const next = !detailed;
+    setDetailed(next);
+    // Switching it off must not leave hidden pins that still apply.
+    if (!next && pinCount) onChange({ ...value, llmOverrides: {} });
+  }
 
   return (
-    <>
-      <Field label={t("fields.openrouterApiKey")} hint={keyHint}>
-        <input
-          className="cmae-input"
-          type="password"
-          autoComplete="off"
-          placeholder={hasKey ? "••••••••" : "sk-or-…"}
-          value={value.openrouterApiKey}
-          onChange={(e) => onChange({ ...value, openrouterApiKey: e.target.value })}
-        />
-      </Field>
+    <div className="cmae-llm">
+      <section className="cmae-llm-card">
+        <div className="cmae-llm-card-head is-flat">
+          <span className="cmae-llm-card-icon"><KeyIcon size={16} /></span>
+          <div className="cmae-llm-card-copy">
+            <h3 className="cmae-llm-card-title">{t("fields.openrouterApiKey")}</h3>
+            <p className="cmae-llm-card-desc">{keyHint}</p>
+          </div>
+          {keyOk ? (
+            <span className="cmae-llm-chip is-ok"><CheckIcon size={12} />{t("llm.keyReady")}</span>
+          ) : null}
+        </div>
+        <div className="cmae-llm-card-body" style={{ paddingTop: 0 }}>
+          <input
+            className="cmae-input"
+            type="password"
+            autoComplete="off"
+            aria-label={t("fields.openrouterApiKey")}
+            placeholder={hasKey ? "••••••••" : "sk-or-…"}
+            value={value.openrouterApiKey}
+            onChange={(e) => onChange({ ...value, openrouterApiKey: e.target.value })}
+          />
+        </div>
+      </section>
 
-      <Field label={t("llm.quickSetup")} hint={t("llm.quickSetupHint")}>
+      <div className="cmae-llm-quick">
+        <span className="cmae-llm-card-icon"><WandIcon size={16} /></span>
+        <div className="cmae-llm-card-copy">
+          <h3 className="cmae-llm-card-title">{t("llm.quickSetup")}</h3>
+          <p className="cmae-llm-card-desc">{t("llm.quickSetupHint")}</p>
+        </div>
         <select
           className="cmae-input"
+          aria-label={t("llm.quickSetup")}
           value=""
           disabled={!catalog}
           onChange={(e) => e.target.value && quickSetup(e.target.value)}
@@ -171,103 +242,122 @@ export function LlmSettingsFields({
             </option>
           ))}
         </select>
-      </Field>
+      </div>
 
       {(["fast", "smart"] as const).map((slot) => (
-        <div key={slot} className="cmae-llm-block">
-          <div>
-            <span className="cmae-field-label">
-              {t(slot === "fast" ? "fields.llmModelFast" : "fields.llmModelSmart")}
-            </span>
-            <p className="cmae-field-hint">
-              {t(slot === "fast" ? "fields.llmModelFastHint" : "fields.llmModelSmartHint")}
-            </p>
+        <section key={slot} className="cmae-llm-card">
+          <div className="cmae-llm-card-head">
+            <span className="cmae-llm-card-icon"><SlotIcon slot={slot} /></span>
+            <div className="cmae-llm-card-copy">
+              <h3 className="cmae-llm-card-title">{slotLabel(slot)}</h3>
+              <p className="cmae-llm-card-desc">
+                {t(slot === "fast" ? "fields.llmModelFastHint" : "fields.llmModelSmartHint")}
+              </p>
+            </div>
           </div>
-          <ModelPicker
-            catalog={catalog}
-            slot={slot}
-            value={slotChoice(slot)}
-            onChange={(c) => setSlot(slot, c)}
-          />
-        </div>
+          <div className="cmae-llm-card-body">
+            <ModelPicker
+              catalog={catalog}
+              slot={slot}
+              value={slotChoice(slot)}
+              onChange={(c) => setSlot(slot, c)}
+            />
+          </div>
+        </section>
       ))}
 
-      <div className="cmae-llm-block">
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <input
-            type="checkbox"
-            checked={detailed}
-            onChange={(e) => {
-              setDetailed(e.target.checked);
-              // Switching it off must not leave hidden pins that still apply.
-              if (!e.target.checked && Object.keys(value.llmOverrides).length) {
-                onChange({ ...value, llmOverrides: {} });
-              }
-            }}
+      <section className="cmae-llm-card">
+        <div className={`cmae-llm-card-head${detailed ? "" : " is-flat"}`}>
+          <span className="cmae-llm-card-icon"><SlidersIcon size={16} /></span>
+          <div className="cmae-llm-card-copy">
+            <h3 className="cmae-llm-card-title">{t("llm.detailedMode")}</h3>
+            <p className="cmae-llm-card-desc">{t("llm.detailedModeHint")}</p>
+          </div>
+          {pinCount ? (
+            <span className="cmae-llm-chip">{t("llm.customCount", { count: pinCount })}</span>
+          ) : null}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={detailed}
+            aria-label={t("llm.detailedMode")}
+            className="cmae-switch"
+            onClick={toggleDetailed}
           />
-          <span className="cmae-field-label">{t("llm.detailedMode")}</span>
-        </label>
-        <p className="cmae-field-hint">{t("llm.detailedModeHint")}</p>
+        </div>
 
-        {detailed
-          ? (["research", "tracker"] as const).map((group) => (
+        {detailed ? (
+          <div className="cmae-llm-card-body">
+            {(["research", "tracker"] as const).map((group) => (
               <div key={group}>
-                <span className="cmae-field-label">{t(`llm.groups.${group}`)}</span>
-                {TUNABLE_FEATURES.filter((f) => f.group === group).map(({ feature }) => {
-                  const pin = value.llmOverrides[feature];
-                  const slot = slotForFeature(feature);
-                  const slotModel = slotChoice(slot).model;
-                  return (
-                    <div key={feature} className="cmae-llm-feature">
-                      <div className="cmae-llm-feature-head">
-                        <div>
-                          <strong>{t(`llm.features.${featureKey(feature)}`)}</strong>
-                          <p className="cmae-field-hint">
-                            {t(`llm.features.${featureKey(feature)}Hint`)}
-                          </p>
+                <h4 className="cmae-llm-group-title">
+                  {group === "research" ? <SearchIcon size={14} /> : <MailIcon size={14} />}
+                  {t(`llm.groups.${group}`)}
+                </h4>
+                <div className="cmae-llm-features">
+                  {TUNABLE_FEATURES.filter((f) => f.group === group).map(({ feature }) => {
+                    const pin = value.llmOverrides[feature];
+                    const slot = slotForFeature(feature);
+                    const key = featureKey(feature);
+                    return (
+                      <div
+                        key={feature}
+                        className={`cmae-llm-feature${pin ? " is-pinned" : ""}`}
+                      >
+                        <div className="cmae-llm-feature-head">
+                          <span className="cmae-llm-feature-icon">{FEATURE_ICONS[feature]}</span>
+                          <div className="cmae-llm-feature-copy">
+                            <div className="cmae-llm-feature-name">{t(`llm.features.${key}`)}</div>
+                            <p className="cmae-llm-card-desc">{t(`llm.features.${key}Hint`)}</p>
+                          </div>
+                          <div className="cmae-llm-feature-actions">
+                            {pin ? (
+                              <>
+                                <span className="cmae-llm-chip is-ok">{t("llm.customBadge")}</span>
+                                <button
+                                  type="button"
+                                  className="cmae-btn cmae-btn-ghost cmae-llm-btn"
+                                  onClick={() => setOverride(feature, null)}
+                                >
+                                  <ResetIcon size={12} />
+                                  {t("llm.followSlot")}
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="cmae-llm-chip" title={slotLabel(slot)}>
+                                  <SlotIcon slot={slot} />
+                                  <b>{nameOf(slotChoice(slot).model)}</b>
+                                </span>
+                                <button
+                                  type="button"
+                                  className="cmae-btn cmae-btn-ghost cmae-llm-btn"
+                                  onClick={() => setOverride(feature, slotChoice(slot))}
+                                >
+                                  <PencilIcon size={12} />
+                                  {t("llm.customize")}
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
                         {pin ? (
-                          <button
-                            type="button"
-                            className="cmae-btn cmae-btn-ghost"
-                            onClick={() => setOverride(feature, null)}
-                          >
-                            {t("llm.followSlot")}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            className="cmae-btn cmae-btn-ghost"
-                            onClick={() => setOverride(feature, slotChoice(slot))}
-                          >
-                            {t("llm.customize")}
-                          </button>
-                        )}
+                          <ModelPicker
+                            catalog={catalog}
+                            slot={slot}
+                            value={pin}
+                            onChange={(c) => setOverride(feature, c)}
+                          />
+                        ) : null}
                       </div>
-                      {pin ? (
-                        <ModelPicker
-                          catalog={catalog}
-                          slot={slot}
-                          value={pin}
-                          onChange={(c) => setOverride(feature, c)}
-                        />
-                      ) : (
-                        <p className="cmae-field-hint">
-                          {t("llm.followsSlot", {
-                            slot: t(
-                              slot === "fast" ? "fields.llmModelFast" : "fields.llmModelSmart",
-                            ),
-                            model: nameOf(slotModel),
-                          })}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            ))
-          : null}
-      </div>
-    </>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }

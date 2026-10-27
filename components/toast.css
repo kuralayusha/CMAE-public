@@ -1,0 +1,62 @@
+.cmae-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 10px 12px 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-elevated);
+  color: var(--ink);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
+  font-size: 13px;
+  line-height: 1.45;
+  animation: cmae-toast-in 0.18s ease-out;
+}
+.cmae-toast.is-ok {
+  border-left: 3px solid var(--ok);
+}
+.cmae-toast.is-err {
+  border-left: 3px solid var(--ink);
+}
+.cmae-toast-icon {
+  display: inline-flex;
+  margin-top: 2px;
+}
+.cmae-toast.is-ok .cmae-toast-icon {
+  color: var(--ok);
+}
+.cmae-toast-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cmae-toast-close {
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.cmae-toast-close:hover {
+  color: var(--ink);
+}
+@keyframes cmae-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmae-toast {
+    animation: none;
+  }
+}

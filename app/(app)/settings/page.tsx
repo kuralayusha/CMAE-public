@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CvDropzone } from "@/components/CvDropzone";
 import { useLocaleUpper, useT } from "@/components/I18nProvider";
+import { Toast } from "@/components/Toast";
 import { LlmSettingsFields, llmFormFromSettings } from "@/components/LlmSettingsFields";
 import type { Effort, LlmOverrides } from "@/lib/llm/slots";
 import { LocalePrepOverlay } from "@/components/LocalePrepOverlay";
@@ -142,6 +143,10 @@ export default function SettingsPage() {
   const [cvMax, setCvMax] = useState(4);
   const [status, setStatus] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<"ok" | "err" | null>(null);
+  const [statusId, setStatusId] = useState(0);
+  // Form + prefs as last loaded/saved; Save stays disabled while they match.
+  const [baseline, setBaseline] = useState<string | null>(null);
+  const [syncBaseline, setSyncBaseline] = useState(false);
   const [busy, setBusy] = useState(false);
   const needsAiKey = Boolean(
     meta && !meta.hasOpenrouterApiKey && !meta.openrouterApiKeyFromEnv,
@@ -264,6 +269,7 @@ export default function SettingsPage() {
       emailSignature: data.emailSignature || "",
     }));
     setPrefs({ ...DEFAULT_PREFS, ...(data.jobPreferences || {}) });
+    setSyncBaseline(true);
     await loadCvs().catch(() => undefined);
 
     // Shipped en.json changed → old user pack mixes EN+TR; refresh automatically
@@ -299,6 +305,17 @@ export default function SettingsPage() {
   function flash(text: string | null, tone: "ok" | "err" | null = null) {
     setStatus(text);
     setStatusTone(text ? tone : null);
+    if (text) setStatusId((n) => n + 1);
+  }
+
+  const snapshot = JSON.stringify({ form, prefs });
+  const dirty = baseline !== null && snapshot !== baseline;
+
+  // Adjust state while rendering (React's pattern for derived state): this
+  // render already holds the freshly loaded/saved values, so the snapshot is right.
+  if (syncBaseline) {
+    setSyncBaseline(false);
+    setBaseline(snapshot);
   }
 
   async function persistSettings(opts?: { confirmAccountSwitch?: boolean }) {
@@ -374,6 +391,7 @@ export default function SettingsPage() {
         openrouterApiKey: "",
         ...llmFormFromSettings(data),
       }));
+      setSyncBaseline(true);
 
       // Live-check the key + both models right after a change, so a typo shows
       // up here and not in the middle of a research run.
@@ -969,23 +987,13 @@ export default function SettingsPage() {
           </SettingsAcc>
 
           <div className="cmae-form-actions">
-            <Button type="submit" disabled={busy || formLocked}>
+            <Button
+              type="submit"
+              disabled={busy || formLocked || !dirty}
+              title={!dirty && !busy ? t("settings.noChanges") : undefined}
+            >
               {busy ? t("common.saving") : t("common.save")}
             </Button>
-            {status ? (
-              <span
-                className={[
-                  "cmae-form-status",
-                  statusTone === "ok" ? "is-ok" : "",
-                  statusTone === "err" ? "is-err" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                role={statusTone === "err" ? "alert" : "status"}
-              >
-                {status}
-              </span>
-            ) : null}
           </div>
 
           <SettingsAcc title={t("settings.accPrivacy")}>
@@ -1132,6 +1140,14 @@ export default function SettingsPage() {
           ) : null}
         </div>
       </PageShell>
+      {status ? (
+        <Toast
+          key={statusId}
+          message={status}
+          tone={statusTone ?? "ok"}
+          onClose={() => flash(null)}
+        />
+      ) : null}
 
       {localePrep ? (
         <LocalePrepOverlay
