@@ -87,16 +87,27 @@ model**, by feature, recent runs with the models each run used) via
 `CMAE_USAGE_REPORT_SECRET` is set the same page can open an admin view
 (`?admin=1`) that proxies the Supabase Edge Function `cmae-report`.
 
-### Supabase side (not in this repo)
-The admin view renders whatever `cmae-report` returns. For per-model reporting
-the function should add (all optional — the UI hides what is missing):
-- `grand.by_model`: `[{model, calls, runs, input_tokens, output_tokens,
-  cache_read_tokens, cost_usd, features[]}]` across all users;
-- `users[].models`: distinct model slugs per user;
-- per-user detail: `by_model` (same row shape) and `runs[].models`.
-`GROUP BY model` over the existing `ai_usage_events.model` column is enough.
-Backfill rows ingested before the migration:
-`update ai_usage_events set model = 'composer-2.5' where model is null or model = '';`
+### Supabase side (`supabase/`)
+Project `your-project-ref` ("example-project"). The deployed Edge Functions
+are versioned in `supabase/functions/` — `cmae-ingest` (POST, per-user secret
+hash), `cmae-report` (admin, secret hash in table `cmae_report_auth`),
+`cmae-prices`. All three run with JWT verification off (the functions do their
+own auth). Deploy with the Supabase CLI from `supabase/`, keeping that flag:
+`supabase functions deploy cmae-report --project-ref your-project-ref --no-verify-jwt --use-api`.
+
+Model breakdown (admin view): `cmae-report` returns `grand.by_model`,
+`users[].models`, and per-user `by_model` + `runs[].models`. The overview reads
+three GROUP BY views from `supabase/migrations/20261027000000_model_views.sql`
+(`cmae_v_model_totals`, `cmae_v_model_features`, `cmae_v_user_models`; service
+role only, like `cmae_v_user_totals`) so it is exact at any table size. If the
+views are missing it falls back to scanning up to 50 000 events and sets
+`grand.by_model_truncated` when that cap is hit; `grand.by_model_source` says
+which path ran. Run SQL with `npx supabase@latest db query --linked
+--project-ref … --file …` (the CLI 2.72 installed here has no `db query`).
+
+`model` was already part of the ingest wire format, and `cmae-ingest` accepts
+OpenRouter slugs (`vendor/model:variant`) via `MODEL_RE`; every row ingested
+before OpenRouter is labelled `composer-2.5`, so no backfill is needed.
 
 ## Tests
 `npm run test:ai-usage`; eval: `CMAE_EVAL_MODEL=<slug> node --import tsx test/tracker-eval/run-eval.ts`

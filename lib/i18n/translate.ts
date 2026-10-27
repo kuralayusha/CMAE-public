@@ -9,6 +9,7 @@ import {
 import { modelForFeature, resolveOpenRouterKey } from "@/lib/llm/config";
 import { updateSettings } from "@/lib/settings/service";
 import { formatHintsForSection } from "./hints";
+import { mapPool } from "./pool";
 import { applyLocaleOverrides } from "./overrides";
 import {
   loadEnPack,
@@ -40,6 +41,13 @@ export {
 function translateModel(): string {
   return process.env.CMAE_I18N_MODEL?.trim() || modelForFeature("i18n.translate");
 }
+
+/**
+ * Sections translated at once. A full pack is ~20 independent model calls; run
+ * one after another it took ~250 s of the host's 300 s budget. 5 keeps well
+ * inside OpenRouter's rate limits for a small model.
+ */
+const TRANSLATE_CONCURRENCY = 5;
 
 export type TranslateUsageCall = {
   feature: "i18n.translate";
@@ -220,25 +228,27 @@ export async function translateLocalePack(
       usageRunId = translateRunId;
       try {
         await withUsageRunAsync(translateRunId, async () => {
-          for (const [sectionKey, sectionVal] of Object.entries(missing)) {
-            if (typeof sectionVal === "string") {
-              const tiny = await translateSection(
-                sectionKey,
-                { value: sectionVal },
-                code,
-                usageCalls,
-              );
-              out[sectionKey] =
-                typeof tiny.value === "string" ? tiny.value : sectionVal;
-            } else {
-              out[sectionKey] = await translateSection(
-                sectionKey,
-                sectionVal,
-                code,
-                usageCalls,
-              );
-            }
-          }
+          const entries = Object.entries(missing);
+          const translated = await mapPool(
+            entries,
+            TRANSLATE_CONCURRENCY,
+            async ([sectionKey, sectionVal]) => {
+              if (typeof sectionVal === "string") {
+                const tiny = await translateSection(
+                  sectionKey,
+                  { value: sectionVal },
+                  code,
+                  usageCalls,
+                );
+                return typeof tiny.value === "string" ? tiny.value : sectionVal;
+              }
+              return translateSection(sectionKey, sectionVal, code, usageCalls);
+            },
+          );
+          // Results come back in input order, so `out` keeps the pack's key order.
+          entries.forEach(([sectionKey], i) => {
+            out[sectionKey] = translated[i]!;
+          });
         });
       } catch (err) {
         if (err && typeof err === "object") {

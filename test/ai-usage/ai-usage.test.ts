@@ -36,6 +36,7 @@ import {
 } from "../../lib/ai-usage/uploader";
 import { MIGRATIONS } from "../../lib/db/migrations";
 import { migration016OpenRouter } from "../../lib/db/migrations/016_openrouter";
+import { mapPool } from "../../lib/i18n/pool";
 import { fetchOpenRouterModels } from "../../lib/llm/openrouter";
 import { DEFAULT_MODELS, isPlausibleModelId, slotForFeature } from "../../lib/llm/slots";
 
@@ -725,6 +726,46 @@ describe("models: report, migration, slots", () => {
     assert.equal(models[1]!.completionPerM, 5);
     assert.equal(models[0]!.free, true);
     assert.equal(models[1]!.free, false);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe("mapPool (parallel translation)", () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it("keeps input order, never exceeds the limit, and actually overlaps", async () => {
+    let active = 0;
+    let peak = 0;
+    const out = await mapPool([30, 5, 20, 1, 10, 2], 3, async (ms, i) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await sleep(ms);
+      active -= 1;
+      return `r${i}`;
+    });
+    assert.deepEqual(out, ["r0", "r1", "r2", "r3", "r4", "r5"]);
+    assert.equal(peak, 3);
+  });
+
+  it("on failure starts nothing new, but waits for in-flight work, then throws the first error", async () => {
+    const started: number[] = [];
+    const finished: number[] = [];
+    await assert.rejects(
+      mapPool([0, 1, 2, 3, 4, 5], 2, async (_, i) => {
+        started.push(i);
+        if (i === 0) throw new Error("boom");
+        await sleep(30);
+        finished.push(i);
+      }),
+      /boom/,
+    );
+    assert.ok(started.length < 6, "stopped launching new items");
+    assert.deepEqual([...finished].sort(), started.filter((i) => i !== 0).sort(), "in-flight items completed");
+  });
+
+  it("handles empty input and limit larger than the list", async () => {
+    assert.deepEqual(await mapPool([], 5, async () => 1), []);
+    assert.deepEqual(await mapPool([1, 2], 50, async (n) => n * 2), [2, 4]);
   });
 });
 
