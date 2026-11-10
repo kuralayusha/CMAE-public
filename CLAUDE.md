@@ -22,7 +22,7 @@ node --conditions=react-server --import tsx --test test/tracker-state/effective.
 
 `--conditions=react-server` is required for tests because lib code imports `server-only`. Tests must use explicit temp dirs/DB handles and never call `getAppRoot()` (it rewrites the user's `~/.cmae-app-root`).
 
-Release/packaging (`desktop:build:mac[:signed]`, `desktop:build:win`, `desktop:publish:*`, `version:sync-policy`) is documented step by step in `README.md` (Turkish). Key facts: installers are published to the separate public repo `kuralayusha/cmae-releases`; the tag is `v<package.json version>`; bumping the version means editing `package.json` then running `node scripts/bump-version-policy.mjs` (updates `version-policy.json`) and committing both. Mac builds only on macOS, Windows builds only on Windows (native modules, win-x64 always).
+Release/packaging (`desktop:build:mac[:signed]`, `desktop:build:win`, `desktop:publish:*`, `version:sync-policy`) is documented step by step in `docs/releasing.md`. Key facts: installers are published to the separate public repo `kuralayusha/cmae-releases`; the tag is `v<package.json version>`; bumping the version means editing `package.json` then running `node scripts/bump-version-policy.mjs` (updates `version-policy.json`) and committing both. Mac builds only on macOS, Windows builds only on Windows (native modules, win-x64 always).
 
 Env: copy `.env.example`. `CMAE_MASTER_KEY` (≥16 chars) is needed for encryption; `OPENROUTER_API_KEY` can alternatively be set in the Settings UI (stored encrypted); on the Vercel translation host it is the maintainer's admin key. `CMAE_DISABLE_SYNC=1` turns off IMAP sync. Do not read or print `.env*` files.
 
@@ -62,5 +62,4 @@ Only English (`locales/en.json`) is shipped as source; other languages are machi
 ## Repo notes
 - Path alias `@/*` → repo root. `next.config.ts` sets `output: "standalone"` and lists native packages in `serverExternalPackages`; new native/heavy deps need adding there (and to `outputFileTracingIncludes` if used on Vercel routes).
 - `/*turbopackIgnore: true*/` comments on `fs`/`path` calls with dynamic paths are intentional (stop Turbopack from tracing the whole project); keep them when editing such code.
-- `zzz-my-notes.md` and `zzz-cover-letter-rules.md` are the owner's personal scratch notes (feature ideas, cover-letter writing rules), not specs; the latter is useful context only when working on the writer agent's prompts.
-- README, docs, and many comments are in Turkish; code identifiers and UI strings are English.
+- README and docs are in English; some code comments may still be in Turkish. Code identifiers and UI strings are English.
