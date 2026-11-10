@@ -43,24 +43,24 @@ export function LandingTrackerDemo() {
   const initial = useMemo(
     (): Row[] => [
       {
-        id: "notion",
-        company: "Notion",
+        id: "umbrella",
+        company: "Umbrella Co",
         role: t("landing.demo.roleSoftware"),
         status: "in_progress",
         label: statusLabel.in_progress,
         activity: t("landing.demo.activity2d"),
       },
       {
-        id: "figma",
-        company: "Figma",
+        id: "hooli",
+        company: "Hooli",
         role: t("landing.demo.roleProduct"),
         status: "follow_up_due",
         label: statusLabel.follow_up_due,
         activity: t("landing.demo.activity5d"),
       },
       {
-        id: "anthropic",
-        company: "Anthropic",
+        id: "soylent",
+        company: "Soylent Inc",
         role: t("landing.demo.roleFullstack"),
         status: "needs_reply",
         label: statusLabel.needs_reply,
@@ -73,7 +73,7 @@ export function LandingTrackerDemo() {
   const afterSync = useMemo(
     (): Row[] => [
       {
-        id: "stripe",
+        id: "acme",
         company: SCENARIO_COMPANIES[0]!.name,
         role: t(SCENARIO_COMPANIES[0]!.roleKey),
         status: "ready_to_send",
@@ -82,7 +82,7 @@ export function LandingTrackerDemo() {
         isNew: true,
       },
       {
-        id: "vercel",
+        id: "globex",
         company: SCENARIO_COMPANIES[1]!.name,
         role: t(SCENARIO_COMPANIES[1]!.roleKey),
         status: "ready_to_send",
@@ -91,7 +91,7 @@ export function LandingTrackerDemo() {
         isNew: true,
       },
       {
-        id: "linear",
+        id: "initech",
         company: SCENARIO_COMPANIES[2]!.name,
         role: t(SCENARIO_COMPANIES[2]!.roleKey),
         status: "ready_to_send",
@@ -100,24 +100,24 @@ export function LandingTrackerDemo() {
         isNew: true,
       },
       {
-        id: "notion",
-        company: "Notion",
+        id: "umbrella",
+        company: "Umbrella Co",
         role: t("landing.demo.roleSoftware"),
         status: "in_progress",
         label: statusLabel.in_progress,
         activity: t("landing.demo.activity2d"),
       },
       {
-        id: "figma",
-        company: "Figma",
+        id: "hooli",
+        company: "Hooli",
         role: t("landing.demo.roleProduct"),
         status: "needs_reply",
         label: statusLabel.needs_reply,
         activity: t("landing.demo.activityJustNow"),
       },
       {
-        id: "anthropic",
-        company: "Anthropic",
+        id: "soylent",
+        company: "Soylent Inc",
         role: t("landing.demo.roleFullstack"),
         status: "needs_reply",
         label: statusLabel.needs_reply,

@@ -146,7 +146,7 @@ export function detectAutoAck(subject: string, body: string): boolean {
     return true;
   }
   // Recruiting auto-receipt without "Automatische Antwort" subject
-  // e.g. ExampleWare "Deine Karriere bei … / setzen uns baldmöglich wieder"
+  // e.g. Acme "Deine Karriere bei … / setzen uns baldmöglich wieder"
   return (
     /wir setzen uns (baldm[oö]glich )?wieder|baldm[oö]glich wieder mit dir in verbindung/.test(
       blob,

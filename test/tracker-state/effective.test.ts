@@ -92,7 +92,7 @@ function status(
   });
 }
 
-/** Real Beispiel AG (#8) events_json shape. */
+/** Representative events_json shape for a multi-round application thread. */
 const ITEM8: EventTimelineEntry[] = [
   e(18, "2026-09-21T09:02:14.000Z", "in", "ack"),
   e(19, "2026-09-21T09:03:19.000Z", "in", "ack"),
@@ -305,8 +305,8 @@ describe("position groups", () => {
 });
 
 describe("scheduledAt interview wait", () => {
-  /** examplecorp-like: invite with date, then confirmation outbound. */
-  const examplecorp = [
+  /** Invite with date, then confirmation outbound. */
+  const INVITE_THREAD = [
     e(1, "2026-10-16T09:31:03.000Z", "in", "interview_invite", {
       scheduledAt: "2026-11-05",
     }),
@@ -317,20 +317,20 @@ describe("scheduledAt interview wait", () => {
     e(4, "2026-10-16T13:07:20.000Z", "out", "other"),
   ];
 
-  it("examplecorp: waiting until interview day (not follow_up_due)", () => {
-    const r = status(examplecorp, Date.parse("2026-10-21T12:00:00.000Z"));
+  it("waiting until interview day (not follow_up_due)", () => {
+    const r = status(INVITE_THREAD, Date.parse("2026-10-21T12:00:00.000Z"));
     assert.equal(r.status, "waiting");
     assert.equal(r.waitingUntil, "2026-11-05");
     assert.equal(r.waitingReason, "interview");
   });
 
   it("day after interview: in_progress until followUpDays from interview", () => {
-    const r = status(examplecorp, Date.parse("2026-11-06T12:00:00.000Z"));
+    const r = status(INVITE_THREAD, Date.parse("2026-11-06T12:00:00.000Z"));
     assert.equal(r.status, "in_progress");
   });
 
   it("interview + followUpDays → follow_up_due", () => {
-    const r = status(examplecorp, Date.parse("2026-11-11T12:00:00.000Z"));
+    const r = status(INVITE_THREAD, Date.parse("2026-11-11T12:00:00.000Z"));
     assert.equal(r.status, "follow_up_due");
   });
 });

@@ -11,7 +11,7 @@ export function hostnameOf(url: string): string {
   }
 }
 
-/** First label of the hostname, e.g. janedoe.dev → "Jane", ExampleSoft.com.tr → "ExampleSoft". */
+/** First label of the hostname, e.g. janedoe.dev → "Jane", acme.example.com → "Acme". */
 export function hostBrandHint(hostOrUrl: string): string {
   const host = hostOrUrl.includes("://")
     ? hostnameOf(hostOrUrl)
@@ -86,7 +86,7 @@ export function resolveCompanyName(
   }
 
   // Personal site with a person-style name that still matches the host label
-  // is already handled above. Anything else (e.g. ExampleSoft on janedoe.dev) → host.
+  // is already handled above. Anything else (e.g. Acme on janedoe.dev) → host.
   return {
     companyName: hint,
     siteKind,

@@ -32,7 +32,7 @@ STRUCTURE RULES (mandatory):
 - Do not add a horizontal-rule-only intro; begin with the first ## section.
 
 EMAIL RULES:
-- If you find an address obfuscated for spam (name(at)domain, name[at]domain, name at domain, [dot]), write it as a normal email with @ and . (e.g. kontakt@example-computer.de). Never leave (at)/[at] forms in the note.
+- If you find an address obfuscated for spam (name(at)domain, name[at]domain, name at domain, [dot]), write it as a normal email with @ and . (e.g. kontakt@example.de). Never leave (at)/[at] forms in the note.
 `.trim();
 
 /** Drop LLM chatter before the first ## section. */

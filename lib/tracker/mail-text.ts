@@ -161,7 +161,7 @@ export function repairCollapsedQuotedPrintable(text: string): string {
     return repairUtf8Mojibake(iconv.decode(Buffer.from(bytes), "windows-1252"));
   });
   // The space after "=" is usually the collapsed newline. Keep it between
-  // real words ("wie für", "das Du", "Royal in"); drop it when the line was
+  // real words ("wie für", "das Du", "Beispiel in"); drop it when the line was
   // cut through a word ("Term"+"in", "apprec"+"iate", "(M/W/"+"D").
   s = s.replace(/(?<=\S)=\s+/gu, (match, offset, whole) => {
     const source = String(whole);

@@ -252,8 +252,8 @@ Return ONLY JSON:
 {
   "groups": [
     {
-      "company": "acmestaffing",
-      "position": "C2S Developer - Frontend" | null,
+      "company": "ACME",
+      "position": "Frontend Developer" | null,
       "status": "waiting",
       "sentiment": "positive" | "negative" | "neutral" | null,
       "waitingOn": "us" | "them" | null,

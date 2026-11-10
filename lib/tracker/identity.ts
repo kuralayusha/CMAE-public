@@ -1,6 +1,6 @@
 /**
  * Stable identity helpers so inactive rows survive sync without duplicates
- * when AI renames "ExampleCo" → "ExampleCo" (same mailbox).
+ * when AI renames "ACME!" → "ACME" (same mailbox).
  */
 
 const PERSONAL_DOMAINS = new Set([
@@ -34,7 +34,7 @@ export function emailDomain(email: string | null | undefined): string | null {
   return d;
 }
 
-/** "ExampleCo" / "ExampleCo GmbH" / "ExampleCo" → same key */
+/** "ACME!" / "Acme GmbH" / "ACME" → same key */
 export function normalizeCompanyKey(name: string | null | undefined): string {
   if (!name) return "";
   return name
