@@ -3,7 +3,8 @@
   "version": "0.1.7",
   "private": true,
   "description": "CMAE — Cold Mail AI Engine (desktop)",
-  "author": "CMAE",
+  "license": "MIT",
+  "author": "CMAE contributors",
   "main": "desktop/main.cjs",
   "repository": {
     "type": "git",
