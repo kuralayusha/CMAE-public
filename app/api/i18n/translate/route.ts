@@ -4,6 +4,14 @@ import { loadEnPack, saveUserPack } from "@/lib/i18n/pack";
 import { getRemoteTranslateUrl, isVercelRuntime } from "@/lib/i18n/remote";
 import { countMissingLeaves, mergeShape } from "@/lib/i18n/shape";
 import { t } from "@/lib/i18n/t";
+import {
+  SlidingWindowLimiter,
+  TRANSLATE_LIMIT,
+  TRANSLATE_WINDOW_MS,
+  clientIp,
+  parseTranslateBody,
+  readLimitedText,
+} from "@/lib/i18n/translate-guard";
 import { translateLocalePack } from "@/lib/i18n/translate";
 import type { LocalePack } from "@/lib/i18n/types";
 import { updateSettings } from "@/lib/settings/service";
@@ -25,18 +33,40 @@ export const runtime = "nodejs";
 /** Locale pack translation can take a while (chunked LLM). */
 export const maxDuration = 300;
 
+/** Per-IP limiter, only enforced on the public Vercel host (see translate-guard.ts). */
+const limiter = new SlidingWindowLimiter(TRANSLATE_LIMIT, TRANSLATE_WINDOW_MS);
+
+function guardError(status: number, error: string, retryAfterSec?: number) {
+  return NextResponse.json(
+    { error },
+    {
+      status,
+      headers: retryAfterSec
+        ? { "Retry-After": String(retryAfterSec) }
+        : undefined,
+    },
+  );
+}
+
 export async function POST(req: Request) {
   try {
-    const body = (await req.json().catch(() => ({}))) as {
-      targetLanguage?: string;
-    };
-    const targetLanguage = String(body.targetLanguage || "").trim();
-    if (!targetLanguage) {
-      return NextResponse.json(
-        { error: t("i18n.error.targetRequired") },
-        { status: 400 },
-      );
+    // Public endpoint: cheap checks first (rate limit, size, shape, language)
+    // so junk never reaches the LLM.
+    if (isVercelRuntime()) {
+      const verdict = limiter.check(clientIp(req.headers));
+      if (!verdict.allowed) {
+        return guardError(
+          429,
+          "Too many translation requests, try again later",
+          verdict.retryAfterSec,
+        );
+      }
     }
+    const text = await readLimitedText(req);
+    if (!text.ok) return guardError(text.status, text.error);
+    const parsed = parseTranslateBody(text.value);
+    if (!parsed.ok) return guardError(parsed.status, parsed.error);
+    const { targetLanguage } = parsed.value;
 
     // Vercel = translation host (key lives here only)
     if (isVercelRuntime()) {

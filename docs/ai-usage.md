@@ -21,6 +21,18 @@ per-user DB: it only uses env — `OPENROUTER_API_KEY` (the maintainer's admin
 key, which pays for language packs) and optionally `CMAE_I18N_MODEL`,
 `CMAE_LLM_MODEL_FAST|SMART`.
 
+**Translate endpoint limits** (`POST /api/i18n/translate`, public on the host
+that holds the key; helpers in `lib/i18n/translate-guard.ts`):
+- Body ≤ 1 KiB, a JSON object with ≤ 4 keys; only `targetLanguage` is read →
+  otherwise `413` / `400` with `{ "error": "..." }`.
+- `targetLanguage` must be a BCP-47-like tag (`tr`, `pt-BR`, `zh-Hant`, ≤ 16
+  chars) whose primary subtag is one of the UI languages in
+  `lib/settings/languages.ts` → otherwise `400`.
+- On the Vercel host: 10 requests per IP per hour (sliding window) → `429` with
+  `Retry-After`. The limiter is in-memory, and serverless instances do not share
+  memory, so it is only a speed bump; use Vercel WAF rate limiting or a shared
+  store such as Upstash for a real limit.
+
 A user who wants Gemini (or any provider's own key) adds it in their OpenRouter
 account (Settings → Integrations, "BYOK"); CMAE never sees or sends it. OpenRouter
 then routes to that key and charges a small fee (first 1M BYOK requests/month free).
