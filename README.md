@@ -8,6 +8,17 @@ It is an Electron shell around a Next.js (standalone) server with a local
 SQLite database. Your data (mails, drafts, CVs, API keys) stays on your machine;
 the only network calls are to Gmail (IMAP) and to OpenRouter for model calls.
 
+## Live version and download
+
+- **Website:** [cmae.yusha.dev](https://cmae.yusha.dev) — product page with the
+  latest desktop installers.
+- **Installers:** macOS (Apple Silicon `.dmg`) and Windows (`.exe`) builds are
+  published on the
+  [releases page](https://github.com/kuralayusha/cmae-releases/releases/latest).
+  Download, install and run — no build step needed.
+
+Prefer to build it yourself? See [Setup](#setup) below.
+
 ## Why
 
 Applying to jobs with personalised mails means repeating the same loop:
