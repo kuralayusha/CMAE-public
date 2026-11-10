@@ -110,5 +110,4 @@ OpenRouter slugs (`vendor/model:variant`) via `MODEL_RE`; every row ingested
 before OpenRouter is labelled `composer-2.5`, so no backfill is needed.
 
 ## Tests
-`npm run test:ai-usage`; eval: `CMAE_EVAL_MODEL=<slug> node --import tsx test/tracker-eval/run-eval.ts`
-(needs `OPENROUTER_API_KEY`; the eval cache is keyed by model + prompt).
+`npm run test:ai-usage`.
