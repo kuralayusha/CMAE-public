@@ -100,12 +100,25 @@ model**, by feature, recent runs with the models each run used) via
 (`?admin=1`) that proxies the Supabase Edge Function `cmae-report`.
 
 ### Supabase side (`supabase/`)
-Project `your-project-ref` ("example-project"). The deployed Edge Functions
-are versioned in `supabase/functions/` — `cmae-ingest` (POST, per-user secret
+Telemetry is off unless you deploy the Edge Functions in `supabase/functions`
+to your own Supabase project and set these variables (all unset by default):
+
+| Variable | Purpose |
+|----------|---------|
+| `CMAE_USAGE_INGEST_URL` | `https://<your-project>.supabase.co/functions/v1/cmae-ingest` |
+| `CMAE_USAGE_PRICES_URL` | `https://<your-project>.supabase.co/functions/v1/cmae-prices` |
+| `CMAE_USAGE_REPORT_URL` | `https://<your-project>.supabase.co/functions/v1/cmae-report` |
+| `CMAE_USAGE_ANON_KEY` | Optional publishable (anon) key sent as `apikey` / `Authorization: Bearer` |
+| `CMAE_USAGE_REPORT_SECRET` | Admin report secret |
+
+When the URLs are unset, upload, remote price refresh and the remote report are
+silent no-ops; `/usage` shows the local rows only. The Edge Functions must
+enforce their own rate limits and payload caps (the versions in this repo do);
+do not rely on the client for that. The Edge Functions are versioned in `supabase/functions/` — `cmae-ingest` (POST, per-user secret
 hash), `cmae-report` (admin, secret hash in table `cmae_report_auth`),
 `cmae-prices`. All three run with JWT verification off (the functions do their
 own auth). Deploy with the Supabase CLI from `supabase/`, keeping that flag:
-`supabase functions deploy cmae-report --project-ref your-project-ref --no-verify-jwt --use-api`.
+`supabase functions deploy cmae-report --project-ref <your-project-ref> --no-verify-jwt --use-api`.
 
 Model breakdown (admin view): `cmae-report` returns `grand.by_model`,
 `users[].models`, and per-user `by_model` + `runs[].models`. The overview reads

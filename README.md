@@ -134,7 +134,11 @@ Copy `.env.example` to `.env`. All variables are optional unless noted.
 | `CMAE_VERSION_URL` | Version-policy endpoint the desktop app compares against. Set to `local` to use only the bundled `version-policy.json`. |
 | `CMAE_GH_TOKEN` | GitHub token for `electron-updater` checks against a private releases repo. |
 | `CMAE_DISABLE_SYNC` | Set to `1` to disable IMAP sync. |
-| `CMAE_USAGE_REPORT_SECRET` / `CMAE_USAGE_REPORT_URL` | Optional admin usage report (`/usage` page). |
+| `CMAE_USAGE_INGEST_URL` / `CMAE_USAGE_PRICES_URL` / `CMAE_USAGE_REPORT_URL` | Optional telemetry Edge Function URLs. Unset = telemetry, remote price refresh and remote report are disabled. |
+| `CMAE_USAGE_ANON_KEY` | Optional publishable key sent with telemetry requests. |
+| `CMAE_USAGE_REPORT_SECRET` | Optional admin usage report secret (`/usage` page). |
+
+Telemetry is off unless you deploy the Edge Functions in `supabase/functions` to your own Supabase project and set these variables. The Edge Functions must enforce their own rate limits and payload caps.
 
 Note: the defaults for `CMAE_I18N_URL` / `CMAE_VERSION_URL` point at the
 maintainer's hosted deployment. If you fork the project, point them at your own

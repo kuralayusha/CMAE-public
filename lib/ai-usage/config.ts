@@ -1,28 +1,23 @@
 /**
- * Usage-telemetry endpoints. Env wins; the embedded defaults are public values
- * (Edge Function URLs + the project's publishable anon key — never a service
- * role key) that ship with the desktop build. Empty = feature inert.
+ * Usage-telemetry endpoints, read from the environment only. Nothing is
+ * embedded: when the URLs are unset the corresponding feature (upload, remote
+ * price refresh, remote report) is a silent no-op.
+ *
+ * - CMAE_USAGE_INGEST_URL    Edge Function that receives anonymous usage counters
+ * - CMAE_USAGE_PRICES_URL    Edge Function that serves the model price table
+ * - CMAE_USAGE_REPORT_URL    Edge Function that serves the usage report
+ * - CMAE_USAGE_ANON_KEY      Optional publishable key sent as apikey/Bearer
+ * - CMAE_USAGE_REPORT_SECRET Admin report secret
  */
-
-const EMBEDDED = {
-  ingestUrl: "https://your-project-ref.supabase.co/functions/v1/cmae-ingest",
-  // Public anon key (project is test DB `example-project`); endpoints do not
-  // require a JWT, the key is only sent for gateway compatibility.
-  anonKey:
-    "REDACTED_JWT",
-  pricesUrl: "https://your-project-ref.supabase.co/functions/v1/cmae-prices",
-  reportUrl: "https://your-project-ref.supabase.co/functions/v1/cmae-report",
-};
 
 const env = (name: string) => process.env[name]?.trim() ?? "";
 
 export function usageConfig() {
   return {
-    ingestUrl: env("CMAE_USAGE_INGEST_URL") || EMBEDDED.ingestUrl,
-    anonKey: env("CMAE_USAGE_ANON_KEY") || EMBEDDED.anonKey,
-    pricesUrl: env("CMAE_USAGE_PRICES_URL") || EMBEDDED.pricesUrl,
-    reportUrl: env("CMAE_USAGE_REPORT_URL") || EMBEDDED.reportUrl,
-    /** Admin report secret — never embedded; set CMAE_USAGE_REPORT_SECRET. */
+    ingestUrl: env("CMAE_USAGE_INGEST_URL"),
+    anonKey: env("CMAE_USAGE_ANON_KEY"),
+    pricesUrl: env("CMAE_USAGE_PRICES_URL"),
+    reportUrl: env("CMAE_USAGE_REPORT_URL"),
     reportSecret: env("CMAE_USAGE_REPORT_SECRET"),
   };
 }

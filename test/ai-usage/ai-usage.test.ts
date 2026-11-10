@@ -28,7 +28,8 @@ import {
   selectPrice,
 } from "../../lib/ai-usage/pricing";
 import { buildLocalUsageReport } from "../../lib/ai-usage/local-report";
-import { createDbBackend, recordImportedTranslateUsage, setTelemetryEnabled } from "../../lib/ai-usage/store";
+import { createDbBackend, recordImportedTranslateUsage, refreshPricesIfDue, setTelemetryEnabled } from "../../lib/ai-usage/store";
+import { usageConfig } from "../../lib/ai-usage/config";
 import {
   resetUploaderState,
   uploadPending,
@@ -904,5 +905,58 @@ describe("call coverage", () => {
     };
     walk(root);
     assert.deepEqual(offenders, []);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+describe("telemetry config (no embedded defaults)", () => {
+  const KEYS = [
+    "CMAE_USAGE_INGEST_URL",
+    "CMAE_USAGE_PRICES_URL",
+    "CMAE_USAGE_REPORT_URL",
+    "CMAE_USAGE_ANON_KEY",
+    "CMAE_USAGE_REPORT_SECRET",
+  ];
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it("unset env => every endpoint empty (disabled)", () => {
+    assert.deepEqual(usageConfig(), {
+      ingestUrl: "",
+      anonKey: "",
+      pricesUrl: "",
+      reportUrl: "",
+      reportSecret: "",
+    });
+  });
+
+  it("unset env => upload and price refresh are no-ops that never fetch", async () => {
+    const d = new Database(":memory:");
+    let called = 0;
+    const fetchImpl = (async () => {
+      called += 1;
+      return new Response("{}");
+    }) as unknown as typeof fetch;
+    const r = await uploadPending({ db: d, fetchImpl, root: os.tmpdir() });
+    assert.equal(r.status, "unconfigured");
+    assert.equal(await refreshPricesIfDue({ db: d, fetchImpl }), false);
+    assert.equal(called, 0);
+    d.close();
+  });
+
+  it("env values are read and trimmed", () => {
+    process.env.CMAE_USAGE_INGEST_URL = "  https://example.test/ingest ";
+    assert.equal(usageConfig().ingestUrl, "https://example.test/ingest");
   });
 });
