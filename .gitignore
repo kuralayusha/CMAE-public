@@ -52,3 +52,7 @@ next-env.d.ts
 
 # editor swap files
 *.swp
+
+# logs and local databases
+*.log
+*.db
