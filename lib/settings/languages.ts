@@ -1,4 +1,7 @@
-/** Common preferred languages for mail drafts (BCP-47-ish codes). */
+/**
+ * Common preferred languages for mail drafts (BCP-47-ish codes). Labels are
+ * native language names on purpose (e.g. "Türkçe"), as shown in language pickers.
+ */
 export const PREFERRED_LANGUAGES: { code: string; label: string }[] = [
   { code: "tr", label: "Türkçe" },
   { code: "en", label: "English" },

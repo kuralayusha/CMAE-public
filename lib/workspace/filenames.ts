@@ -15,7 +15,10 @@ export const WS = {
   emailTranslated: "email_translated.md",
 } as const;
 
-/** Legacy names still present in older company folders. */
+/**
+ * Legacy names still present in older company folders. The Turkish file names
+ * are kept on purpose: existing user workspaces contain them.
+ */
 export const WS_LEGACY = {
   companyInfo: ["sirket_bilgileri.md"],
   jobLinks: ["basvuru_linkleri.md"],

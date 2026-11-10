@@ -28,7 +28,7 @@ export type RankedEmail = {
   reason: string;
 };
 
-/** Saf mekanik fetch — dil/kural yok */
+/** Purely mechanical fetch — no language or rules logic */
 export async function fetchPage(jobId: string, url: string): Promise<DiscoveredPage> {
   const { stdout, code } = await runCurl(jobId, [
     "-sL",

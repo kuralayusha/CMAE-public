@@ -123,7 +123,7 @@ export function classifyWorkspaceFileKind(name: string): WorkspaceFileKind {
   }
   if (
     /^reply(_translated)?\.md$/i.test(name) ||
-    /^yanit.*\.md$/i.test(name)
+    /^yanit.*\.md$/i.test(name) // legacy Turkish file name (reply)
   ) {
     return "reply";
   }
@@ -494,6 +494,7 @@ export function draftFlagsFromIndex(
   const hasThanksDraft = names.some(
     (f) => /^thanks\.md$/i.test(f) || /^tesekkur.*\.md$/i.test(f),
   );
+  // tesekkur / yanit = legacy Turkish draft file names, kept for older folders
   const hasReplyDraft = names.some(
     (f) => /^reply\.md$/i.test(f) || /^yanit.*\.md$/i.test(f),
   );
@@ -552,6 +553,7 @@ export function indexedDraftContentHash(
   } else if (kind === "reply") {
     match =
       rows.find((r) => /^reply\.md$/i.test(r.name)) ||
+      // legacy Turkish file name (reply)
       rows.find((r) => /^yanit.*\.md$/i.test(r.name));
   }
   return match?.contentHash || null;

@@ -121,6 +121,7 @@ export function resolveDraftContent(
         /^follow_up_\d+\.md$/i,
       ]) || null;
   } else if (kind === "thanks") {
+    // tesekkur / yanit below are legacy Turkish draft file names (thanks / reply), kept for older folders.
     draft = findNamedDraft(folder, [/^thanks\.md$/i, /^tesekkur.*\.md$/i]);
   } else if (kind === "reply") {
     draft = findNamedDraft(folder, [/^reply\.md$/i, /^yanit.*\.md$/i]);

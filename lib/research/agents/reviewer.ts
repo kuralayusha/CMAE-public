@@ -9,6 +9,9 @@ import { writeFile } from "../workspace";
 const THRESHOLD = 72;
 const REDOABLE = ["scout", "jobfit", "contact", "research", "writer"] as const;
 
+// Note: the reviewer prompt below contains German/Turkish example phrases
+// ("İş başvurusu", "Merhaba", "bulunamadı", ...) on purpose: drafts may be in
+// those languages, so the banned stock phrases/placeholders must cover them.
 export async function runReviewer(ctx: RunContext): Promise<ReviewVerdict> {
   const { jobId } = ctx;
   speak(

@@ -282,7 +282,10 @@ export type WorkspaceEntryBadge = {
   tone: "muted" | "ok" | "ai";
 };
 
-/** Agent scratch files — not primary user deliverables. */
+/**
+ * Agent scratch files — not primary user deliverables. Turkish names (ozet,
+ * rotalar, iletisim, ...) are legacy file names kept for older folders.
+ */
 const FOR_AI_FILES = new Set([
   "summary.md",
   "ozet.md",
@@ -293,6 +296,7 @@ const FOR_AI_FILES = new Set([
   "iletisim.md",
 ]);
 
+// "sirket_bilgileri" is the legacy Turkish file name still present in older folders.
 function isCompanyInfoFile(name: string): boolean {
   return /^(company_info|sirket_bilgileri)(_translated)?\.md$/i.test(name);
 }
@@ -313,9 +317,9 @@ function isUserFacingMailDraft(name: string): boolean {
     /^follow_up_/i.test(name) ||
     /^followup/i.test(name) ||
     /^thanks/i.test(name) ||
-    /^tesekkur/i.test(name) ||
+    /^tesekkur/i.test(name) || // legacy Turkish file name (thanks)
     /^reply/i.test(name) ||
-    /^yanit/i.test(name)
+    /^yanit/i.test(name) // legacy Turkish file name (reply)
   );
 }
 
@@ -334,13 +338,14 @@ function isHttpishUrl(u: string): boolean {
   return /https?:\/\//i.test(u) || /^www\./i.test(u);
 }
 
-/** Count job URLs in job_links.md / basvuru_linkleri.md (jobfit output). */
-export function analyzeBasvuruLinkleri(content: string): {
+/** Count job URLs in job_links.md / legacy basvuru_linkleri.md (jobfit output). */
+export function analyzeJobLinks(content: string): {
   count: number;
   empty: boolean;
 } {
   const text = String(content || "");
-  // Explicit empty templates (EN + common TR) — only when no URLs present
+  // Explicit empty templates (EN + legacy Turkish output; the Turkish regexes
+  // are intentional, they must match old files) — only when no URLs present
   const looksEmptyTemplate =
     /uygun\s+a[cç][ıi]k\s+ilan\s+yok/i.test(text) ||
     /no\s+matching\s+(open\s+)?(job|role)/i.test(text) ||
@@ -348,7 +353,7 @@ export function analyzeBasvuruLinkleri(content: string): {
     /cold\s*\/\s*speculative\s+application/i.test(text) ||
     /spek[üu]latif\s+ba[sş]vuru/i.test(text);
 
-  // "- Link: url" / "- Bağlantı: url" / any "- Label: http…" (locale-agnostic)
+  // "- Link: url" / "- Bağlantı: url" (Turkish label, intentionally matched) / any "- Label: http…" (locale-agnostic)
   const fromLinkLines = [...text.matchAll(/^\s*-\s*[^:\n]{1,80}:\s*(\S+)/gim)]
     .map((m) => (m[1] || "").replace(/[),.;]+$/, ""))
     .filter(isHttpishUrl);
@@ -370,6 +375,7 @@ export function analyzeBasvuruLinkleri(content: string): {
 }
 
 async function hasTranslatedCompanyInfo(dir: string): Promise<boolean> {
+  // sirket_bilgileri_translated.md = legacy Turkish file name kept for older folders
   for (const file of ["company_info_translated.md", "sirket_bilgileri_translated.md"]) {
     try {
       await fs.access(path.join(/*turbopackIgnore: true*/ dir, file));
@@ -418,7 +424,7 @@ async function badgesForEntry(
   if (/^(job_links|basvuru_linkleri)\.md$/i.test(name)) {
     try {
       const raw = await fs.readFile(fullPath, "utf8");
-      const { count, empty } = analyzeBasvuruLinkleri(raw);
+      const { count, empty } = analyzeJobLinks(raw);
       if (empty || count === 0) {
         return [{ text: t("folders.empty"), tone: "muted" }];
       }

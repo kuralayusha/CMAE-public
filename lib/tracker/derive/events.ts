@@ -141,6 +141,7 @@ export type FallbackIntent = {
   waitingUntil?: string | null;
 };
 
+// Multilingual keyword data (incl. Turkish "teşekkür") must match real mail text.
 const THANKS_RE =
   /teşekkür|thank you for (your time|the update|letting|the feedback|your feedback)|appreciate the (update|opportunity|feedback)|vielen dank für (ihre|die|deine) (schnelle |freundliche |ausführliche )?(rückmeldung|antwort|zeit|feedback)/i;
 

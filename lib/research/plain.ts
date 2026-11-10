@@ -108,6 +108,8 @@ export function derivePlain(input: {
   if (/online/i.test(raw)) {
     return withAgent(t("terminal.plain.startedTask"), agent, t);
   }
+  // The Turkish alternatives in the matchers below are intentional: they match
+  // legacy job log lines that were written in Turkish before the logs became English.
   if (/Ana sayfa|sayfa çek|home page|fetching home/i.test(raw)) {
     return withAgent(t("terminal.plain.reviewingHome"), agent || "scout", t);
   }

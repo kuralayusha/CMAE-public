@@ -100,6 +100,8 @@ export function mergeJobPreferences(
   );
 }
 
+// Turkish/German labels are intentional: they are inserted into mail drafts
+// written in the user's preferred language (langHint).
 function workTypeLabel(t: WorkType, langHint = "en"): string {
   const tr = langHint.startsWith("tr");
   const de = langHint.startsWith("de");

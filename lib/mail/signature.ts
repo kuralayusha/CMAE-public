@@ -5,7 +5,10 @@
 
 import { formatSubjectBody, parseSubjectBody } from "@/lib/mail/subject-body";
 
-/** Single-line closings (whole line match, optional trailing punctuation). */
+/**
+ * Single-line closings (whole line match, optional trailing punctuation).
+ * Turkish/German/French closings are intentional: they must match real mails.
+ */
 const CLOSING_LINE =
   /^(viele\s*gr[uü](?:ß|ss)e?|mit\s+freundlichen\s+gr[uü](?:ß|ss)en|freundliche\s+gr[uü](?:ß|ss)e|best\s+regards|kind\s+regards|warm\s+regards|with\s+kind\s+regards|yours\s+sincerely|sincerely|sayg[ıi]lar[ıi]mla|iyi\s+[çc]al[ıi][şs]malar|kolay\s+gelsin|cordialement|salutations(?:\s+distingu[eé]es)?|met\s+vriendelijke\s+groet(?:en)?|atenamente|un\s+saludo)[,!.…]*$/i;
 

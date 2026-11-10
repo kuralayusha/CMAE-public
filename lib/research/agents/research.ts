@@ -15,7 +15,11 @@ import { speak } from "../speak";
 import { writeFile } from "../workspace";
 import { formatContactMarkdown } from "./contact";
 
-/** No agent chatter — files must contain only the deliverable. */
+/**
+ * No agent chatter — files must contain only the deliverable. The Turkish
+ * preamble examples in the prompt are intentional: they show the model that
+ * non-English preambles are banned too.
+ */
 export const OUTPUT_ONLY_RULES = `
 OUTPUT RULES (mandatory):
 - Output ONLY the requested deliverable. Start with the first required section or field.

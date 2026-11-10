@@ -1,6 +1,9 @@
 /**
  * Deterministic mail signals — auto-reply / ACK / return dates.
  * Used to override weak AI labels.
+ *
+ * The German/Turkish/French phrases in the regexes below are intentional
+ * keyword data: they must match real mail text in those languages.
  */
 
 import {

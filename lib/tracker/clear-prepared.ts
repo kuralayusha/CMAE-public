@@ -40,7 +40,7 @@ export function isPreparedMailFile(name: string, kind: DraftKind): boolean {
   return (
     n === "reply.md" ||
     n === "reply_translated.md" ||
-    /^yanit.*\.md$/.test(n)
+    /^yanit.*\.md$/.test(n) // legacy Turkish file name (reply), kept for older folders
   );
 }
 

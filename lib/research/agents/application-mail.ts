@@ -18,7 +18,12 @@ export function canonicalizeMailDraft(raw: string, fullName?: string | null): st
   );
 }
 
-/** Hard rules — draft is copy/paste or sync-to-Gmail ready. */
+/**
+ * Hard rules — draft is copy/paste or sync-to-Gmail ready.
+ * Turkish placeholder/subject examples inside the prompt ("bulunamadı", "İş
+ * başvurusu", ...) are intentional: drafts can be written in Turkish, so the
+ * model must be told these non-English fillers are banned too.
+ */
 export const MAIL_FIELD_RULES = `
 CRITICAL — SUBJECT and BODY are final mail fields. The user will copy/paste or sync them into draft mode unchanged.
 

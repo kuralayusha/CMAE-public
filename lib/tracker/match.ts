@@ -214,6 +214,8 @@ async function matchBatch(
   searches: WorkspaceCandidate[],
   mailIntents?: MailIntentMap,
 ): Promise<AiGroup[] | null> {
+  // The multilingual intent examples in the prompt (DE/TR/FR) are intentional:
+  // they show the model that intents are language-independent.
   const prompt = `You classify job-application Gmail for a cold-mail tracker.
 
 LANGUAGE: Work in ANY language. Judge meaning, not keywords. Examples of the SAME intents:

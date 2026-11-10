@@ -134,6 +134,8 @@ async function translateSection(
   sink: TranslateUsageCall[],
 ): Promise<LocalePack> {
   const keyContext = formatHintsForSection(sectionKey, section);
+  // The Turkish/German/French examples in the prompt below are intentional:
+  // they illustrate part-of-speech rules and Turkish İ/ı casing for translators.
   const prompt = `You are a professional UI localization engine.
 Translate the following JSON object of UI strings from English into language code "${targetLanguage}".
 

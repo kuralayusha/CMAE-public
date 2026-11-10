@@ -159,7 +159,7 @@
   grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.15fr);
 }
 
-/* Preview açıkken boyut/tarih sütunlarını gizle — isim okunaklı kalsın */
+/* While the preview is open, hide the size/date columns so the name stays readable */
 .cmae-fb-body.is-split .cmae-fb-cols {
   grid-template-columns: minmax(0, 1fr);
   padding-left: 44px;

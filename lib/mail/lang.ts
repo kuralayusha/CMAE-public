@@ -1,4 +1,8 @@
-/** Normalize language codes for comparison (en-US → en, Türkçe → tr when possible). */
+/**
+ * Normalize language codes for comparison (en-US → en, Türkçe → tr when possible).
+ * The native language names ("türk", "deutsch", "français") are intentional:
+ * they must match real language labels coming from mails and settings.
+ */
 export function langKey(raw: string | null | undefined): string {
   const s = String(raw || "")
     .trim()

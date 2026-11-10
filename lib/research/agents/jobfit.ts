@@ -9,6 +9,8 @@ import { writeFile } from "../workspace";
 /** Minimum fitScore to treat a posting as a real CV match. */
 export const JOB_FIT_MIN_SCORE = 70;
 
+// German and Turkish phrases ("nicht geeignet", "uygun değil") are intentional:
+// the model may answer in the posting's language.
 const WEAK_FIT_RE =
   /\b(poor\s+fit|weak\s+fit|not\s+a\s+(good\s+)?match|unlikely|does\s+not\s+align|no\s+align|mismatch|unsuitable|nicht\s+geeignet|kein\s+fit|schlecht(er)?\s+fit|uygun\s+de[gğ]il)\b/i;
 

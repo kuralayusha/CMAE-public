@@ -57,7 +57,7 @@ export function syncTopLevelFolderRefs(
           continue;
         }
         // Mail history: keep workspaceFolder name so UI can show
-        // "Research klasörü bulunamadı" via workspace_folders.present=0.
+        // "Research folder not found" via workspace_folders.present=0.
         db.update(trackerItems)
           .set({
             researchJobId: null,
